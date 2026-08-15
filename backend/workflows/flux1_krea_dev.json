@@ -1,0 +1,128 @@
+{
+  "9": {
+    "inputs": {
+      "filename_prefix": "flux_krea",
+      "images": [
+        "200:198",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "200:63": {
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp16.safetensors",
+      "type": "flux",
+      "device": "default"
+    },
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "DualCLIPLoader"
+    }
+  },
+  "200:64": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "200:65": {
+    "inputs": {
+      "unet_name": "flux1-krea-dev_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "200:195": {
+    "inputs": {
+      "text": "Ultra-photorealistic landscape photograph taken from a high hilltop viewpoint overlooking a vast natural valley during late afternoon golden hour. The scene captures an expansive, untouched landscape with rolling green hills stretching into the distance, layered with atmospheric perspective and natural depth fading into soft bluish haze on the horizon.\n\nThe foreground consists of detailed rocky terrain with natural textures, small patches of grass, wild shrubs, and uneven earth surfaces rendered with extreme micro-detail. Subtle wind movement is implied through gently swaying grass and natural vegetation patterns.\n\nMidground shows a wide valley with dense clusters of trees, winding dirt paths, and small rivers reflecting sunlight in thin shimmering lines. The terrain has realistic elevation changes with natural erosion patterns and organic land formation.\n\nThe background features multiple layers of mountain ranges gradually fading into atmospheric haze, with soft volumetric light scattering through the air. The sun is low near the horizon, casting long directional shadows across the entire landscape and creating warm golden highlights on hill edges.\n\nThe sky is highly realistic with a soft gradient from warm orange near the horizon to pale blue higher up, with scattered thin clouds subtly illuminated from below. Natural atmospheric perspective is strong, with distant objects losing contrast and color saturation realistically.\n\nCaptured as a professional landscape photograph using a full-frame DSLR camera, 24mm wide-angle lens, f/8 aperture for deep focus across the entire scene. Extremely high dynamic range, natural color grading, physically accurate lighting, no HDR exaggeration, no CGI appearance, pure documentary-style realism similar to National Geographic travel photography.\n\nUltra-detailed, 8K realism, sharp foreground textures with smooth natural depth transitions, no artificial sharpening artifacts, no surreal elements, completely grounded real-world geography look.",
+      "clip": [
+        "200:63",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "200:196": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "200:197": {
+    "inputs": {
+      "seed": 657505249306724,
+      "steps": 20,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "200:65",
+        0
+      ],
+      "positive": [
+        "200:195",
+        0
+      ],
+      "negative": [
+        "200:199",
+        0
+      ],
+      "latent_image": [
+        "200:196",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "200:198": {
+    "inputs": {
+      "samples": [
+        "200:197",
+        0
+      ],
+      "vae": [
+        "200:64",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "200:199": {
+    "inputs": {
+      "conditioning": [
+        "200:195",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  }
+}

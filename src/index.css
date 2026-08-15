@@ -1,0 +1,242 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Neumorphic base ── */
+    --neu-base: #E8E8F2;
+    --neu-light: #FFFFFF;
+    --neu-dark: #C4C4D4;
+    --neu-shadow: 6px 6px 14px #C4C4D4, -6px -6px 14px #FFFFFF;
+    --neu-shadow-sm: 3px 3px 8px #C4C4D4, -3px -3px 8px #FFFFFF;
+    --neu-shadow-lg: 10px 10px 24px #C0C0D2, -10px -10px 24px #FFFFFF;
+    --neu-inset: inset 4px 4px 10px #C4C4D4, inset -4px -4px 10px #FFFFFF;
+    --neu-inset-sm: inset 2px 2px 6px #C4C4D4, inset -2px -2px 6px #FFFFFF;
+
+    /* ── Semantic tokens ── */
+    --background: 240 20% 91%;
+    --foreground: 245 25% 24%;
+
+    --card: 240 20% 93%;
+    --card-foreground: 245 25% 24%;
+
+    --popover: 240 20% 93%;
+    --popover-foreground: 245 25% 24%;
+
+    --primary: 232 52% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 18% 88%;
+    --secondary-foreground: 245 25% 24%;
+
+    --muted: 240 15% 87%;
+    --muted-foreground: 245 10% 56%;
+
+    --accent: 232 52% 62%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 15% 85%;
+    --input: 240 20% 89%;
+    --ring: 232 52% 62%;
+
+    --radius: 1rem;
+
+    /* ── Sidebar ── */
+    --sidebar-background: 240 20% 91%;
+    --sidebar-foreground: 245 20% 42%;
+    --sidebar-primary: 232 52% 62%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 20% 87%;
+    --sidebar-accent-foreground: 245 25% 24%;
+    --sidebar-border: 240 15% 85%;
+    --sidebar-ring: 232 52% 62%;
+
+    /* ── Status ── */
+    --success: 152 56% 46%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 240 25% 15%;
+    --info: 232 52% 62%;
+    --info-foreground: 0 0% 100%;
+
+    /* ── Charts ── */
+    --chart-1: 232 52% 62%;
+    --chart-2: 280 50% 65%;
+    --chart-3: 152 56% 46%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 72% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    background-color: #E8E8F2;
+    color: hsl(var(--foreground));
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  /* ── Neumorphic surfaces ── */
+  .neu {
+    background: #E8E8F2;
+    box-shadow: var(--neu-shadow);
+    border-radius: var(--radius);
+    border: none;
+  }
+
+  .neu-sm {
+    background: #E8E8F2;
+    box-shadow: var(--neu-shadow-sm);
+    border-radius: calc(var(--radius) * 0.75);
+    border: none;
+  }
+
+  .neu-lg {
+    background: #E8E8F2;
+    box-shadow: var(--neu-shadow-lg);
+    border-radius: calc(var(--radius) * 1.5);
+    border: none;
+  }
+
+  .neu-inset {
+    background: #E8E8F2;
+    box-shadow: var(--neu-inset);
+    border-radius: var(--radius);
+    border: none;
+  }
+
+  .neu-inset-sm {
+    background: #E8E8F2;
+    box-shadow: var(--neu-inset-sm);
+    border-radius: calc(var(--radius) * 0.75);
+    border: none;
+  }
+
+  .neu-btn {
+    background: #E8E8F2;
+    box-shadow: var(--neu-shadow-sm);
+    border-radius: 50rem;
+    border: none;
+    transition: box-shadow 0.15s ease, transform 0.1s ease;
+    cursor: pointer;
+  }
+
+  .neu-btn:hover {
+    box-shadow: 4px 4px 10px #C4C4D4, -4px -4px 10px #FFFFFF;
+  }
+
+  .neu-btn:active {
+    box-shadow: var(--neu-inset-sm);
+    transform: scale(0.98);
+  }
+
+  .neu-btn-accent {
+    background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
+    box-shadow: 3px 3px 8px #B0B0C8, -2px -2px 6px #FFFFFF;
+    border-radius: 50rem;
+    border: none;
+    color: white;
+    transition: box-shadow 0.15s ease, transform 0.1s ease;
+    cursor: pointer;
+  }
+
+  .neu-btn-accent:hover {
+    box-shadow: 4px 4px 12px #A0A0C0, -2px -2px 8px #FFFFFF;
+  }
+
+  .neu-btn-accent:active {
+    box-shadow: inset 2px 2px 6px #4A5AB8, inset -2px -2px 4px #8898F0;
+    transform: scale(0.98);
+  }
+
+  /* ── Text styles ── */
+  .text-neu-primary {
+    color: #3D3D5C;
+  }
+
+  .text-neu-muted {
+    color: #9090A8;
+  }
+
+  .text-neu-accent {
+    color: #6B7FD4;
+  }
+
+  /* ── Accent gradient ── */
+  .bg-neu-accent {
+    background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
+  }
+
+  /* ── Sidebar-specific ── */
+  .sidebar-neu {
+    background: #E8E8F2;
+    box-shadow: 4px 0 16px rgba(180, 180, 200, 0.4);
+  }
+
+  /* ── Remove default borders on neu elements ── */
+  .neu *, .neu-sm *, .neu-lg *, .neu-inset * {
+    border-color: transparent;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #E8E8F2;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #C4C4D4;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9090A8;
+  }
+
+  /* ── Legacy compat ── */
+  .bg-gradient-gold {
+    background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .shadow-card {
+    box-shadow: var(--neu-shadow-sm);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--neu-shadow-lg);
+  }
+}
+
+/* ── Import page-level overrides ── */
+/* Add this line at the bottom of index.css:
+   @import './neu-overrides.css';
+   Or paste the contents of neu-overrides.css directly below this comment */
