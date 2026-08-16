@@ -41,7 +41,7 @@ interface Scene {
 const API = "https://fintech-dashboard-61vh.onrender.com/api";
 const BASE = "https://fintech-dashboard-61vh.onrender.com";
 
-// ─── Backend interrupt helper ─────────────────────────────────────────────────
+// â”€â”€â”€ Backend interrupt helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Tells the backend to actually cancel the running ComfyUI job.
 // workflow: "ttv.json" (text->video), "ltx23.json" (image->video / storyboard video)
 // job_id: storyboard job id, when relevant.
@@ -57,7 +57,7 @@ async function stopGeneration(workflow?: string, jobId?: string) {
   }
 }
 
-// ─── Skeleton / shimmer helper ────────────────────────────────────────────────
+// â”€â”€â”€ Skeleton / shimmer helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Shimmer({ className = "" }: { className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-xl bg-gray-100 ${className}`}>
@@ -72,7 +72,7 @@ function ImageSkeleton() {
       <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
         <div className="h-12 w-12 rounded-full border-4 border-gray-200 border-t-violet-400 animate-spin" />
-        <p className="text-sm font-medium">Generating image…</p>
+        <p className="text-sm font-medium">Generating imageâ€¦</p>
       </div>
     </div>
   );
@@ -84,8 +84,8 @@ function VideoSkeleton() {
       <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
         <div className="h-12 w-12 rounded-full border-4 border-gray-200 border-t-blue-400 animate-spin" />
-        <p className="text-sm font-medium">Generating video…</p>
-        <p className="text-xs text-gray-400">This can take 1–2 minutes</p>
+        <p className="text-sm font-medium">Generating videoâ€¦</p>
+        <p className="text-xs text-gray-400">This can take 1â€“2 minutes</p>
       </div>
     </div>
   );
@@ -102,7 +102,7 @@ function PromptSkeleton() {
   );
 }
 
-// ─── Mode: Text → Image ───────────────────────────────────────────────────────
+// â”€â”€â”€ Mode: Text â†’ Image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TextToImage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -147,7 +147,7 @@ function TextToImage() {
 
   const download = async () => {
     if (!imagePath) return;
-    const res = await fetch(`${BASE}/${imagePath}`);
+    const res = await fetch((imagePath?.startsWith("http") ? imagePath : (imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`)));
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -166,12 +166,12 @@ function TextToImage() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && generate()}
-            placeholder="Describe the image you want…"
+            placeholder="Describe the image you wantâ€¦"
           />
           <div className="flex gap-2">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-              {loading ? "Generating…" : "Generate Image"}
+              {loading ? "Generatingâ€¦" : "Generate Image"}
             </Button>
             {loading && (
               <Button variant="destructive" onClick={stop} title="Stop generating">
@@ -207,7 +207,7 @@ function TextToImage() {
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.4 }}
-              src={`${BASE}/${imagePath}`}
+              src={(imagePath?.startsWith("http") ? imagePath : (imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`))}
               className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto"
             />
           ) : (
@@ -222,7 +222,7 @@ function TextToImage() {
   );
 }
 
-// ─── Mode: Text → Video (ttv.json) ────────────────────────────────────────────
+// â”€â”€â”€ Mode: Text â†’ Video (ttv.json) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TextToVideo() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -279,12 +279,12 @@ function TextToVideo() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && generate()}
-            placeholder="Describe the video scene you want…"
+            placeholder="Describe the video scene you wantâ€¦"
           />
           <div className="flex gap-2">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Video className="mr-2 h-4 w-4" />}
-              {loading ? "Generating…" : "Generate Video"}
+              {loading ? "Generatingâ€¦" : "Generate Video"}
             </Button>
             {loading && (
               <Button variant="destructive" onClick={stop} title="Stop generating">
@@ -330,7 +330,7 @@ function TextToVideo() {
   );
 }
 
-// ─── Mode: Image → Video (ltx23.json) ─────────────────────────────────────────
+// â”€â”€â”€ Mode: Image â†’ Video (ltx23.json) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ImageToVideo() {
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -341,7 +341,7 @@ function ImageToVideo() {
   const [loading, setLoading] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
 
-  const imgSrc = imageData ?? (imagePath ? `${BASE}/${imagePath}` : null);
+  const imgSrc = imageData ?? (imagePath ? (imagePath?.startsWith("http") ? imagePath : (imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`)) : null);
 
   const uploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
@@ -435,7 +435,7 @@ function ImageToVideo() {
               {imgSrc && <img src={imgSrc} className="w-full h-full object-cover opacity-40" />}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
                 <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="text-xs">Analyzing image…</span>
+                <span className="text-xs">Analyzing imageâ€¦</span>
               </div>
             </div>
           ) : imgSrc ? (
@@ -472,13 +472,13 @@ function ImageToVideo() {
             <Input
               value={videoPrompt}
               onChange={(e) => setVideoPrompt(e.target.value)}
-              placeholder="Describe the motion / animation…"
+              placeholder="Describe the motion / animationâ€¦"
             />
           )}
           <div className="flex gap-2">
             <Button onClick={generate} disabled={loading || !imgSrc || !videoPrompt.trim() || analyzing} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Wand2 className="mr-2 h-4 w-4" />}
-              {loading ? "Generating…" : "Generate Video"}
+              {loading ? "Generatingâ€¦" : "Generate Video"}
             </Button>
             {loading && (
               <Button variant="destructive" onClick={stop} title="Stop generating">
@@ -524,7 +524,7 @@ function ImageToVideo() {
   );
 }
 
-// ─── Mode: Full Storyboard ────────────────────────────────────────────────────
+// â”€â”€â”€ Mode: Full Storyboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Storyboard() {
   const [destination, setDestination] = useState("");
   const [loading, setLoading] = useState(false);
@@ -624,7 +624,7 @@ function Storyboard() {
   };
 
   const getImageSrc = useCallback((scene: Scene) =>
-    scene.image_data ?? (scene.image_path ? `${BASE}/${scene.image_path}` : null), []);
+    scene.image_data ?? (scene.image_path ? (scene.image_path?.startsWith("http") ? scene.image_path : `${BASE}/${scene.image_path}`) : null), []);
 
   const regenerateImage = async (index: number) => {
     setScenes((prev) => {
@@ -757,7 +757,7 @@ function Storyboard() {
               <X className="h-6 w-6" />
             </button>
             <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium">
-              Scene {fsScene?.scene} · {(fullscreen ?? 0) + 1} / {scenes.length}
+              Scene {fsScene?.scene} Â· {(fullscreen ?? 0) + 1} / {scenes.length}
             </div>
             {fullscreen > 0 && (
               <button className="absolute left-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-3 z-10" onClick={(e) => { e.stopPropagation(); setFullscreen(fullscreen - 1); }}>
@@ -783,11 +783,11 @@ function Storyboard() {
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && generate()}
-          placeholder="Enter destination (e.g. Tokyo, Paris, Bali, Rajasthan)…"
+          placeholder="Enter destination (e.g. Tokyo, Paris, Bali, Rajasthan)â€¦"
         />
         <Button onClick={generate} disabled={loading || !destination.trim()}>
           {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />}
-          {loading ? "Generating…" : "Generate Storyboard"}
+          {loading ? "Generatingâ€¦" : "Generate Storyboard"}
         </Button>
         {loading && (
           <Button variant="destructive" onClick={stopStoryboard} title="Stop generating">
@@ -802,7 +802,7 @@ function Storyboard() {
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2 text-blue-700 font-medium">
               <Loader2 className="animate-spin h-4 w-4" />
-              Generating scenes… {progress.done} / {progress.total} complete
+              Generating scenesâ€¦ {progress.done} / {progress.total} complete
             </span>
             <span className="text-blue-500">{Math.round((progress.done / progress.total) * 100)}%</span>
           </div>
@@ -813,7 +813,7 @@ function Storyboard() {
               transition={{ duration: 0.6, ease: "easeOut" }}
             />
           </div>
-          <p className="text-xs text-blue-400">Each image takes 30–90 seconds. Scenes appear as they're ready.</p>
+          <p className="text-xs text-blue-400">Each image takes 30â€“90 seconds. Scenes appear as they're ready.</p>
         </div>
       )}
 
@@ -862,7 +862,7 @@ function Storyboard() {
                       <Trash2 className="h-4 w-4 mr-2" /> Delete
                     </Button>
                     <Button variant="secondary" disabled={scene.imageLoading} onClick={() => regenerateImage(i)}>
-                      🔄 Regenerate
+                      ðŸ”„ Regenerate
                     </Button>
                     {scene.imageLoading && (
                       <Button variant="destructive" onClick={() => stopSceneImage(i)} title="Stop generating">
@@ -901,7 +901,7 @@ function Storyboard() {
                       <Video className="mr-2 h-4 w-4" /> Generate Video
                     </Button>
                     <Button variant="secondary" disabled={!imgSrc || scene.videoLoading} onClick={() => generateVideo(i)}>
-                      🔄 Regenerate Video
+                      ðŸ”„ Regenerate Video
                     </Button>
                     {scene.videoLoading && (
                       <Button variant="destructive" onClick={() => stopSceneVideo(i)} title="Stop generating">
@@ -938,7 +938,7 @@ function Storyboard() {
   );
 }
 
-// ─── Root page ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Root page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function Creatives() {
   const [mode, setMode] = useState<Mode>("text-image");
 
