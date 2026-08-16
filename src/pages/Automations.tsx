@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = "https://fintech-dashboard-61vh.onrender.com/api";
 
 type TriggerType = "webhook" | "scheduled" | "not-built";
 type RunStatus   = "idle" | "running" | "success" | "error";

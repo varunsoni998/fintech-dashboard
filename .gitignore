@@ -30,3 +30,4 @@ __pycache__/
 src.zip
 .env.secrets
 .env.secrets2
+backend/outputs/

@@ -15,7 +15,7 @@ const getApiBase = () => {
   const hostname = window.location.hostname;
   // Tauri desktop app uses 'tauri.localhost' — point to the actual server IP instead
   if (hostname === "tauri.localhost" || hostname === "localhost" || hostname === "127.0.0.1") {
-    return "http://localhost:8000/api";
+    return "https://fintech-dashboard-61vh.onrender.com/api";
   }
   // Browser on LAN — use the same host that served the page
   return `http://${hostname}:8000/api`;

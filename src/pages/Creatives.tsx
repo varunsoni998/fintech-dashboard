@@ -38,8 +38,8 @@ interface Scene {
   promptsLoading: boolean;
 }
 
-const API = "http://localhost:8000/api";
-const BASE = "http://localhost:8000";
+const API = "https://fintech-dashboard-61vh.onrender.com/api";
+const BASE = "https://fintech-dashboard-61vh.onrender.com";
 
 // ─── Backend interrupt helper ─────────────────────────────────────────────────
 // Tells the backend to actually cancel the running ComfyUI job.
