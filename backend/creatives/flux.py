@@ -4,7 +4,8 @@ import base64
 import requests
 
 CF_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
+CF_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
+CF_GLOBAL_KEY = os.getenv("CLOUDFLARE_GLOBAL_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -16,14 +17,19 @@ Ultra photorealistic. Luxury travel commercial. RAW photograph. 8K. HDR.
 Natural colors. Professional travel photography. No illustration. No CGI. Real photograph.
 """
 
-    # Generate image via Cloudflare
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+
     response = requests.post(
         url,
-        headers={"Authorization": f"Bearer {CF_API_TOKEN}"},
-        json={"prompt": final_prompt.strip(), "num_steps": 8},
+        headers={
+            "X-Auth-Email": CF_EMAIL,
+            "X-Auth-Key": CF_GLOBAL_KEY,
+            "Content-Type": "application/json",
+        },
+        json={"prompt": final_prompt.strip()},
         timeout=60,
     )
+
     if not response.ok:
         raise Exception(f"Cloudflare failed: {response.text}")
 
@@ -48,6 +54,5 @@ Natural colors. Professional travel photography. No illustration. No CGI. Real p
     if not upload_res.ok:
         raise Exception(f"Supabase upload failed: {upload_res.text}")
 
-    # Return public URL
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/generated-images/{filename}"
     return public_url
