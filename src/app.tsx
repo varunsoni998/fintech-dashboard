@@ -5,8 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import Index            from "./pages/index";
+import Login            from "./pages/Login";
 import Analytics        from "./pages/Analytics";
 import Leads            from "./pages/Leads";
 import Suppliers        from "./pages/suppliers";
@@ -31,41 +33,50 @@ import Automations      from "./pages/Automations";
 
 const queryClient = new QueryClient();
 
+function AppLayout() {
+  return (
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full">
+        <DashboardSidebar />
+        <Routes>
+          <Route path="/"               element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/finance-kpis"   element={<ProtectedRoute><FinanceKPIs /></ProtectedRoute>} />
+          <Route path="/analytics"      element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/lead-analytics" element={<ProtectedRoute><LeadAnalytics /></ProtectedRoute>} />
+          <Route path="/web-analytics"  element={<ProtectedRoute><WebAnalytics /></ProtectedRoute>} />
+          <Route path="/leads"             element={<ProtectedRoute><Leads /></ProtectedRoute>} />
+          <Route path="/suppliers"         element={<ProtectedRoute><Suppliers /></ProtectedRoute>} />
+          <Route path="/supplier-reachout" element={<ProtectedRoute><SupplierReachout /></ProtectedRoute>} />
+          <Route path="/active-deals"      element={<ProtectedRoute><ActiveDeals /></ProtectedRoute>} />
+          <Route path="/itineraries"       element={<ProtectedRoute><Itineraries /></ProtectedRoute>} />
+          <Route path="/operations"        element={<ProtectedRoute><Operations /></ProtectedRoute>} />
+          <Route path="/content"           element={<ProtectedRoute><Content /></ProtectedRoute>} />
+          <Route path="/chat"              element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          <Route path="/campaign-design"   element={<ProtectedRoute><CampaignDesign /></ProtectedRoute>} />
+          <Route path="/scheduling"        element={<ProtectedRoute><Scheduling /></ProtectedRoute>} />
+          <Route path="/client-pms"        element={<ProtectedRoute><ClientPMS /></ProtectedRoute>} />
+          <Route path="/todo"              element={<ProtectedRoute><TodoPage /></ProtectedRoute>} />
+          <Route path="/mxai"              element={<ProtectedRoute><MXAI /></ProtectedRoute>} />
+          <Route path="/automations"       element={<ProtectedRoute><Automations /></ProtectedRoute>} />
+          <Route path="/book"              element={<ProtectedRoute><BookMeeting /></ProtectedRoute>} />
+          <Route path="/creatives"         element={<ProtectedRoute><Creatives /></ProtectedRoute>} />
+          <Route path="*"                  element={<NotFound />} />
+        </Routes>
+      </div>
+    </SidebarProvider>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full">
-            <DashboardSidebar />
-            <Routes>
-              <Route path="/"               element={<Index />} />
-              <Route path="/finance-kpis"   element={<FinanceKPIs />} />
-              <Route path="/analytics"      element={<Analytics />} />
-              <Route path="/lead-analytics" element={<LeadAnalytics />} />
-              <Route path="/web-analytics"  element={<WebAnalytics />} />
-              <Route path="/leads"             element={<Leads />} />
-              <Route path="/suppliers"         element={<Suppliers />} />
-              <Route path="/supplier-reachout" element={<SupplierReachout />} />
-              <Route path="/active-deals"      element={<ActiveDeals />} />
-              <Route path="/itineraries"       element={<Itineraries />} />
-              <Route path="/operations"        element={<Operations />} />
-              <Route path="/content"           element={<Content />} />
-              <Route path="/chat"              element={<Chat />} />
-              <Route path="/campaign-design"   element={<CampaignDesign />} />
-              <Route path="/scheduling"        element={<Scheduling />} />
-              <Route path="/client-pms"        element={<ClientPMS />} />
-              <Route path="/todo"              element={<TodoPage />} />
-              <Route path="/mxai"              element={<MXAI />} />
-              <Route path="/automations"       element={<Automations />} />
-              <Route path="/book"              element={<BookMeeting />} />
-              <Route path="/creatives"         element={<Creatives />} />
-              <Route path="*"                  element={<NotFound />} />
-            </Routes>
-          </div>
-        </SidebarProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/*" element={<AppLayout />} />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
