@@ -52,3 +52,20 @@ def generate_image(image_prompt: str) -> str:
 
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/generated-images/{filename}"
     return public_url
+
+import threading
+
+def cleanup_old_images():
+    import time
+    while True:
+        time.sleep(3600)  # every hour
+        try:
+            from supabase_client import supabase
+            files = supabase.storage.from_("generated-images").list()
+            for f in files or []:
+                supabase.storage.from_("generated-images").remove([f["name"]])
+        except Exception as e:
+            print(f"Cleanup error: {e}")
+
+# Start cleanup thread
+threading.Thread(target=cleanup_old_images, daemon=True).start()
