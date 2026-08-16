@@ -72,7 +72,7 @@ function ImageSkeleton() {
       <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
         <div className="h-12 w-12 rounded-full border-4 border-gray-200 border-t-violet-400 animate-spin" />
-        <p className="text-sm font-medium">Generating imageÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</p>
+        <p className="text-sm font-medium">Generating image...</p>
       </div>
     </div>
   );
@@ -84,7 +84,7 @@ function VideoSkeleton() {
       <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
         <div className="h-12 w-12 rounded-full border-4 border-gray-200 border-t-blue-400 animate-spin" />
-        <p className="text-sm font-medium">Generating videoÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</p>
+        <p className="text-sm font-medium">Generating video...</p>
         <p className="text-xs text-gray-400">This can take 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ2 minutes</p>
       </div>
     </div>
@@ -166,12 +166,12 @@ function TextToImage() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && generate()}
-            placeholder="Describe the image you wantÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+            placeholder="Describe the image you want..."
           />
           <div className="flex gap-2">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-              {loading ? "GeneratingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦" : "Generate Image"}
+              {loading ? "Generating..." : "Generate Image"}
             </Button>
             {loading && (
               <Button variant="destructive" onClick={stop} title="Stop generating">
@@ -279,12 +279,12 @@ function TextToVideo() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && generate()}
-            placeholder="Describe the video scene you wantÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+            placeholder="Describe the video scene you want..."
           />
           <div className="flex gap-2">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Video className="mr-2 h-4 w-4" />}
-              {loading ? "GeneratingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦" : "Generate Video"}
+              {loading ? "Generating..." : "Generate Video"}
             </Button>
             {loading && (
               <Button variant="destructive" onClick={stop} title="Stop generating">
@@ -435,7 +435,7 @@ function ImageToVideo() {
               {imgSrc && <img src={imgSrc} className="w-full h-full object-cover opacity-40" />}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
                 <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="text-xs">Analyzing imageÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</span>
+                <span className="text-xs">Analyzing image...</span>
               </div>
             </div>
           ) : imgSrc ? (
@@ -472,13 +472,13 @@ function ImageToVideo() {
             <Input
               value={videoPrompt}
               onChange={(e) => setVideoPrompt(e.target.value)}
-              placeholder="Describe the motion / animationÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+              placeholder="Describe the motion / animation..."
             />
           )}
           <div className="flex gap-2">
             <Button onClick={generate} disabled={loading || !imgSrc || !videoPrompt.trim() || analyzing} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Wand2 className="mr-2 h-4 w-4" />}
-              {loading ? "GeneratingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦" : "Generate Video"}
+              {loading ? "Generating..." : "Generate Video"}
             </Button>
             {loading && (
               <Button variant="destructive" onClick={stop} title="Stop generating">
@@ -783,11 +783,11 @@ function Storyboard() {
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && generate()}
-          placeholder="Enter destination (e.g. Tokyo, Paris, Bali, Rajasthan)ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+          placeholder="Enter destination (e.g. Tokyo, Paris, Bali, Rajasthan)..."
         />
         <Button onClick={generate} disabled={loading || !destination.trim()}>
           {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />}
-          {loading ? "GeneratingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦" : "Generate Storyboard"}
+          {loading ? "Generating..." : "Generate Storyboard"}
         </Button>
         {loading && (
           <Button variant="destructive" onClick={stopStoryboard} title="Stop generating">
@@ -802,7 +802,7 @@ function Storyboard() {
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2 text-blue-700 font-medium">
               <Loader2 className="animate-spin h-4 w-4" />
-              Generating scenesÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ {progress.done} / {progress.total} complete
+              Generating scenes... {progress.done} / {progress.total} complete
             </span>
             <span className="text-blue-500">{Math.round((progress.done / progress.total) * 100)}%</span>
           </div>
