@@ -11,11 +11,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 
 def generate_image(image_prompt: str) -> str:
-    final_prompt = f"""
-{image_prompt}
-Ultra photorealistic. Luxury travel commercial. RAW photograph. 8K. HDR.
-Natural colors. Professional travel photography. No illustration. No CGI. Real photograph.
-"""
+    final_prompt = image_prompt
 
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
 
