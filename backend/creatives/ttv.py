@@ -1,6 +1,8 @@
 import os
+import time
 import uuid
 import json
+import threading
 import requests
 
 from creatives.utils import submit, wait
@@ -14,16 +16,6 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 
 def generate_video_from_text(prompt):
-    """
-    Generates a video directly from a text prompt using the ttv.json
-    workflow (LTX 2.3 running in its native text-to-video path — no
-    source image is uploaded or required).
-
-    The workflow has a "Switch to Text to Video?" boolean node that
-    toggles between the img2video and pure text2video branches; we
-    force it to True here since this function never has an image.
-    """
-
     print("\n")
     print("=" * 100)
     print("TEXT-TO-VIDEO GENERATION")
@@ -51,10 +43,8 @@ No watermark. No logos. No subtitles. No on-screen text.
     for key, value in workflow.items():
         if not isinstance(value, dict):
             continue
-
         if value.get("class_type") == "PrimitiveStringMultiline":
             prompt_node = key
-
         if (
             value.get("class_type") == "PrimitiveBoolean"
             and value.get("_meta", {}).get("title") == "Switch to Text to Video?"
@@ -96,10 +86,8 @@ No watermark. No logos. No subtitles. No on-screen text.
 
         if "videos" in node:
             video = node["videos"][0]
-
         elif "gifs" in node:
             video = node["gifs"][0]
-
         elif "images" in node:
             for item in node["images"]:
                 fname = item.get("filename", "")
@@ -144,12 +132,38 @@ No watermark. No logos. No subtitles. No on-screen text.
         print("=" * 100)
         print(save_path)
 
-        frontend_path = f"outputs/videos/{new_filename}"
+        # Upload to Supabase and return public URL
+        from supabase_client import supabase
+
+        with open(save_path, "rb") as f:
+            supabase.storage.from_("videos").upload(
+                path=new_filename,
+                file=f,
+                file_options={"content-type": "video/mp4"}
+            )
+        public_url = supabase.storage.from_("videos").get_public_url(new_filename)
+
+        # Delete from Supabase after 1 hour and clean up local file
+        def cleanup(fname, local_path):
+            time.sleep(3600)
+            try:
+                from supabase_client import supabase
+                supabase.storage.from_("videos").remove([fname])
+                print(f"Deleted from Supabase: {fname}")
+            except Exception as e:
+                print(f"Supabase delete failed: {e}")
+            try:
+                os.remove(local_path)
+                print(f"Deleted local file: {local_path}")
+            except Exception as e:
+                print(f"Local delete failed: {e}")
+
+        threading.Thread(target=cleanup, args=(new_filename, save_path), daemon=True).start()
 
         print("\nRETURNING:")
-        print(frontend_path)
+        print(public_url)
 
-        return frontend_path
+        return public_url
 
     print("\n")
     print("=" * 100)

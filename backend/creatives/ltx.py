@@ -1,6 +1,8 @@
 import os
+import time
 import uuid
 import json
+import threading
 import requests
 
 from creatives.utils import submit, wait, push_image
@@ -13,11 +15,7 @@ OUTPUT = "outputs/videos"
 os.makedirs(OUTPUT, exist_ok=True)
 
 
-def generate_video_from_image(
-    image_path,
-    image_prompt,
-    video_prompt,
-):
+def generate_video_from_image(image_path, image_prompt, video_prompt):
 
     print("\n")
     print("=" * 100)
@@ -64,18 +62,18 @@ The video should feel like a living photograph, not an animation.
 
 ALLOWED MOTION TYPES (choose only what fits the scene):
 
-• Extremely slow camera push forward — barely perceptible drift into the scene
-• Gentle, almost imperceptible camera tilt upward revealing sky
-• Ultra-slow parallax effect — foreground elements drift slightly slower than background
-• Clouds drifting slowly across the sky — very slow, like watching a time-lapse in reverse
-• Water surface shimmering slowly — subtle light reflections moving gently
-• River or waterfall flowing — slow and smooth, not rushing
-• Leaves or trees swaying gently in a soft breeze — very minimal movement
-• Flags or fabric rippling slowly in wind — smooth and graceful
-• Steam or mist rising slowly — ethereal, dreamlike
-• Golden light slowly shifting — as if the sun is moving just slightly
-• Shadows creeping very slowly across architecture
-• Birds gliding silently in the distance — far away, slow arcs
+- Extremely slow camera push forward — barely perceptible drift into the scene
+- Gentle, almost imperceptible camera tilt upward revealing sky
+- Ultra-slow parallax effect — foreground elements drift slightly slower than background
+- Clouds drifting slowly across the sky — very slow, like watching a time-lapse in reverse
+- Water surface shimmering slowly — subtle light reflections moving gently
+- River or waterfall flowing — slow and smooth, not rushing
+- Leaves or trees swaying gently in a soft breeze — very minimal movement
+- Flags or fabric rippling slowly in wind — smooth and graceful
+- Steam or mist rising slowly — ethereal, dreamlike
+- Golden light slowly shifting — as if the sun is moving just slightly
+- Shadows creeping very slowly across architecture
+- Birds gliding silently in the distance — far away, slow arcs
 
 IMAGE DESCRIPTION (what is in the photograph):
 {image_prompt}
@@ -96,20 +94,17 @@ Like a photograph that learned to breathe.
 
     image_node = None
     prompt_node = None
-    for key, value in workflow.items():
 
+    for key, value in workflow.items():
         if not isinstance(value, dict):
             continue
-
         if value.get("class_type") == "LoadImage":
             image_node = key
-
         if value.get("class_type") == "PrimitiveStringMultiline":
             prompt_node = key
 
     if image_node is None:
         raise Exception("LoadImage node not found in workflow.")
-
     if prompt_node is None:
         raise Exception("PrimitiveStringMultiline node not found in workflow.")
 
@@ -120,7 +115,6 @@ Like a photograph that learned to breathe.
     print("=" * 100)
     print("WORKFLOW READY")
     print("=" * 100)
-
     print("IMAGE NODE:", image_node)
     print("PROMPT NODE:", prompt_node)
     print("UPLOADED IMAGE:", filename)
@@ -137,7 +131,6 @@ Like a photograph that learned to breathe.
     print("=" * 100)
     print("COMFY OUTPUTS")
     print("=" * 100)
-
     print(json.dumps(outputs, indent=4))
 
     for node_id, node in outputs.items():
@@ -146,10 +139,8 @@ Like a photograph that learned to breathe.
 
         if "videos" in node:
             video = node["videos"][0]
-
         elif "gifs" in node:
             video = node["gifs"][0]
-
         elif "images" in node:
             for item in node["images"]:
                 fname = item.get("filename", "")
@@ -194,12 +185,38 @@ Like a photograph that learned to breathe.
         print("=" * 100)
         print(save_path)
 
-        frontend_path = f"outputs/videos/{new_filename}"
+        # Upload to Supabase and return public URL
+        from supabase_client import supabase
+
+        with open(save_path, "rb") as f:
+            supabase.storage.from_("videos").upload(
+                path=new_filename,
+                file=f,
+                file_options={"content-type": "video/mp4"}
+            )
+        public_url = supabase.storage.from_("videos").get_public_url(new_filename)
+
+        # Delete from Supabase after 1 hour and clean up local file
+        def cleanup(fname, local_path):
+            time.sleep(3600)
+            try:
+                from supabase_client import supabase
+                supabase.storage.from_("videos").remove([fname])
+                print(f"Deleted from Supabase: {fname}")
+            except Exception as e:
+                print(f"Supabase delete failed: {e}")
+            try:
+                os.remove(local_path)
+                print(f"Deleted local file: {local_path}")
+            except Exception as e:
+                print(f"Local delete failed: {e}")
+
+        threading.Thread(target=cleanup, args=(new_filename, save_path), daemon=True).start()
 
         print("\nRETURNING:")
-        print(frontend_path)
+        print(public_url)
 
-        return frontend_path
+        return public_url
 
     print("\n")
     print("=" * 100)

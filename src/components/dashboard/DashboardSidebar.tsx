@@ -20,6 +20,7 @@ import {
   Sparkles,
   ImagePlus,
   Zap,
+  LogOut,
 } from "lucide-react";
 import { NavLink } from "../../components/Navlink";
 import {
@@ -33,6 +34,8 @@ import {
   SidebarHeader,
 } from "../../components/ui/sidebar";
 import { useState } from "react";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 
 const STORAGE_KEY = "sidebar:modules";
 
@@ -111,6 +114,11 @@ function ModuleSection({
 export function DashboardSidebar() {
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(t => t + 1);
+  const { user, profile } = useAuth();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   return (
     <Sidebar className="border-r-0" style={{ background: "#E8E8F2" }}>
@@ -121,7 +129,7 @@ export function DashboardSidebar() {
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h2 className="text-lg font-bold tracking-tight leading-none" style={{ color: "#3D3D5C" }}>Fintech</h2>
+            <h2 className="text-lg font-bold tracking-tight leading-none" style={{ color: "#3D3D5C" }}>BusinessOS</h2>
             <p className="text-[10px] mt-0.5 tracking-widest uppercase" style={{ color: "#9090A8" }}>Dashboard</p>
           </div>
         </div>
@@ -189,9 +197,42 @@ export function DashboardSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <div className="p-4 mt-auto">
-        <p className="text-[10px] text-center tracking-widest uppercase" style={{ color: "#C4C4D4" }}>
-          Powered by <span style={{ color: "#9090A8" }}>Fintech</span>
+      {/* User info + Sign out */}
+      <div className="p-4 mt-auto border-t-0">
+        {user && (
+          <div className="mb-3 px-2">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold text-white"
+                style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)", boxShadow: "2px 2px 5px #C4C4D4, -1px -1px 4px #FFFFFF" }}>
+                {(profile?.full_name || user.email || "U")[0].toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium truncate" style={{ color: "#3D3D5C" }}>
+                  {profile?.full_name || user.email?.split("@")[0]}
+                </p>
+                <p className="text-[10px] truncate" style={{ color: "#9090A8" }}>
+                  {profile?.role || "member"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-xs transition-all"
+          style={{
+            background: "#E8E8F2",
+            boxShadow: "2px 2px 5px #C4C4D4, -2px -2px 5px #FFFFFF",
+            color: "#E05A5A",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
+        <p className="text-[10px] text-center tracking-widest uppercase mt-3" style={{ color: "#C4C4D4" }}>
+          Powered by <span style={{ color: "#9090A8" }}>BusinessOS</span>
         </p>
       </div>
     </Sidebar>

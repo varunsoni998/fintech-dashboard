@@ -1,170 +1,244 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "../lib/supabase";
+import { Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+
+const N = {
+  card: {
+    background: "#E8E8F2",
+    boxShadow: "10px 10px 24px #C0C0D2, -10px -10px 24px #FFFFFF",
+    borderRadius: "1.5rem",
+    border: "none",
+  },
+  input: {
+    background: "#E8E8F2",
+    boxShadow: "inset 3px 3px 7px #C4C4D4, inset -3px -3px 7px #FFFFFF",
+    borderRadius: "0.75rem",
+    border: "none",
+    color: "#3D3D5C",
+  },
+  btn: {
+    background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
+    boxShadow: "3px 3px 8px #B0B0C8, -2px -2px 6px #FFFFFF",
+    borderRadius: "0.75rem",
+    border: "none",
+    color: "white",
+    cursor: "pointer",
+    transition: "box-shadow 0.15s ease, transform 0.1s ease",
+  },
+};
+
+type Mode = "login" | "signup" | "forgot";
 
 export default function Login() {
-  const navigate = useNavigate();
-  const { toast } = useToast();
-
-  const [loading, setLoading] = useState(false);
-
-  // login fields
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-
-  // signup fields
-  const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    setError("");
+    setSuccess("");
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
-      password: loginPassword,
-    });
-    setLoading(false);
 
-    if (error) {
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: fullName } },
+        });
+        if (error) throw error;
+        setSuccess("Check your email to confirm your account!");
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        setSuccess("Password reset email sent! Check your inbox.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
     }
-
-    navigate("/");
-  }
-
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: signupEmail,
-      password: signupPassword,
-      options: {
-        data: { full_name: fullName },
-      },
-    });
-    setLoading(false);
-
-    if (error) {
-      toast({
-        title: "Sign up failed",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    toast({
-      title: "Account created",
-      description: "Check your email to confirm your account, then log in.",
-    });
-  }
+  };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Welcome</CardTitle>
-          <CardDescription>Sign in to your account or create a new one</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Log in</TabsTrigger>
-              <TabsTrigger value="signup">Sign up</TabsTrigger>
-            </TabsList>
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: "#E8E8F2" }}
+    >
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div
+            className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
+            style={{
+              background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
+              boxShadow: "6px 6px 14px #C4C4D4, -6px -6px 14px #FFFFFF",
+            }}
+          >
+            <Sparkles className="h-8 w-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold" style={{ color: "#3D3D5C" }}>
+            BusinessOS
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "#9090A8" }}>
+            {mode === "login" && "Sign in to your workspace"}
+            {mode === "signup" && "Create your account"}
+            {mode === "forgot" && "Reset your password"}
+          </p>
+        </div>
 
-            <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Logging in..." : "Log in"}
-                </Button>
-              </form>
-            </TabsContent>
+        {/* Card */}
+        <div className="p-8" style={N.card}>
+          <div className="space-y-4">
+            {/* Full name — signup only */}
+            {mode === "signup" && (
+              <div className="relative">
+                <User
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
+                  style={{ color: "#9090A8" }}
+                />
+                <input
+                  type="text"
+                  placeholder="Full name"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 text-sm outline-none"
+                  style={N.input}
+                />
+              </div>
+            )}
 
-            <TabsContent value="signup">
-              <form onSubmit={handleSignup} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full name</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Jane Doe"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    required
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    placeholder="••••••••"
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creating account..." : "Sign up"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+            {/* Email */}
+            <div className="relative">
+              <Mail
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
+                style={{ color: "#9090A8" }}
+              />
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                className="w-full pl-10 pr-4 py-3 text-sm outline-none"
+                style={N.input}
+              />
+            </div>
+
+            {/* Password — not for forgot */}
+            {mode !== "forgot" && (
+              <div className="relative">
+                <Lock
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
+                  style={{ color: "#9090A8" }}
+                />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                  className="w-full pl-10 pr-10 py-3 text-sm outline-none"
+                  style={N.input}
+                />
+                <button
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9090A8" }}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            )}
+
+            {/* Error / Success */}
+            {error && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={{ color: "#E05A5A", background: "rgba(224,90,90,0.08)" }}>
+                {error}
+              </p>
+            )}
+            {success && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={{ color: "#52A882", background: "rgba(82,168,130,0.08)" }}>
+                {success}
+              </p>
+            )}
+
+            {/* Submit */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="w-full py-3 text-sm font-semibold transition-all"
+              style={{ ...N.btn, opacity: loading ? 0.7 : 1 }}
+            >
+              {loading
+                ? "Please wait..."
+                : mode === "login"
+                ? "Sign In"
+                : mode === "signup"
+                ? "Create Account"
+                : "Send Reset Email"}
+            </button>
+          </div>
+
+          {/* Footer links */}
+          <div className="mt-6 text-center space-y-2">
+            {mode === "login" && (
+              <>
+                <button
+                  onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }}
+                  className="block w-full text-xs"
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9090A8" }}
+                >
+                  Forgot password?
+                </button>
+                <p className="text-xs" style={{ color: "#9090A8" }}>
+                  Don't have an account?{" "}
+                  <button
+                    onClick={() => { setMode("signup"); setError(""); setSuccess(""); }}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "#6B7FD4", fontWeight: 500 }}
+                  >
+                    Sign up
+                  </button>
+                </p>
+              </>
+            )}
+            {mode === "signup" && (
+              <p className="text-xs" style={{ color: "#9090A8" }}>
+                Already have an account?{" "}
+                <button
+                  onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "#6B7FD4", fontWeight: 500 }}
+                >
+                  Sign in
+                </button>
+              </p>
+            )}
+            {mode === "forgot" && (
+              <button
+                onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                className="text-xs"
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#6B7FD4" }}
+              >
+                Back to sign in
+              </button>
+            )}
+          </div>
+        </div>
+
+        <p className="text-center text-xs mt-6" style={{ color: "#C4C4D4" }}>
+          Powered by <span style={{ color: "#9090A8" }}>BusinessOS</span>
+        </p>
+      </div>
     </div>
   );
 }
