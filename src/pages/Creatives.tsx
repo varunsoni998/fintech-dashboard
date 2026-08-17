@@ -85,7 +85,7 @@ function VideoSkeleton() {
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
         <div className="h-12 w-12 rounded-full border-4 border-gray-200 border-t-blue-400 animate-spin" />
         <p className="text-sm font-medium">Generating video...</p>
-        <p className="text-xs text-gray-400">This can take 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ2 minutes</p>
+        <p className="text-xs text-gray-400">This can take 1-2 minutes</p>
       </div>
     </div>
   );
@@ -260,7 +260,7 @@ function TextToVideo() {
 
   const download = async () => {
     if (!videoPath) return;
-    const res = await fetch(`${BASE}/${videoPath}`);
+    const res = await fetch(videoPath);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -316,7 +316,7 @@ function TextToVideo() {
               controls
               className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto"
             >
-              <source src={`${BASE}/${videoPath}?t=${Date.now()}`} type="video/mp4" />
+              <source src={videoPath} type="video/mp4" />
             </motion.video>
           ) : (
             <div className="w-full aspect-video rounded-xl border bg-muted/20 flex flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -425,7 +425,7 @@ function ImageToVideo() {
 
   const download = async () => {
     if (!videoPath) return;
-    const res = await fetch(`${BASE}/${videoPath}`);
+    const res = await fetch(videoPath);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -523,7 +523,7 @@ function ImageToVideo() {
               controls
               className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto"
             >
-              <source src={`${BASE}/${videoPath}?t=${Date.now()}`} type="video/mp4" />
+              <source src={videoPath} type="video/mp4" />
             </motion.video>
           ) : (
             <div className="w-full aspect-video rounded-xl border bg-muted/20 flex flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -826,7 +826,7 @@ function Storyboard() {
               transition={{ duration: 0.6, ease: "easeOut" }}
             />
           </div>
-          <p className="text-xs text-blue-400">Each image takes 30ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ90 seconds. Scenes appear as they're ready.</p>
+          <p className="text-xs text-blue-400">Each image takes 30-90 seconds. Scenes appear as they're ready.</p>
         </div>
       )}
 
@@ -902,7 +902,7 @@ function Storyboard() {
                     <VideoSkeleton />
                   ) : scene.video_path ? (
                     <video controls className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto">
-                      <source src={`${BASE}/${scene.video_path}?t=${Date.now()}`} type="video/mp4" />
+                      <source src={videoPath} type="video/mp4" />
                     </video>
                   ) : (
                     <div className="w-full aspect-video rounded-xl border bg-gray-50 flex items-center justify-center">
