@@ -384,11 +384,24 @@ function ImageToVideo() {
     controllerRef.current = controller;
 
     try {
+      // If we have a local file (base64), upload it first to get a server path
+      let serverImagePath = imagePath;
+
+      if (!serverImagePath && imageData) {
+        // Convert base64 to blob and upload via analyze-image to get a server path
+        const blob = await fetch(imageData).then(r => r.blob());
+        const formData = new FormData();
+        formData.append("file", blob, "upload.jpg");
+        const uploadRes = await fetch(`${API}/analyze-image`, { method: "POST", body: formData });
+        const uploadData = await uploadRes.json();
+        serverImagePath = uploadData.imagePath ?? null;
+      }
+
       const res = await fetch(`${API}/generate-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image_path: imagePath,
+          image_path: serverImagePath,
           image_prompt: imagePromptAnalyzed,
           video_prompt: videoPrompt.trim(),
         }),
