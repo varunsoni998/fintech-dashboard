@@ -12,13 +12,7 @@ import { useEffect, useRef, useState } from "react";
 // Replace the existing API_BASE line at the top of Chat.tsx with this:
 
 const getApiBase = () => {
-  const hostname = window.location.hostname;
-  // Tauri desktop app uses 'tauri.localhost' — point to the actual server IP instead
-  if (hostname === "tauri.localhost" || hostname === "localhost" || hostname === "127.0.0.1") {
     return "https://fintech-dashboard-61vh.onrender.com/api";
-  }
-  // Browser on LAN — use the same host that served the page
-  return `http://${hostname}:8000/api`;
 };
 
 const API_BASE = getApiBase();
