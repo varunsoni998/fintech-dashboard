@@ -18,6 +18,9 @@ import {
   Copy,
   Check,
   Square,
+  MonitorPlay,
+  Smartphone,
+  Clock,
 } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -25,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type Mode = "text-image" | "text-video" | "image-video" | "storyboard";
+type Ratio = "landscape" | "portrait";
+type Duration = 2 | 3 | 5;
 
 interface Scene {
   scene: number;
@@ -40,14 +45,28 @@ interface Scene {
 
 const API = "https://fintech-dashboard-61vh.onrender.com/api";
 const BASE = "";
+const TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes
+
+// ---- Fetch with timeout ----
+function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const timeoutController = new AbortController();
+  const timer = setTimeout(() => timeoutController.abort(), TIMEOUT_MS);
+
+  // Merge abort signals if caller also has one
+  const callerSignal = options.signal as AbortSignal | undefined;
+  if (callerSignal) {
+    callerSignal.addEventListener("abort", () => timeoutController.abort());
+  }
+
+  return fetch(url, { ...options, signal: timeoutController.signal }).finally(() =>
+    clearTimeout(timer)
+  );
+}
 
 // ---- Backend interrupt helper ----
-// Tells the backend to actually cancel the running ComfyUI job.
-// workflow: "ttv.json" (text->video), "ltx23.json" (image->video / storyboard video)
-// job_id: storyboard job id, when relevant.
 async function stopGeneration(workflow?: string, jobId?: string) {
   try {
-    await fetch(`${API}/stop-generation`, {
+    await fetchWithTimeout(`${API}/stop-generation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workflow, job_id: jobId }),
@@ -55,6 +74,55 @@ async function stopGeneration(workflow?: string, jobId?: string) {
   } catch (err) {
     console.error("Failed to stop generation:", err);
   }
+}
+
+// ---- Shared ratio + duration toggle UI ----
+function RatioButtons({ value, onChange }: { value: Ratio; onChange: (v: Ratio) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ratio</p>
+      <div className="flex gap-2">
+        {(["landscape", "portrait"] as Ratio[]).map((r) => (
+          <button
+            key={r}
+            onClick={() => onChange(r)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              value === r
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+            }`}
+          >
+            {r === "landscape" ? <MonitorPlay className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
+            {r === "landscape" ? "Landscape" : "Portrait (Reels)"}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DurationButtons({ value, onChange }: { value: Duration; onChange: (v: Duration) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</p>
+      <div className="flex gap-2">
+        {([2, 3, 5] as Duration[]).map((d) => (
+          <button
+            key={d}
+            onClick={() => onChange(d)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              value === d
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+            }`}
+          >
+            <Clock className="h-3 w-3" />
+            {d}s
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ---- Skeleton / shimmer helper ----
@@ -85,7 +153,7 @@ function VideoSkeleton() {
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
         <div className="h-12 w-12 rounded-full border-4 border-gray-200 border-t-blue-400 animate-spin" />
         <p className="text-sm font-medium">Generating video...</p>
-        <p className="text-xs text-gray-400">This can take 1-2 minutes</p>
+        <p className="text-xs text-gray-400">This can take several minutes</p>
       </div>
     </div>
   );
@@ -105,6 +173,7 @@ function PromptSkeleton() {
 // ---- Mode: Text -> Image ----
 function TextToImage() {
   const [prompt, setPrompt] = useState("");
+  const [ratio, setRatio] = useState<Ratio>("landscape");
   const [loading, setLoading] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -117,10 +186,10 @@ function TextToImage() {
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
-      const res = await fetch(`${API}/generate-image`, {
+      const res = await fetchWithTimeout(`${API}/generate-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: prompt.trim(), ratio }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -147,7 +216,7 @@ function TextToImage() {
 
   const download = async () => {
     if (!imagePath) return;
-    const res = await fetch(imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`);
+    const res = await fetchWithTimeout(imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -160,15 +229,20 @@ function TextToImage() {
   return (
     <div className="grid lg:grid-cols-3 gap-6 items-start">
       <div className="lg:col-span-1">
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</p>
-          <Input
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && generate()}
-            placeholder="Describe the image you want..."
-          />
-          <div className="flex gap-2">
+        <div className="rounded-xl border bg-card p-4 space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</p>
+            <Input
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && generate()}
+              placeholder="Describe the image you want..."
+            />
+          </div>
+
+          <RatioButtons value={ratio} onChange={setRatio} />
+
+          <div className="flex gap-2 pt-1">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ImageIcon className="mr-2 h-4 w-4" />}
               {loading ? "Generating..." : "Generate Image"}
@@ -225,6 +299,8 @@ function TextToImage() {
 // ---- Mode: Text -> Video (ttv.json) ----
 function TextToVideo() {
   const [prompt, setPrompt] = useState("");
+  const [ratio, setRatio] = useState<Ratio>("landscape");
+  const [duration, setDuration] = useState<Duration>(3);
   const [loading, setLoading] = useState(false);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -236,10 +312,10 @@ function TextToVideo() {
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
-      const res = await fetch(`${API}/generate-video-text`, {
+      const res = await fetchWithTimeout(`${API}/generate-video-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: prompt.trim(), ratio, duration }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -260,7 +336,7 @@ function TextToVideo() {
 
   const download = async () => {
     if (!videoPath) return;
-    const res = await fetch(videoPath);
+    const res = await fetchWithTimeout(videoPath);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -273,15 +349,21 @@ function TextToVideo() {
   return (
     <div className="grid lg:grid-cols-3 gap-6 items-start">
       <div className="lg:col-span-1">
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</p>
-          <Input
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && generate()}
-            placeholder="Describe the video scene you want..."
-          />
-          <div className="flex gap-2">
+        <div className="rounded-xl border bg-card p-4 space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</p>
+            <Input
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && generate()}
+              placeholder="Describe the video scene you want..."
+            />
+          </div>
+
+          <RatioButtons value={ratio} onChange={setRatio} />
+          <DurationButtons value={duration} onChange={setDuration} />
+
+          <div className="flex gap-2 pt-1">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Video className="mr-2 h-4 w-4" />}
               {loading ? "Generating..." : "Generate Video"}
@@ -337,6 +419,8 @@ function ImageToVideo() {
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoPrompt, setVideoPrompt] = useState("");
   const [imagePromptAnalyzed, setImagePromptAnalyzed] = useState("");
+  const [ratio, setRatio] = useState<Ratio>("landscape");
+  const [duration, setDuration] = useState<Duration>(3);
   const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
@@ -363,7 +447,7 @@ function ImageToVideo() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API}/analyze-image`, { method: "POST", body: formData });
+      const res = await fetchWithTimeout(`${API}/analyze-image`, { method: "POST", body: formData });
       if (res.ok) {
         const data = await res.json();
         setImagePromptAnalyzed(data.image_prompt || "");
@@ -384,26 +468,26 @@ function ImageToVideo() {
     controllerRef.current = controller;
 
     try {
-      // If we have a local file (base64), upload it first to get a server path
       let serverImagePath = imagePath;
 
       if (!serverImagePath && imageData) {
-        // Convert base64 to blob and upload via analyze-image to get a server path
         const blob = await fetch(imageData).then(r => r.blob());
         const formData = new FormData();
         formData.append("file", blob, "upload.jpg");
-        const uploadRes = await fetch(`${API}/analyze-image`, { method: "POST", body: formData });
+        const uploadRes = await fetchWithTimeout(`${API}/analyze-image`, { method: "POST", body: formData });
         const uploadData = await uploadRes.json();
         serverImagePath = uploadData.imagePath ?? null;
       }
 
-      const res = await fetch(`${API}/generate-video`, {
+      const res = await fetchWithTimeout(`${API}/generate-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image_path: serverImagePath,
           image_prompt: imagePromptAnalyzed,
           video_prompt: videoPrompt.trim(),
+          ratio,
+          duration,
         }),
         signal: controller.signal,
       });
@@ -425,7 +509,7 @@ function ImageToVideo() {
 
   const download = async () => {
     if (!videoPath) return;
-    const res = await fetch(videoPath);
+    const res = await fetchWithTimeout(videoPath);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -476,19 +560,25 @@ function ImageToVideo() {
           </label>
         </div>
 
-        {/* Motion prompt */}
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Motion Prompt</p>
-          {analyzing ? (
-            <PromptSkeleton />
-          ) : (
-            <Input
-              value={videoPrompt}
-              onChange={(e) => setVideoPrompt(e.target.value)}
-              placeholder="Describe the motion / animation..."
-            />
-          )}
-          <div className="flex gap-2">
+        {/* Motion prompt + settings */}
+        <div className="rounded-xl border bg-card p-4 space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Motion Prompt</p>
+            {analyzing ? (
+              <PromptSkeleton />
+            ) : (
+              <Input
+                value={videoPrompt}
+                onChange={(e) => setVideoPrompt(e.target.value)}
+                placeholder="Describe the motion / animation..."
+              />
+            )}
+          </div>
+
+          <RatioButtons value={ratio} onChange={setRatio} />
+          <DurationButtons value={duration} onChange={setDuration} />
+
+          <div className="flex gap-2 pt-1">
             <Button onClick={generate} disabled={loading || !imgSrc || !videoPrompt.trim() || analyzing} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Wand2 className="mr-2 h-4 w-4" />}
               {loading ? "Generating..." : "Generate Video"}
@@ -540,6 +630,8 @@ function ImageToVideo() {
 // ---- Mode: Full Storyboard ----
 function Storyboard() {
   const [destination, setDestination] = useState("");
+  const [ratio, setRatio] = useState<Ratio>("landscape");
+  const [duration, setDuration] = useState<Duration>(3);
   const [loading, setLoading] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [progress, setProgress] = useState({ done: 0, total: 10 });
@@ -571,7 +663,7 @@ function Storyboard() {
     seenScenes.current = new Set();
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${API}/storyboard-status/${jobId}`);
+        const res = await fetchWithTimeout(`${API}/storyboard-status/${jobId}`);
         const data = await res.json();
         if (!data.success) { stopPolling(); setLoading(false); return; }
 
@@ -613,10 +705,10 @@ function Storyboard() {
     const controller = new AbortController();
     storyboardControllerRef.current = controller;
     try {
-      const res = await fetch(`${API}/generate-full-storyboard`, {
+      const res = await fetchWithTimeout(`${API}/generate-full-storyboard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination }),
+        body: JSON.stringify({ destination, ratio, duration }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -648,10 +740,10 @@ function Storyboard() {
     const controller = new AbortController();
     sceneImageControllers.current[index] = controller;
     try {
-      const res = await fetch(`${API}/generate-image`, {
+      const res = await fetchWithTimeout(`${API}/generate-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: scenes[index].image_prompt }),
+        body: JSON.stringify({ prompt: scenes[index].image_prompt, ratio }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -692,7 +784,7 @@ function Storyboard() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API}/analyze-image`, { method: "POST", body: formData });
+      const res = await fetchWithTimeout(`${API}/analyze-image`, { method: "POST", body: formData });
       if (res.ok) {
         const data = await res.json();
         setScenes((prev) => {
@@ -717,10 +809,16 @@ function Storyboard() {
     sceneVideoControllers.current[index] = controller;
     try {
       const scene = scenes[index];
-      const res = await fetch(`${API}/generate-video`, {
+      const res = await fetchWithTimeout(`${API}/generate-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_path: scene.image_path, image_prompt: scene.image_prompt, video_prompt: scene.video_prompt }),
+        body: JSON.stringify({
+          image_path: scene.image_path,
+          image_prompt: scene.image_prompt,
+          video_prompt: scene.video_prompt,
+          ratio,
+          duration,
+        }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -741,7 +839,7 @@ function Storyboard() {
   };
 
   const downloadFile = async (url: string, filename: string) => {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -790,23 +888,30 @@ function Storyboard() {
         )}
       </AnimatePresence>
 
-      {/* Input */}
-      <div className="flex gap-3">
-        <Input
-          value={destination}
-          onChange={(e) => setDestination(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && generate()}
-          placeholder="Enter destination (e.g. Tokyo, Paris, Bali, Rajasthan)..."
-        />
-        <Button onClick={generate} disabled={loading || !destination.trim()}>
-          {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />}
-          {loading ? "Generating..." : "Generate Storyboard"}
-        </Button>
-        {loading && (
-          <Button variant="destructive" onClick={stopStoryboard} title="Stop generating">
-            <Square className="h-4 w-4" />
+      {/* Input + ratio/duration controls */}
+      <div className="rounded-xl border bg-card p-4 space-y-4">
+        <div className="flex gap-3">
+          <Input
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && generate()}
+            placeholder="Enter destination (e.g. Tokyo, Paris, Bali, Rajasthan)..."
+          />
+          <Button onClick={generate} disabled={loading || !destination.trim()}>
+            {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />}
+            {loading ? "Generating..." : "Generate Storyboard"}
           </Button>
-        )}
+          {loading && (
+            <Button variant="destructive" onClick={stopStoryboard} title="Stop generating">
+              <Square className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-6">
+          <RatioButtons value={ratio} onChange={setRatio} />
+          <DurationButtons value={duration} onChange={setDuration} />
+        </div>
       </div>
 
       {/* Progress bar */}
