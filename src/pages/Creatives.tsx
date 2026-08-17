@@ -42,9 +42,6 @@ const API = "https://fintech-dashboard-61vh.onrender.com/api";
 const BASE = "";
 
 // ---- Backend interrupt helper ----
-// Tells the backend to actually cancel the running ComfyUI job.
-// workflow: "ttv.json" (text->video), "ltx23.json" (image->video / storyboard video)
-// job_id: storyboard job id, when relevant.
 async function stopGeneration(workflow?: string, jobId?: string) {
   try {
     await fetch(`${API}/stop-generation`, {
@@ -236,6 +233,7 @@ function TextToVideo() {
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
+      // Start the job
       const res = await fetch(`${API}/generate-video-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,7 +241,23 @@ function TextToVideo() {
         signal: controller.signal,
       });
       const data = await res.json();
-      setVideoPath(data.videoPath ?? null);
+      if (!data.job_id) throw new Error("No job ID returned");
+
+      // Poll until done
+      while (true) {
+        await new Promise((r) => setTimeout(r, 10000));
+        if (controller.signal.aborted) break;
+        const statusRes = await fetch(`${API}/video-status/${data.job_id}`);
+        const statusData = await statusRes.json();
+        if (statusData.status === "done") {
+          setVideoPath(statusData.videoPath ?? null);
+          break;
+        }
+        if (statusData.status === "error") {
+          console.error("Video generation failed:", statusData.error);
+          break;
+        }
+      }
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
     } finally {
@@ -388,8 +402,7 @@ function ImageToVideo() {
       let serverImagePath = imagePath;
 
       if (!serverImagePath && imageData) {
-        // Convert base64 to blob and upload via analyze-image to get a server path
-        const blob = await fetch(imageData).then(r => r.blob());
+        const blob = await fetch(imageData).then((r) => r.blob());
         const formData = new FormData();
         formData.append("file", blob, "upload.jpg");
         const uploadRes = await fetch(`${API}/analyze-image`, { method: "POST", body: formData });
@@ -397,6 +410,7 @@ function ImageToVideo() {
         serverImagePath = uploadData.imagePath ?? null;
       }
 
+      // Start the job
       const res = await fetch(`${API}/generate-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -408,7 +422,23 @@ function ImageToVideo() {
         signal: controller.signal,
       });
       const data = await res.json();
-      setVideoPath(data.videoPath ?? null);
+      if (!data.job_id) throw new Error("No job ID returned");
+
+      // Poll until done
+      while (true) {
+        await new Promise((r) => setTimeout(r, 10000));
+        if (controller.signal.aborted) break;
+        const statusRes = await fetch(`${API}/video-status/${data.job_id}`);
+        const statusData = await statusRes.json();
+        if (statusData.status === "done") {
+          setVideoPath(statusData.videoPath ?? null);
+          break;
+        }
+        if (statusData.status === "error") {
+          console.error("Video generation failed:", statusData.error);
+          break;
+        }
+      }
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
     } finally {
@@ -456,7 +486,13 @@ function ImageToVideo() {
               <img src={imgSrc} className="w-full h-48 object-cover" />
               <button
                 className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1"
-                onClick={() => { setImageData(null); setImagePath(null); setVideoPath(null); setImagePromptAnalyzed(""); setVideoPrompt(""); }}
+                onClick={() => {
+                  setImageData(null);
+                  setImagePath(null);
+                  setVideoPath(null);
+                  setImagePromptAnalyzed("");
+                  setVideoPrompt("");
+                }}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -470,7 +506,9 @@ function ImageToVideo() {
 
           <label>
             <Button variant="secondary" asChild className="w-full">
-              <span><Upload className="mr-2 h-4 w-4" /> {imgSrc ? "Replace Image" : "Upload Image"}</span>
+              <span>
+                <Upload className="mr-2 h-4 w-4" /> {imgSrc ? "Replace Image" : "Upload Image"}
+              </span>
             </Button>
             <input hidden type="file" accept="image/*" onChange={uploadImage} />
           </label>
@@ -563,7 +601,10 @@ function Storyboard() {
   }, [fullscreen, scenes.length]);
 
   const stopPolling = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   };
 
   const startPolling = (jobId: string) => {
@@ -573,7 +614,11 @@ function Storyboard() {
       try {
         const res = await fetch(`${API}/storyboard-status/${jobId}`);
         const data = await res.json();
-        if (!data.success) { stopPolling(); setLoading(false); return; }
+        if (!data.success) {
+          stopPolling();
+          setLoading(false);
+          return;
+        }
 
         setProgress({ done: data.scenes.length, total: data.total });
 
@@ -597,8 +642,13 @@ function Storyboard() {
         if (newScenes.length > 0) {
           setScenes((prev) => [...prev, ...newScenes].sort((a, b) => a.scene - b.scene));
         }
-        if (data.status === "done" || data.status === "error") { stopPolling(); setLoading(false); }
-      } catch (err) { console.error("Poll error:", err); }
+        if (data.status === "done" || data.status === "error") {
+          stopPolling();
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+      }
     }, 3000);
   };
 
@@ -620,7 +670,10 @@ function Storyboard() {
         signal: controller.signal,
       });
       const data = await res.json();
-      if (!data.success || !data.job_id) { setLoading(false); return; }
+      if (!data.success || !data.job_id) {
+        setLoading(false);
+        return;
+      }
       jobIdRef.current = data.job_id;
       startPolling(data.job_id);
     } catch (err) {
@@ -636,8 +689,11 @@ function Storyboard() {
     stopGeneration(undefined, jobIdRef.current ?? undefined);
   };
 
-  const getImageSrc = useCallback((scene: Scene) =>
-    scene.image_data ?? (scene.image_path ? (scene.image_path?.startsWith("http") ? scene.image_path : `${BASE}/${scene.image_path}`) : null), []);
+  const getImageSrc = useCallback(
+    (scene: Scene) =>
+      scene.image_data ?? (scene.image_path ? (scene.image_path?.startsWith("http") ? scene.image_path : `${BASE}/${scene.image_path}`) : null),
+    []
+  );
 
   const regenerateImage = async (index: number) => {
     setScenes((prev) => {
@@ -662,7 +718,11 @@ function Storyboard() {
       });
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
-      setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], imageLoading: false }; return c; });
+      setScenes((prev) => {
+        const c = [...prev];
+        c[index] = { ...c[index], imageLoading: false };
+        return c;
+      });
     } finally {
       delete sceneImageControllers.current[index];
     }
@@ -671,7 +731,11 @@ function Storyboard() {
   const stopSceneImage = (index: number) => {
     sceneImageControllers.current[index]?.abort();
     delete sceneImageControllers.current[index];
-    setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], imageLoading: false }; return c; });
+    setScenes((prev) => {
+      const c = [...prev];
+      c[index] = { ...c[index], imageLoading: false };
+      return c;
+    });
     stopGeneration();
   };
 
@@ -697,38 +761,90 @@ function Storyboard() {
         const data = await res.json();
         setScenes((prev) => {
           const c = [...prev];
-          c[index] = { ...c[index], image_prompt: data.image_prompt || c[index].image_prompt, video_prompt: data.video_prompt || c[index].video_prompt, promptsLoading: false };
+          c[index] = {
+            ...c[index],
+            image_prompt: data.image_prompt || c[index].image_prompt,
+            video_prompt: data.video_prompt || c[index].video_prompt,
+            promptsLoading: false,
+          };
           return c;
         });
       } else {
-        setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], promptsLoading: false }; return c; });
+        setScenes((prev) => {
+          const c = [...prev];
+          c[index] = { ...c[index], promptsLoading: false };
+          return c;
+        });
       }
     } catch {
-      setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], promptsLoading: false }; return c; });
+      setScenes((prev) => {
+        const c = [...prev];
+        c[index] = { ...c[index], promptsLoading: false };
+        return c;
+      });
     }
   };
 
   const deleteImage = (index: number) =>
-    setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], image_path: null, image_data: null, video_path: null }; return c; });
+    setScenes((prev) => {
+      const c = [...prev];
+      c[index] = { ...c[index], image_path: null, image_data: null, video_path: null };
+      return c;
+    });
 
   const generateVideo = async (index: number) => {
-    setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], videoLoading: true }; return c; });
+    setScenes((prev) => {
+      const c = [...prev];
+      c[index] = { ...c[index], videoLoading: true };
+      return c;
+    });
     const controller = new AbortController();
     sceneVideoControllers.current[index] = controller;
     try {
       const scene = scenes[index];
+
+      // Start the job
       const res = await fetch(`${API}/generate-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_path: scene.image_path, image_prompt: scene.image_prompt, video_prompt: scene.video_prompt }),
+        body: JSON.stringify({
+          image_path: scene.image_path,
+          image_prompt: scene.image_prompt,
+          video_prompt: scene.video_prompt,
+        }),
         signal: controller.signal,
       });
       const data = await res.json();
-      setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], video_path: data.videoPath ?? null, videoLoading: false }; return c; });
+      if (!data.job_id) throw new Error("No job ID returned");
+
+      // Poll until done
+      while (true) {
+        await new Promise((r) => setTimeout(r, 10000));
+        if (controller.signal.aborted) break;
+        const statusRes = await fetch(`${API}/video-status/${data.job_id}`);
+        const statusData = await statusRes.json();
+        if (statusData.status === "done") {
+          setScenes((prev) => {
+            const c = [...prev];
+            c[index] = { ...c[index], video_path: statusData.videoPath ?? null, videoLoading: false };
+            return c;
+          });
+          break;
+        }
+        if (statusData.status === "error") {
+          console.error("Video generation failed:", statusData.error);
+          break;
+        }
+      }
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
-      setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], videoLoading: false }; return c; });
     } finally {
+      setScenes((prev) => {
+        const c = [...prev];
+        // Only clear loading flag if not already cleared by a "done" poll
+        if (c[index].videoLoading) c[index] = { ...c[index], videoLoading: false };
+        return c;
+      });
       delete sceneVideoControllers.current[index];
     }
   };
@@ -736,7 +852,11 @@ function Storyboard() {
   const stopSceneVideo = (index: number) => {
     sceneVideoControllers.current[index]?.abort();
     delete sceneVideoControllers.current[index];
-    setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], videoLoading: false }; return c; });
+    setScenes((prev) => {
+      const c = [...prev];
+      c[index] = { ...c[index], videoLoading: false };
+      return c;
+    });
     stopGeneration("ltx23.json");
   };
 
@@ -766,25 +886,49 @@ function Storyboard() {
             className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
             onClick={() => setFullscreen(null)}
           >
-            <button className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-2 z-10" onClick={() => setFullscreen(null)}>
+            <button
+              className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-2 z-10"
+              onClick={() => setFullscreen(null)}
+            >
               <X className="h-6 w-6" />
             </button>
             <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium">
               Scene {fsScene?.scene} · {(fullscreen ?? 0) + 1} / {scenes.length}
             </div>
             {fullscreen > 0 && (
-              <button className="absolute left-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-3 z-10" onClick={(e) => { e.stopPropagation(); setFullscreen(fullscreen - 1); }}>
+              <button
+                className="absolute left-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-3 z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullscreen(fullscreen - 1);
+                }}
+              >
                 <ChevronLeft className="h-6 w-6" />
               </button>
             )}
             {fullscreen < scenes.length - 1 && (
-              <button className="absolute right-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-3 z-10" onClick={(e) => { e.stopPropagation(); setFullscreen(fullscreen + 1); }}>
+              <button
+                className="absolute right-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-3 z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullscreen(fullscreen + 1);
+                }}
+              >
                 <ChevronRight className="h-6 w-6" />
               </button>
             )}
-            <motion.img key={fullscreen} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} src={fsSrc} className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            <motion.img
+              key={fullscreen}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              src={fsSrc}
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-8 py-6">
-              <p className="text-white/80 text-sm text-center max-w-3xl mx-auto line-clamp-2 leading-relaxed">{fsScene?.image_prompt}</p>
+              <p className="text-white/80 text-sm text-center max-w-3xl mx-auto line-clamp-2 leading-relaxed">
+                {fsScene?.image_prompt}
+              </p>
             </div>
           </motion.div>
         )}
@@ -889,7 +1033,9 @@ function Storyboard() {
                     )}
                     <label>
                       <Button variant="secondary" asChild>
-                        <span><Upload className="mr-2 h-4 w-4" /> Upload</span>
+                        <span>
+                          <Upload className="mr-2 h-4 w-4" /> Upload
+                        </span>
                       </Button>
                       <input hidden type="file" accept="image/*" onChange={(e) => uploadImage(i, e)} />
                     </label>
@@ -921,7 +1067,11 @@ function Storyboard() {
                         <Square className="h-4 w-4 mr-2" /> Stop
                       </Button>
                     )}
-                    <Button variant="outline" disabled={!scene.video_path} onClick={() => downloadFile(scene.video_path!, `scene-${scene.scene}.mp4`)}>
+                    <Button
+                      variant="outline"
+                      disabled={!scene.video_path}
+                      onClick={() => downloadFile(scene.video_path!, `scene-${scene.scene}.mp4`)}
+                    >
                       <Download className="mr-2 h-4 w-4" /> Download Video
                     </Button>
                   </div>
@@ -932,13 +1082,17 @@ function Storyboard() {
               <div className="mt-8 grid md:grid-cols-2 gap-6">
                 <div className="bg-gray-50 rounded-xl p-4 border">
                   <h3 className="font-bold text-lg mb-3">Image Prompt</h3>
-                  {scene.promptsLoading ? <PromptSkeleton /> : (
+                  {scene.promptsLoading ? (
+                    <PromptSkeleton />
+                  ) : (
                     <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.image_prompt}</p>
                   )}
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 border">
                   <h3 className="font-bold text-lg mb-3">Video Prompt</h3>
-                  {scene.promptsLoading ? <PromptSkeleton /> : (
+                  {scene.promptsLoading ? (
+                    <PromptSkeleton />
+                  ) : (
                     <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.video_prompt}</p>
                   )}
                 </div>
@@ -976,10 +1130,26 @@ export default function Creatives() {
         <div className="flex flex-wrap gap-2">
           {(["text-image", "text-video", "image-video", "storyboard"] as Mode[]).map((m) => (
             <Button key={m} variant={mode === m ? "default" : "outline"} onClick={() => setMode(m)}>
-              {m === "text-image" && <><ImageIcon className="mr-2 h-4 w-4" /> Text to Image</>}
-              {m === "text-video" && <><Video className="mr-2 h-4 w-4" /> Text to Video</>}
-              {m === "image-video" && <><Wand2 className="mr-2 h-4 w-4" /> Image to Video</>}
-              {m === "storyboard" && <><FileText className="mr-2 h-4 w-4" /> Full Storyboard</>}
+              {m === "text-image" && (
+                <>
+                  <ImageIcon className="mr-2 h-4 w-4" /> Text to Image
+                </>
+              )}
+              {m === "text-video" && (
+                <>
+                  <Video className="mr-2 h-4 w-4" /> Text to Video
+                </>
+              )}
+              {m === "image-video" && (
+                <>
+                  <Wand2 className="mr-2 h-4 w-4" /> Image to Video
+                </>
+              )}
+              {m === "storyboard" && (
+                <>
+                  <FileText className="mr-2 h-4 w-4" /> Full Storyboard
+                </>
+              )}
             </Button>
           ))}
         </div>
