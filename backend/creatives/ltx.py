@@ -15,6 +15,83 @@ OUTPUT = "outputs/videos"
 os.makedirs(OUTPUT, exist_ok=True)
 
 
+def _extract_public_url(get_public_url_result, bucket: str, filename: str) -> str:
+    """
+    Normalizes the return value of supabase.storage.from_(bucket).get_public_url(filename)
+    across supabase-py / storage3 versions.
+
+    - Newer clients (storage3 >= 0.7 / supabase-py v2): returns a plain str.
+    - Older clients: can return a dict like {"publicUrl": ...} or
+      {"data": {"publicUrl": ...}} or an object with a .public_url attribute.
+    """
+    result = get_public_url_result
+
+    if isinstance(result, str) and result:
+        return result
+
+    if isinstance(result, dict):
+        candidate = (
+            result.get("publicUrl")
+            or result.get("publicURL")
+            or result.get("public_url")
+        )
+        if candidate:
+            return candidate
+        nested = result.get("data")
+        if isinstance(nested, dict):
+            candidate = (
+                nested.get("publicUrl")
+                or nested.get("publicURL")
+                or nested.get("public_url")
+            )
+            if candidate:
+                return candidate
+
+    for attr in ("public_url", "publicUrl", "publicURL"):
+        candidate = getattr(result, attr, None)
+        if candidate:
+            return candidate
+
+    raise Exception(
+        f"Could not resolve a public URL from Supabase for '{filename}' in bucket "
+        f"'{bucket}'. get_public_url() returned: {result!r}. "
+        f"Also double-check that the '{bucket}' bucket is marked Public in the "
+        f"Supabase dashboard (Storage -> {bucket} -> Configuration)."
+    )
+
+
+def _upload_video_to_supabase(local_path: str, new_filename: str) -> str:
+    from supabase_client import supabase
+
+    bucket = "videos"
+
+    with open(local_path, "rb") as f:
+        upload_response = supabase.storage.from_(bucket).upload(
+            path=new_filename,
+            file=f,
+            file_options={"content-type": "video/mp4"},
+        )
+
+    # Some client versions return an object/dict with an "error" field instead
+    # of raising on failure — catch that explicitly so a bad upload never
+    # silently proceeds to a dead public URL.
+    upload_error = None
+    if isinstance(upload_response, dict):
+        upload_error = upload_response.get("error")
+    else:
+        upload_error = getattr(upload_response, "error", None)
+    if upload_error:
+        raise Exception(f"Supabase upload failed for '{new_filename}': {upload_error}")
+
+    public_url_result = supabase.storage.from_(bucket).get_public_url(new_filename)
+    public_url = _extract_public_url(public_url_result, bucket, new_filename)
+
+    print("\nSUPABASE PUBLIC URL:")
+    print(public_url)
+
+    return public_url
+
+
 def generate_video_from_image(image_path, image_prompt, video_prompt):
 
     print("\n")
@@ -186,15 +263,7 @@ Like a photograph that learned to breathe.
         print(save_path)
 
         # Upload to Supabase and return public URL
-        from supabase_client import supabase
-
-        with open(save_path, "rb") as f:
-            supabase.storage.from_("videos").upload(
-                path=new_filename,
-                file=f,
-                file_options={"content-type": "video/mp4"}
-            )
-        public_url = supabase.storage.from_("videos").get_public_url(new_filename)
+        public_url = _upload_video_to_supabase(save_path, new_filename)
 
         # Delete from Supabase after 1 hour and clean up local file
         def cleanup(fname, local_path):

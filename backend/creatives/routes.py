@@ -78,18 +78,12 @@ class ImageRequest(BaseModel):
 
 class TextVideoRequest(BaseModel):
     prompt: str
-    width: int = 512
-    height: int = 512
-    length: int = 81
 
 
 class VideoRequest(BaseModel):
     image_path: str
     image_prompt: str
     video_prompt: str
-    width: int = 512
-    height: int = 512
-    length: int = 81
 
 
 class ChatMessageRequest(BaseModel):
@@ -335,63 +329,24 @@ def generate_image_route(req: ImageRequest):
 
 @router.post("/generate-video")
 def generate_video(req: VideoRequest):
-    job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "running", "videoPath": None, "error": None}
-
-    def run():
-        try:
-            video_path = generate_video_from_image(
-                image_path=req.image_path,
-                image_prompt=req.image_prompt,
-                video_prompt=req.video_prompt,
-                width=req.width,
-                height=req.height,
-                length=req.length,
-            )
-            jobs[job_id]["status"] = "done"
-            jobs[job_id]["videoPath"] = video_path
-        except Exception as error:
-            jobs[job_id]["status"] = "error"
-            jobs[job_id]["error"] = str(error)
-
-    threading.Thread(target=run, daemon=True).start()
-    return {"success": True, "job_id": job_id}
+    try:
+        video_path = generate_video_from_image(
+            image_path=req.image_path,
+            image_prompt=req.image_prompt,
+            video_prompt=req.video_prompt,
+        )
+        return {"success": True, "videoPath": video_path}
+    except Exception as error:
+        return {"success": False, "error": str(error)}
 
 
 @router.post("/generate-video-text")
 def generate_video_text(req: TextVideoRequest):
-    job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "running", "videoPath": None, "error": None}
-
-    def run():
-        try:
-            video_path = generate_video_from_text(
-                prompt=req.prompt,
-                width=req.width,
-                height=req.height,
-                length=req.length,
-            )
-            jobs[job_id]["status"] = "done"
-            jobs[job_id]["videoPath"] = video_path
-        except Exception as error:
-            jobs[job_id]["status"] = "error"
-            jobs[job_id]["error"] = str(error)
-
-    threading.Thread(target=run, daemon=True).start()
-    return {"success": True, "job_id": job_id}
-
-
-@router.get("/video-status/{job_id}")
-def video_status(job_id: str):
-    job = jobs.get(job_id)
-    if not job:
-        return {"success": False, "error": "Job not found"}
-    return {
-        "success": True,
-        "status": job["status"],
-        "videoPath": job["videoPath"],
-        "error": job.get("error"),
-    }
+    try:
+        video_path = generate_video_from_text(req.prompt)
+        return {"success": True, "videoPath": video_path}
+    except Exception as error:
+        return {"success": False, "error": str(error)}
 
 
 @router.post("/analyze-image")
@@ -632,6 +587,7 @@ async def mxai_chat(payload: MXAIMessageRequest):
 
                     decoded = line.decode("utf-8")
 
+                    # OpenRouter streams SSE lines: "data: {...}"
                     if decoded.startswith("data: "):
                         decoded = decoded[6:]
 
@@ -643,6 +599,7 @@ async def mxai_chat(payload: MXAIMessageRequest):
                     except Exception:
                         continue
 
+                    # OpenRouter format: choices[0].delta.content
                     token = chunk.get("choices", [{}])[0].get("delta", {}).get("content") or ""
                     if token:
                         full_content += token
