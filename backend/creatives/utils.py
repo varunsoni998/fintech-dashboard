@@ -1,79 +1,53 @@
 import os
 import time
 import uuid
-import shutil
 import requests
 
-COMFY_URL = "http://127.0.0.1:8188"
-
+COMFY_URL = "https://doorbell-scant-snowy.ngrok-free.app"
 
 # ----------------------------------
 # Submit workflow to ComfyUI
 # ----------------------------------
-
 def submit(workflow):
-
     response = requests.post(
         f"{COMFY_URL}/prompt",
         json={"prompt": workflow},
+        timeout=30,
     )
-
     response.raise_for_status()
-
     data = response.json()
-
     if "prompt_id" not in data:
         raise Exception(f"ComfyUI error:\n{data}")
-
     return data["prompt_id"]
-
 
 # ----------------------------------
 # Wait until generation finishes
 # ----------------------------------
-
 def wait(prompt_id):
-
     while True:
-
         response = requests.get(
-            f"{COMFY_URL}/history/{prompt_id}"
+            f"{COMFY_URL}/history/{prompt_id}",
+            timeout=30,
         )
-
         response.raise_for_status()
-
         history = response.json()
-
         if prompt_id in history:
-
             return history[prompt_id]
-
-        time.sleep(1)
-
+        time.sleep(3)
 
 # ----------------------------------
-# Copy image to ComfyUI input
-# with UNIQUE filename
+# Upload image to ComfyUI via API
+# (works from Render — no local path needed)
 # ----------------------------------
-
 def push_image(image_path):
-
-    input_dir = r"C:\Users\ADMIN\Desktop\AI\ComfyUI\input"
-
-    os.makedirs(input_dir, exist_ok=True)
-
-    ext = os.path.splitext(image_path)[1]
-
+    ext = os.path.splitext(image_path)[1] or ".jpg"
     new_filename = f"{uuid.uuid4()}{ext}"
-
-    target_path = os.path.join(
-        input_dir,
-        new_filename
-    )
-
-    shutil.copy2(
-        image_path,
-        target_path
-    )
-
-    return new_filename
+    with open(image_path, "rb") as f:
+        files = {"image": (new_filename, f, "image/jpeg")}
+        response = requests.post(
+            f"{COMFY_URL}/upload/image",
+            files=files,
+            timeout=60,
+        )
+        response.raise_for_status()
+    return response.json()["name"]
