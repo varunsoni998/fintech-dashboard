@@ -6,7 +6,7 @@ import requests
 from creatives.utils import submit, wait
 from creatives.workflows import load_workflow
 
-COMFY = "https://doorbell-scant-snowy.ngrok-free.app"
+COMFY = "https://doorbell-scant-snowy.ngrok-free.dev"
 
 OUTPUT = "outputs/videos"
 

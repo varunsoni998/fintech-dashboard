@@ -3,7 +3,7 @@ import time
 import uuid
 import requests
 
-COMFY_URL = "https://doorbell-scant-snowy.ngrok-free.app"
+COMFY_URL = "https://doorbell-scant-snowy.ngrok-free.dev"
 
 # ----------------------------------
 # Submit workflow to ComfyUI
