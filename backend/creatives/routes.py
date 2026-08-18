@@ -84,6 +84,8 @@ class VideoRequest(BaseModel):
     image_path: str
     image_prompt: str
     video_prompt: str
+    ratio: str = "9:16"
+    duration_seconds: int = 5
 
 
 class ChatMessageRequest(BaseModel):
@@ -334,6 +336,8 @@ def generate_video(req: VideoRequest):
             image_path=req.image_path,
             image_prompt=req.image_prompt,
             video_prompt=req.video_prompt,
+            ratio=req.ratio,
+            duration_seconds=req.duration_seconds,
         )
         return {"success": True, "videoPath": video_path}
     except Exception as error:
