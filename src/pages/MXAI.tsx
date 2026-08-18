@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ReactMarkdown from "react-markdown";
+import { useAuth } from "@/hooks/useAuth";
 
 const API = "https://fintech-dashboard-61vh.onrender.com/api";
 
@@ -17,15 +18,6 @@ const genId = () =>
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
-
-const getUser = (): string => {
-  let name = localStorage.getItem("chat_username");
-  if (!name) {
-    name = prompt("Enter your name for AI:") || "Team Member";
-    localStorage.setItem("chat_username", name);
-  }
-  return name;
-};
 
 interface Conversation { id: string; title: string; updated_at: string; }
 interface Message {
@@ -80,7 +72,7 @@ const ThinkingDots = () => (
   </div>
 );
 
-// ── Option cards (Claude-style) ────────────────────────────
+// ── Option cards ───────────────────────────────────────────
 const OptionCards = ({
   question,
   options,
@@ -127,8 +119,6 @@ const OptionCards = ({
             <span className="text-sm text-card-foreground">{opt}</span>
           </button>
         ))}
-
-        {/* Manual input option */}
         {!manualMode ? (
           <button
             disabled={disabled}
@@ -172,7 +162,10 @@ const OptionCards = ({
 
 // ── Main component ─────────────────────────────────────────
 export default function MXAI() {
-  const [userName] = useState(getUser);
+  // Get username from auth instead of localStorage
+  const { user, profile } = useAuth();
+  const userName = profile?.full_name || user?.email?.split("@")[0] || "Team Member";
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -190,6 +183,7 @@ export default function MXAI() {
   const abortRef = useRef<AbortController | null>(null);
 
   const loadConversations = useCallback(async () => {
+    if (!userName) return;
     try {
       const res = await fetch(`${API}/mxai/conversations/${encodeURIComponent(userName)}`);
       const data = await res.json();
@@ -389,7 +383,7 @@ export default function MXAI() {
       if (err.name === "AbortError") return;
       setMessages(prev => prev.map(m =>
         m.id === assistantId
-          ? { ...m, content: `Could not reach MXAI — ${err.message}`, error: true }
+          ? { ...m, content: `Could not reach Zeno — ${err.message}`, error: true }
           : m
       ));
     } finally {
@@ -420,15 +414,15 @@ export default function MXAI() {
     <DashboardLayout>
       <div className="flex h-[calc(100vh-56px)] -m-6 overflow-hidden">
 
-        {/* ── Zeno SIDEBAR ────────────────────────────────── */}
+        {/* ── SIDEBAR ─────────────────────────────────────── */}
         <div className="w-64 shrink-0 flex flex-col border-r border-border bg-card">
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2 mb-3">
               <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-fuchsia-500 to-indigo-600 flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
-              <span className="font-bold text-card-foreground tracking-wide">Zeno</span>
-              <span className="ml-auto text-[10px] text-muted-foreground">{userName}</span>
+              <span className="font-bold text-card-foreground tracking-wide">Zeno AI</span>
+              <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[80px]">{userName}</span>
             </div>
             <Button
               onClick={createConversation}
@@ -499,16 +493,15 @@ export default function MXAI() {
 
         {/* ── CHAT AREA ────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 bg-background">
-
           {!activeId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8">
               <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-indigo-600 flex items-center justify-center shadow-lg">
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-card-foreground mb-2">Welcome to Zeno</h2>
+                <h2 className="text-2xl font-bold text-card-foreground mb-2">Welcome to Zeno AI</h2>
                 <p className="text-muted-foreground text-sm max-w-sm">
-                  Your AI assistant. Start a new chat to get help with clients, suppliers, campaigns and more.
+                  Your AI assistant. Start a new chat to get help with itineraries, clients, suppliers, campaigns and more.
                 </p>
               </div>
               <Button
@@ -610,8 +603,6 @@ export default function MXAI() {
                       <p className={`text-[10px] text-muted-foreground mt-1 ${msg.role === "user" ? "text-right" : ""}`}>
                         {formatDate(msg.created_at)}
                       </p>
-
-                      {/* Option cards — only on last assistant message with options */}
                       {msg.role === "assistant" &&
                         msg.options &&
                         msg.options.length > 0 &&
@@ -638,8 +629,6 @@ export default function MXAI() {
 
               {/* Input area */}
               <div className="border-t border-border p-4 shrink-0">
-
-                {/* Model selector */}
                 <div className="relative mb-2">
                   <button
                     onClick={() => setModelOpen(!modelOpen)}
@@ -684,7 +673,6 @@ export default function MXAI() {
                   </AnimatePresence>
                 </div>
 
-                {/* Message input */}
                 <div className="flex items-end gap-2 bg-card border border-border rounded-2xl px-3 py-2 focus-within:border-fuchsia-400 transition-colors">
                   <Input
                     ref={inputRef}
@@ -715,7 +703,7 @@ export default function MXAI() {
                   </button>
                 </div>
                 <p className="text-[10px] text-muted-foreground text-center mt-2">
-                  Zeno · Powered by Zeno AI
+                  Zeno · Powered by BusinessOS AI
                 </p>
               </div>
             </>
