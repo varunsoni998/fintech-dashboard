@@ -124,9 +124,17 @@ export function DashboardSidebar() {
     <Sidebar className="border-r-0" style={{ background: "#E8E8F2" }}>
       <SidebarHeader className="px-4 py-5 border-b-0">
         <div className="flex items-center gap-3 mb-2">
-          <div className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)", boxShadow: "3px 3px 8px #C4C4D4, -2px -2px 6px #FFFFFF" }}>
-            <Sparkles className="h-5 w-5 text-white" />
+          <div
+            className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden"
+            style={{
+              boxShadow: "3px 3px 8px #C4C4D4, -2px -2px 6px #FFFFFF"
+            }}
+          >
+            <img
+              src="/favicon.png"
+              alt="BusinessOS"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div>
             <h2 className="text-lg font-bold tracking-tight leading-none" style={{ color: "#3D3D5C" }}>BusinessOS</h2>
