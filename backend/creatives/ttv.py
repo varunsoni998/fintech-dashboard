@@ -8,22 +8,27 @@ import requests
 from creatives.utils import submit, wait
 from creatives.workflows import load_workflow
 
-COMFY = "https://doorbell-scant-snowy.ngrok-free.dev"
+COMFY = os.getenv("COMFY_URL", "https://doorbell-scant-snowy.ngrok-free.dev")
 
 OUTPUT = "outputs/videos"
 
 os.makedirs(OUTPUT, exist_ok=True)
 
+# Resolution presets — matches ltx.py exactly
+RATIO_PRESETS = {
+    "16:9": {"width": 1280, "height": 720},
+    "9:16": {"width": 720,  "height": 1280},
+    "1:1":  {"width": 768,  "height": 768},
+    "4:3":  {"width": 1024, "height": 768},
+}
+
+# Node IDs to patch in ttv.json
+WIDTH_NODE    = "267:257"   # PrimitiveInt "Width"
+HEIGHT_NODE   = "267:258"   # PrimitiveInt "Height"
+DURATION_NODE = "267:225"   # PrimitiveInt "Duration" (seconds)
+
 
 def _extract_public_url(get_public_url_result, bucket: str, filename: str) -> str:
-    """
-    Normalizes the return value of supabase.storage.from_(bucket).get_public_url(filename)
-    across supabase-py / storage3 versions.
-
-    - Newer clients (storage3 >= 0.7 / supabase-py v2): returns a plain str.
-    - Older clients: can return a dict like {"publicUrl": ...} or
-      {"data": {"publicUrl": ...}} or an object with a .public_url attribute.
-    """
     result = get_public_url_result
 
     if isinstance(result, str) and result:
@@ -54,9 +59,7 @@ def _extract_public_url(get_public_url_result, bucket: str, filename: str) -> st
 
     raise Exception(
         f"Could not resolve a public URL from Supabase for '{filename}' in bucket "
-        f"'{bucket}'. get_public_url() returned: {result!r}. "
-        f"Also double-check that the '{bucket}' bucket is marked Public in the "
-        f"Supabase dashboard (Storage -> {bucket} -> Configuration)."
+        f"'{bucket}'. get_public_url() returned: {result!r}."
     )
 
 
@@ -72,9 +75,6 @@ def _upload_video_to_supabase(local_path: str, new_filename: str) -> str:
             file_options={"content-type": "video/mp4"},
         )
 
-    # Some client versions return an object/dict with an "error" field instead
-    # of raising on failure — catch that explicitly so a bad upload never
-    # silently proceeds to a dead public URL.
     upload_error = None
     if isinstance(upload_response, dict):
         upload_error = upload_response.get("error")
@@ -92,16 +92,41 @@ def _upload_video_to_supabase(local_path: str, new_filename: str) -> str:
     return public_url
 
 
-def generate_video_from_text(prompt):
+def generate_video_from_text(
+    prompt: str,
+    ratio: str = "9:16",
+    duration_seconds: int = 5,
+):
     print("\n")
     print("=" * 100)
     print("TEXT-TO-VIDEO GENERATION")
     print("=" * 100)
-
-    print("\nPROMPT:")
-    print(prompt)
+    print("RATIO:   ", ratio)
+    print("DURATION:", duration_seconds, "seconds")
+    print("PROMPT:  ", prompt[:120])
 
     workflow = load_workflow("ttv.json")
+
+    # ---- Patch resolution ----
+    preset = RATIO_PRESETS.get(ratio, RATIO_PRESETS["9:16"])
+    if WIDTH_NODE in workflow:
+        workflow[WIDTH_NODE]["inputs"]["value"] = preset["width"]
+        print(f"WIDTH  node {WIDTH_NODE} → {preset['width']}")
+    else:
+        print(f"WARNING: width node {WIDTH_NODE} not found in ttv.json")
+
+    if HEIGHT_NODE in workflow:
+        workflow[HEIGHT_NODE]["inputs"]["value"] = preset["height"]
+        print(f"HEIGHT node {HEIGHT_NODE} → {preset['height']}")
+    else:
+        print(f"WARNING: height node {HEIGHT_NODE} not found in ttv.json")
+
+    # ---- Patch duration ----
+    if DURATION_NODE in workflow:
+        workflow[DURATION_NODE]["inputs"]["value"] = max(1, duration_seconds)
+        print(f"DURATION node {DURATION_NODE} → {duration_seconds}s")
+    else:
+        print(f"WARNING: duration node {DURATION_NODE} not found in ttv.json")
 
     final_prompt = f"""
 {prompt}
@@ -194,7 +219,7 @@ No watermark. No logos. No subtitles. No on-screen text.
         print("\nDOWNLOAD URL:")
         print(url)
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=120)
         response.raise_for_status()
 
         new_filename = f"{uuid.uuid4()}.mp4"
@@ -209,10 +234,8 @@ No watermark. No logos. No subtitles. No on-screen text.
         print("=" * 100)
         print(save_path)
 
-        # Upload to Supabase and return public URL
         public_url = _upload_video_to_supabase(save_path, new_filename)
 
-        # Delete from Supabase after 1 hour and clean up local file
         def cleanup(fname, local_path):
             time.sleep(3600)
             try:
@@ -227,7 +250,9 @@ No watermark. No logos. No subtitles. No on-screen text.
             except Exception as e:
                 print(f"Local delete failed: {e}")
 
-        threading.Thread(target=cleanup, args=(new_filename, save_path), daemon=True).start()
+        threading.Thread(
+            target=cleanup, args=(new_filename, save_path), daemon=True
+        ).start()
 
         print("\nRETURNING:")
         print(public_url)

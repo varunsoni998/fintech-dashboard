@@ -28,8 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type Mode = "text-image" | "text-video" | "image-video" | "storyboard";
-type Ratio = "landscape" | "portrait";
-type Duration = 2 | 3 | 5;
+type Ratio = "9:16" | "16:9" | "1:1" | "4:3";
+type Duration = 2 | 3 | 5 | 8;
 
 interface Scene {
   scene: number;
@@ -51,13 +51,10 @@ const TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes
 function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
   const timeoutController = new AbortController();
   const timer = setTimeout(() => timeoutController.abort(), TIMEOUT_MS);
-
-  // Merge abort signals if caller also has one
   const callerSignal = options.signal as AbortSignal | undefined;
   if (callerSignal) {
     callerSignal.addEventListener("abort", () => timeoutController.abort());
   }
-
   return fetch(url, { ...options, signal: timeoutController.signal }).finally(() =>
     clearTimeout(timer)
   );
@@ -76,24 +73,35 @@ async function stopGeneration(workflow?: string, jobId?: string) {
   }
 }
 
-// ---- Shared ratio + duration toggle UI ----
+// ---- Ratio toggle ----
+const RATIO_OPTIONS: { value: Ratio; label: string; icon: "landscape" | "portrait" | "square" }[] = [
+  { value: "16:9",  label: "16:9 Landscape", icon: "landscape" },
+  { value: "9:16",  label: "9:16 Portrait",  icon: "portrait"  },
+  { value: "1:1",   label: "1:1 Square",     icon: "square"    },
+  { value: "4:3",   label: "4:3 Standard",   icon: "landscape" },
+];
+
 function RatioButtons({ value, onChange }: { value: Ratio; onChange: (v: Ratio) => void }) {
   return (
     <div className="space-y-1.5">
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ratio</p>
-      <div className="flex gap-2">
-        {(["landscape", "portrait"] as Ratio[]).map((r) => (
+      <div className="flex flex-wrap gap-2">
+        {RATIO_OPTIONS.map((r) => (
           <button
-            key={r}
-            onClick={() => onChange(r)}
+            key={r.value}
+            onClick={() => onChange(r.value)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-              value === r
+              value === r.value
                 ? "bg-primary text-primary-foreground border-primary shadow-sm"
                 : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
             }`}
           >
-            {r === "landscape" ? <MonitorPlay className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
-            {r === "landscape" ? "Landscape" : "Portrait (Reels)"}
+            {r.icon === "portrait" ? (
+              <Smartphone className="h-3.5 w-3.5" />
+            ) : (
+              <MonitorPlay className="h-3.5 w-3.5" />
+            )}
+            {r.label}
           </button>
         ))}
       </div>
@@ -101,12 +109,15 @@ function RatioButtons({ value, onChange }: { value: Ratio; onChange: (v: Ratio) 
   );
 }
 
+// ---- Duration toggle ----
+const DURATION_OPTIONS: Duration[] = [2, 3, 5, 8];
+
 function DurationButtons({ value, onChange }: { value: Duration; onChange: (v: Duration) => void }) {
   return (
     <div className="space-y-1.5">
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</p>
       <div className="flex gap-2">
-        {([2, 3, 5] as Duration[]).map((d) => (
+        {DURATION_OPTIONS.map((d) => (
           <button
             key={d}
             onClick={() => onChange(d)}
@@ -125,7 +136,7 @@ function DurationButtons({ value, onChange }: { value: Duration; onChange: (v: D
   );
 }
 
-// ---- Skeleton / shimmer helper ----
+// ---- Skeletons ----
 function Shimmer({ className = "" }: { className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-xl bg-gray-100 ${className}`}>
@@ -173,7 +184,7 @@ function PromptSkeleton() {
 // ---- Mode: Text -> Image ----
 function TextToImage() {
   const [prompt, setPrompt] = useState("");
-  const [ratio, setRatio] = useState<Ratio>("landscape");
+  const [ratio, setRatio] = useState<Ratio>("16:9");
   const [loading, setLoading] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -216,7 +227,7 @@ function TextToImage() {
 
   const download = async () => {
     if (!imagePath) return;
-    const res = await fetchWithTimeout(imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`);
+    const res = await fetchWithTimeout(imagePath.startsWith("http") ? imagePath : `${BASE}/${imagePath}`);
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -239,9 +250,7 @@ function TextToImage() {
               placeholder="Describe the image you want..."
             />
           </div>
-
           <RatioButtons value={ratio} onChange={setRatio} />
-
           <div className="flex gap-2 pt-1">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ImageIcon className="mr-2 h-4 w-4" />}
@@ -271,7 +280,6 @@ function TextToImage() {
             </div>
           )}
         </div>
-
         <div className="flex-1 p-5">
           {loading ? (
             <ImageSkeleton />
@@ -281,7 +289,7 @@ function TextToImage() {
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.4 }}
-              src={imagePath?.startsWith("http") ? imagePath : `${BASE}/${imagePath}`}
+              src={imagePath.startsWith("http") ? imagePath : `${BASE}/${imagePath}`}
               className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto"
             />
           ) : (
@@ -296,11 +304,11 @@ function TextToImage() {
   );
 }
 
-// ---- Mode: Text -> Video (ttv.json) ----
+// ---- Mode: Text -> Video ----
 function TextToVideo() {
   const [prompt, setPrompt] = useState("");
-  const [ratio, setRatio] = useState<Ratio>("landscape");
-  const [duration, setDuration] = useState<Duration>(3);
+  const [ratio, setRatio] = useState<Ratio>("9:16");
+  const [duration, setDuration] = useState<Duration>(5);
   const [loading, setLoading] = useState(false);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -315,7 +323,7 @@ function TextToVideo() {
       const res = await fetchWithTimeout(`${API}/generate-video-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim(), ratio, duration }),
+        body: JSON.stringify({ prompt: prompt.trim(), ratio, duration_seconds: duration }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -359,10 +367,8 @@ function TextToVideo() {
               placeholder="Describe the video scene you want..."
             />
           </div>
-
           <RatioButtons value={ratio} onChange={setRatio} />
           <DurationButtons value={duration} onChange={setDuration} />
-
           <div className="flex gap-2 pt-1">
             <Button onClick={generate} disabled={loading || !prompt.trim()} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Video className="mr-2 h-4 w-4" />}
@@ -386,7 +392,6 @@ function TextToVideo() {
             </Button>
           )}
         </div>
-
         <div className="flex-1 p-5">
           {loading ? (
             <VideoSkeleton />
@@ -412,15 +417,15 @@ function TextToVideo() {
   );
 }
 
-// ---- Mode: Image -> Video (ltx23.json) ----
+// ---- Mode: Image -> Video ----
 function ImageToVideo() {
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoPrompt, setVideoPrompt] = useState("");
   const [imagePromptAnalyzed, setImagePromptAnalyzed] = useState("");
-  const [ratio, setRatio] = useState<Ratio>("landscape");
-  const [duration, setDuration] = useState<Duration>(3);
+  const [ratio, setRatio] = useState<Ratio>("9:16");
+  const [duration, setDuration] = useState<Duration>(5);
   const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
@@ -430,20 +435,17 @@ function ImageToVideo() {
   const uploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
-
     const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-
     setImageData(base64);
     setImagePath(null);
     setVideoPath(null);
     setImagePromptAnalyzed("");
     setAnalyzing(true);
-
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -466,19 +468,16 @@ function ImageToVideo() {
     setVideoPath(null);
     const controller = new AbortController();
     controllerRef.current = controller;
-
     try {
       let serverImagePath = imagePath;
-
       if (!serverImagePath && imageData) {
-        const blob = await fetch(imageData).then(r => r.blob());
+        const blob = await fetch(imageData).then((r) => r.blob());
         const formData = new FormData();
         formData.append("file", blob, "upload.jpg");
         const uploadRes = await fetchWithTimeout(`${API}/analyze-image`, { method: "POST", body: formData });
         const uploadData = await uploadRes.json();
         serverImagePath = uploadData.imagePath ?? null;
       }
-
       const res = await fetchWithTimeout(`${API}/generate-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -487,7 +486,7 @@ function ImageToVideo() {
           image_prompt: imagePromptAnalyzed,
           video_prompt: videoPrompt.trim(),
           ratio,
-          duration,
+          duration_seconds: duration,
         }),
         signal: controller.signal,
       });
@@ -521,11 +520,9 @@ function ImageToVideo() {
 
   return (
     <div className="grid lg:grid-cols-3 gap-6 items-start">
-      {/* Upload */}
       <div className="space-y-4">
         <div className="rounded-xl border bg-card p-4 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source Image</p>
-
           {analyzing ? (
             <div className="relative h-48 rounded-lg overflow-hidden bg-gray-100">
               <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
@@ -551,7 +548,6 @@ function ImageToVideo() {
               <span>Upload an image</span>
             </div>
           )}
-
           <label>
             <Button variant="secondary" asChild className="w-full">
               <span><Upload className="mr-2 h-4 w-4" /> {imgSrc ? "Replace Image" : "Upload Image"}</span>
@@ -560,7 +556,6 @@ function ImageToVideo() {
           </label>
         </div>
 
-        {/* Motion prompt + settings */}
         <div className="rounded-xl border bg-card p-4 space-y-4">
           <div className="space-y-1.5">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Motion Prompt</p>
@@ -574,10 +569,8 @@ function ImageToVideo() {
               />
             )}
           </div>
-
           <RatioButtons value={ratio} onChange={setRatio} />
           <DurationButtons value={duration} onChange={setDuration} />
-
           <div className="flex gap-2 pt-1">
             <Button onClick={generate} disabled={loading || !imgSrc || !videoPrompt.trim() || analyzing} className="flex-1">
               {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Wand2 className="mr-2 h-4 w-4" />}
@@ -592,7 +585,6 @@ function ImageToVideo() {
         </div>
       </div>
 
-      {/* Output */}
       <div className="lg:col-span-2 rounded-xl border bg-card flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <span className="text-sm font-medium">Output</span>
@@ -630,8 +622,8 @@ function ImageToVideo() {
 // ---- Mode: Full Storyboard ----
 function Storyboard() {
   const [destination, setDestination] = useState("");
-  const [ratio, setRatio] = useState<Ratio>("landscape");
-  const [duration, setDuration] = useState<Duration>(3);
+  const [ratio, setRatio] = useState<Ratio>("9:16");
+  const [duration, setDuration] = useState<Duration>(5);
   const [loading, setLoading] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [progress, setProgress] = useState({ done: 0, total: 10 });
@@ -666,9 +658,7 @@ function Storyboard() {
         const res = await fetchWithTimeout(`${API}/storyboard-status/${jobId}`);
         const data = await res.json();
         if (!data.success) { stopPolling(); setLoading(false); return; }
-
         setProgress({ done: data.scenes.length, total: data.total });
-
         const newScenes: Scene[] = [];
         for (const scene of data.scenes) {
           if (!seenScenes.current.has(scene.scene)) {
@@ -708,7 +698,7 @@ function Storyboard() {
       const res = await fetchWithTimeout(`${API}/generate-full-storyboard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, ratio, duration }),
+        body: JSON.stringify({ destination, ratio, duration_seconds: duration }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -729,14 +719,10 @@ function Storyboard() {
   };
 
   const getImageSrc = useCallback((scene: Scene) =>
-    scene.image_data ?? (scene.image_path ? (scene.image_path?.startsWith("http") ? scene.image_path : `${BASE}/${scene.image_path}`) : null), []);
+    scene.image_data ?? (scene.image_path ? (scene.image_path.startsWith("http") ? scene.image_path : `${BASE}/${scene.image_path}`) : null), []);
 
   const regenerateImage = async (index: number) => {
-    setScenes((prev) => {
-      const c = [...prev];
-      c[index] = { ...c[index], imageLoading: true, video_path: null, image_data: null };
-      return c;
-    });
+    setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], imageLoading: true, video_path: null, image_data: null }; return c; });
     const controller = new AbortController();
     sceneImageControllers.current[index] = controller;
     try {
@@ -747,11 +733,7 @@ function Storyboard() {
         signal: controller.signal,
       });
       const data = await res.json();
-      setScenes((prev) => {
-        const c = [...prev];
-        c[index] = { ...c[index], image_path: data.imagePath ?? null, image_data: null, imageLoading: false };
-        return c;
-      });
+      setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], image_path: data.imagePath ?? null, image_data: null, imageLoading: false }; return c; });
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
       setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], imageLoading: false }; return c; });
@@ -776,22 +758,14 @@ function Storyboard() {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-    setScenes((prev) => {
-      const c = [...prev];
-      c[index] = { ...c[index], image_path: null, image_data: base64, video_path: null, promptsLoading: true };
-      return c;
-    });
+    setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], image_path: null, image_data: base64, video_path: null, promptsLoading: true }; return c; });
     try {
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetchWithTimeout(`${API}/analyze-image`, { method: "POST", body: formData });
       if (res.ok) {
         const data = await res.json();
-        setScenes((prev) => {
-          const c = [...prev];
-          c[index] = { ...c[index], image_prompt: data.image_prompt || c[index].image_prompt, video_prompt: data.video_prompt || c[index].video_prompt, promptsLoading: false };
-          return c;
-        });
+        setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], image_prompt: data.image_prompt || c[index].image_prompt, video_prompt: data.video_prompt || c[index].video_prompt, promptsLoading: false }; return c; });
       } else {
         setScenes((prev) => { const c = [...prev]; c[index] = { ...c[index], promptsLoading: false }; return c; });
       }
@@ -817,7 +791,7 @@ function Storyboard() {
           image_prompt: scene.image_prompt,
           video_prompt: scene.video_prompt,
           ratio,
-          duration,
+          duration_seconds: duration,
         }),
         signal: controller.signal,
       });
@@ -854,13 +828,10 @@ function Storyboard() {
 
   return (
     <>
-      {/* Fullscreen lightbox */}
       <AnimatePresence>
         {fullscreen !== null && fsSrc && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
             onClick={() => setFullscreen(null)}
           >
@@ -888,7 +859,7 @@ function Storyboard() {
         )}
       </AnimatePresence>
 
-      {/* Input + ratio/duration controls */}
+      {/* Input + controls */}
       <div className="rounded-xl border bg-card p-4 space-y-4">
         <div className="flex gap-3">
           <Input
@@ -907,14 +878,13 @@ function Storyboard() {
             </Button>
           )}
         </div>
-
         <div className="flex flex-wrap gap-6">
           <RatioButtons value={ratio} onChange={setRatio} />
           <DurationButtons value={duration} onChange={setDuration} />
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress */}
       {loading && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
@@ -942,25 +912,16 @@ function Storyboard() {
           return (
             <motion.div
               key={scene.scene}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
               className="border rounded-2xl shadow-md p-6 bg-white"
             >
               <h2 className="text-2xl font-bold mb-5">Scene {scene.scene}</h2>
               <div className="grid lg:grid-cols-2 gap-8">
-                {/* Image column */}
+                {/* Image */}
                 <div>
-                  {scene.imageLoading ? (
-                    <ImageSkeleton />
-                  ) : imgSrc ? (
+                  {scene.imageLoading ? <ImageSkeleton /> : imgSrc ? (
                     <div className="relative group cursor-pointer" onClick={() => setFullscreen(i)}>
-                      <motion.img
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        src={imgSrc}
-                        className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto"
-                      />
+                      <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={imgSrc} className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all rounded-xl flex items-center justify-center">
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 backdrop-blur-sm rounded-full p-4">
                           <ZoomIn className="h-8 w-8 text-white" />
@@ -983,7 +944,7 @@ function Storyboard() {
                       🔄 Regenerate
                     </Button>
                     {scene.imageLoading && (
-                      <Button variant="destructive" onClick={() => stopSceneImage(i)} title="Stop generating">
+                      <Button variant="destructive" onClick={() => stopSceneImage(i)}>
                         <Square className="h-4 w-4 mr-2" /> Stop
                       </Button>
                     )}
@@ -1001,11 +962,9 @@ function Storyboard() {
                   </div>
                 </div>
 
-                {/* Video column */}
+                {/* Video */}
                 <div>
-                  {scene.videoLoading ? (
-                    <VideoSkeleton />
-                  ) : scene.video_path ? (
+                  {scene.videoLoading ? <VideoSkeleton /> : scene.video_path ? (
                     <video controls className="w-full h-auto max-h-[70vh] object-contain rounded-xl border mx-auto">
                       <source src={scene.video_path} type="video/mp4" />
                     </video>
@@ -1022,7 +981,7 @@ function Storyboard() {
                       🔄 Regenerate Video
                     </Button>
                     {scene.videoLoading && (
-                      <Button variant="destructive" onClick={() => stopSceneVideo(i)} title="Stop generating">
+                      <Button variant="destructive" onClick={() => stopSceneVideo(i)}>
                         <Square className="h-4 w-4 mr-2" /> Stop
                       </Button>
                     )}
@@ -1037,15 +996,11 @@ function Storyboard() {
               <div className="mt-8 grid md:grid-cols-2 gap-6">
                 <div className="bg-gray-50 rounded-xl p-4 border">
                   <h3 className="font-bold text-lg mb-3">Image Prompt</h3>
-                  {scene.promptsLoading ? <PromptSkeleton /> : (
-                    <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.image_prompt}</p>
-                  )}
+                  {scene.promptsLoading ? <PromptSkeleton /> : <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.image_prompt}</p>}
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 border">
                   <h3 className="font-bold text-lg mb-3">Video Prompt</h3>
-                  {scene.promptsLoading ? <PromptSkeleton /> : (
-                    <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.video_prompt}</p>
-                  )}
+                  {scene.promptsLoading ? <PromptSkeleton /> : <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.video_prompt}</p>}
                 </div>
               </div>
             </motion.div>
@@ -1063,9 +1018,7 @@ export default function Creatives() {
   return (
     <DashboardLayout>
       <style>{`
-        @keyframes shimmer {
-          100% { transform: translateX(200%); }
-        }
+        @keyframes shimmer { 100% { transform: translateX(200%); } }
       `}</style>
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
@@ -1077,37 +1030,23 @@ export default function Creatives() {
           <p className="text-muted-foreground mt-2">Create images, videos, and full storyboard workflows.</p>
         </div>
 
-        {/* Mode tabs */}
         <div className="flex flex-wrap gap-2">
           {(["text-image", "text-video", "image-video", "storyboard"] as Mode[]).map((m) => (
             <Button key={m} variant={mode === m ? "default" : "outline"} onClick={() => setMode(m)}>
-              {m === "text-image" && <><ImageIcon className="mr-2 h-4 w-4" /> Text to Image</>}
-              {m === "text-video" && <><Video className="mr-2 h-4 w-4" /> Text to Video</>}
-              {m === "image-video" && <><Wand2 className="mr-2 h-4 w-4" /> Image to Video</>}
-              {m === "storyboard" && <><FileText className="mr-2 h-4 w-4" /> Full Storyboard</>}
+              {m === "text-image"  && <><ImageIcon className="mr-2 h-4 w-4" /> Text to Image</>}
+              {m === "text-video"  && <><Video     className="mr-2 h-4 w-4" /> Text to Video</>}
+              {m === "image-video" && <><Wand2     className="mr-2 h-4 w-4" /> Image to Video</>}
+              {m === "storyboard"  && <><FileText  className="mr-2 h-4 w-4" /> Full Storyboard</>}
             </Button>
           ))}
         </div>
 
-        {/*
-          IMPORTANT: all four modes stay mounted at all times (display:none toggling
-          instead of unmounting via AnimatePresence key-swap). This is what makes
-          each mode's state (prompts, generated media, loading state) persist when
-          you switch tabs and come back.
-        */}
+        {/* All four modes stay mounted — display:none preserves state across tab switches */}
         <div className="space-y-6">
-          <div style={{ display: mode === "text-image" ? "block" : "none" }}>
-            <TextToImage />
-          </div>
-          <div style={{ display: mode === "text-video" ? "block" : "none" }}>
-            <TextToVideo />
-          </div>
-          <div style={{ display: mode === "image-video" ? "block" : "none" }}>
-            <ImageToVideo />
-          </div>
-          <div style={{ display: mode === "storyboard" ? "block" : "none" }}>
-            <Storyboard />
-          </div>
+          <div style={{ display: mode === "text-image"  ? "block" : "none" }}><TextToImage /></div>
+          <div style={{ display: mode === "text-video"  ? "block" : "none" }}><TextToVideo /></div>
+          <div style={{ display: mode === "image-video" ? "block" : "none" }}><ImageToVideo /></div>
+          <div style={{ display: mode === "storyboard"  ? "block" : "none" }}><Storyboard /></div>
         </div>
       </div>
     </DashboardLayout>

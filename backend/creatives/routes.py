@@ -70,14 +70,19 @@ class StopGenerationRequest(BaseModel):
 
 class StoryboardRequest(BaseModel):
     destination: str
+    ratio: str = "9:16"
+    duration_seconds: int = 5
 
 
 class ImageRequest(BaseModel):
     prompt: str
+    ratio: str = "9:16"
 
 
 class TextVideoRequest(BaseModel):
     prompt: str
+    ratio: str = "9:16"
+    duration_seconds: int = 5
 
 
 class VideoRequest(BaseModel):
@@ -347,7 +352,11 @@ def generate_video(req: VideoRequest):
 @router.post("/generate-video-text")
 def generate_video_text(req: TextVideoRequest):
     try:
-        video_path = generate_video_from_text(req.prompt)
+        video_path = generate_video_from_text(
+            prompt=req.prompt,
+            ratio=req.ratio,
+            duration_seconds=req.duration_seconds,
+        )
         return {"success": True, "videoPath": video_path}
     except Exception as error:
         return {"success": False, "error": str(error)}
@@ -591,7 +600,6 @@ async def mxai_chat(payload: MXAIMessageRequest):
 
                     decoded = line.decode("utf-8")
 
-                    # OpenRouter streams SSE lines: "data: {...}"
                     if decoded.startswith("data: "):
                         decoded = decoded[6:]
 
@@ -603,7 +611,6 @@ async def mxai_chat(payload: MXAIMessageRequest):
                     except Exception:
                         continue
 
-                    # OpenRouter format: choices[0].delta.content
                     token = chunk.get("choices", [{}])[0].get("delta", {}).get("content") or ""
                     if token:
                         full_content += token
