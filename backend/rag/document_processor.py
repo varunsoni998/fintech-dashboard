@@ -1,19 +1,21 @@
 """
 Document processor — routes file types to the correct extractor,
 chunks the text, generates embeddings, and stores everything in Supabase.
+
+Fix: document record is inserted FIRST (status='processing'), then chunks,
+then updated to status='indexed'. This satisfies the rag_chunks foreign key.
 """
 import hashlib
-import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 from supabase_client import supabase
 
 from .chunker import chunk_page_text, chunk_document_text, Chunk
 from .embeddings import embed_texts, embed_images_base64
-from .pdf_processor import extract_pdf_pages, extract_pdf_text_only
+from .pdf_processor import extract_pdf_pages
 from .config import UPLOAD_DIR
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ def file_sha256(path: str) -> str:
 # ── Supabase helpers ──────────────────────────────────────────────────────────
 
 def _get_existing_doc(file_hash: str, user_id: str) -> Optional[dict]:
-    """Return existing document record if this file was already indexed by this user."""
+    """Return existing document record if already indexed by this user."""
     try:
         result = (
             supabase.table("rag_documents")
@@ -47,27 +49,42 @@ def _get_existing_doc(file_hash: str, user_id: str) -> Optional[dict]:
         return None
 
 
-def _insert_document(
+def _insert_document_placeholder(
     document_id: str,
     user_id: str,
     filename: str,
     file_hash: str,
-    page_count: int,
-    chunk_count: int,
     file_type: str,
 ) -> dict:
+    """
+    Insert the document row FIRST with status='processing'.
+    This must happen before any chunks are inserted so the FK is satisfied.
+    """
     row = {
         "id": document_id,
         "user_id": user_id,
         "filename": filename,
         "file_hash": file_hash,
-        "page_count": page_count,
-        "chunk_count": chunk_count,
         "file_type": file_type,
-        "status": "indexed",
+        "page_count": 0,
+        "chunk_count": 0,
+        "status": "processing",
     }
     result = supabase.table("rag_documents").insert(row).execute()
     return result.data[0]
+
+
+def _update_document_indexed(
+    document_id: str,
+    page_count: int,
+    chunk_count: int,
+) -> None:
+    """Update the document row after all chunks are stored."""
+    supabase.table("rag_documents").update({
+        "page_count": page_count,
+        "chunk_count": chunk_count,
+        "status": "indexed",
+    }).eq("id", document_id).execute()
 
 
 def _insert_chunks(chunks: list[Chunk], embeddings: list[list[float]]) -> None:
@@ -81,13 +98,12 @@ def _insert_chunks(chunks: list[Chunk], embeddings: list[list[float]]) -> None:
             "page_number": chunk.page_number,
             "chunk_index": chunk.chunk_index,
             "text": chunk.text,
-            "embedding": vec,   # stored as JSONB array
+            "embedding": vec,
         })
 
-    # Supabase has a max of 1000 rows per insert; batch if needed
     batch_size = 100
     for i in range(0, len(rows), batch_size):
-        supabase.table("rag_chunks").insert(rows[i : i + batch_size]).execute()
+        supabase.table("rag_chunks").insert(rows[i: i + batch_size]).execute()
 
 
 def _insert_visual_chunks(
@@ -105,189 +121,209 @@ def _insert_visual_chunks(
             "document_id": document_id,
             "filename": filename,
             "page_number": page_num,
-            "image_b64": img_b64[:500],  # store thumbnail preview only, not full image
+            "image_b64": img_b64[:500],   # thumbnail preview only
             "embedding": vec,
         })
 
     batch_size = 50
     for i in range(0, len(rows), batch_size):
-        supabase.table("rag_visual_chunks").insert(rows[i : i + batch_size]).execute()
+        supabase.table("rag_visual_chunks").insert(rows[i: i + batch_size]).execute()
 
 
 # ── Main processing functions ─────────────────────────────────────────────────
+
+StatusCB = Optional[Callable[[str], None]]
+
+
+def _status(cb: StatusCB, msg: str) -> None:
+    if cb:
+        cb(msg)
+    logger.info("[processor] %s", msg)
+
 
 def process_pdf(
     file_path: str,
     filename: str,
     user_id: str,
     enable_visual: bool = True,
-    status_callback=None,
+    status_callback: StatusCB = None,
 ) -> dict:
     """
-    Full PDF processing pipeline:
-    1. Hash → check dedup
-    2. Extract text + images per page
-    3. Chunk text
-    4. Generate text embeddings
-    5. Generate visual embeddings (if enabled)
-    6. Store in Supabase
-    Returns the document record.
+    Full PDF processing pipeline — document record inserted FIRST.
     """
-    def _status(msg: str):
-        if status_callback:
-            status_callback(msg)
-        logger.info("[PDF] %s", msg)
-
-    _status("Hashing file...")
+    _status(status_callback, "Hashing file...")
     file_hash = file_sha256(file_path)
+
     existing = _get_existing_doc(file_hash, user_id)
     if existing:
-        _status("Already indexed (duplicate).")
+        _status(status_callback, "Already indexed (duplicate).")
         return existing
 
     document_id = str(uuid.uuid4())
-    _status("Extracting text from pages...")
 
-    pages = extract_pdf_pages(file_path, render_images=enable_visual)
+    # ── INSERT DOCUMENT FIRST so FK constraint is satisfied ──────────────────
+    _status(status_callback, "Creating document record...")
+    _insert_document_placeholder(document_id, user_id, filename, file_hash, "pdf")
 
-    all_chunks: list[Chunk] = []
-    visual_pages: list[int] = []
-    visual_images: list[str] = []
+    try:
+        _status(status_callback, "Extracting text from pages...")
+        pages = extract_pdf_pages(file_path, render_images=enable_visual)
 
-    for page in pages:
-        if page.text.strip():
-            chunks = chunk_page_text(page.text, document_id, filename, page.page_number)
-            all_chunks.extend(chunks)
-        if enable_visual and page.image_b64:
-            visual_pages.append(page.page_number)
-            visual_images.append(page.image_b64)
+        all_chunks: list[Chunk] = []
+        visual_pages: list[int] = []
+        visual_images: list[str] = []
 
-    if not all_chunks:
-        raise RuntimeError("No text could be extracted from the PDF.")
+        for page in pages:
+            if page.text.strip():
+                chunks = chunk_page_text(page.text, document_id, filename, page.page_number)
+                all_chunks.extend(chunks)
+            if enable_visual and page.image_b64:
+                visual_pages.append(page.page_number)
+                visual_images.append(page.image_b64)
 
-    _status(f"Generating text embeddings for {len(all_chunks)} chunks...")
-    chunk_texts = [c.text for c in all_chunks]
-    text_embeddings = embed_texts(chunk_texts)
+        if not all_chunks:
+            raise RuntimeError("No text could be extracted from the PDF.")
 
-    _status("Storing text vectors...")
-    _insert_chunks(all_chunks, text_embeddings)
+        _status(status_callback, f"Generating text embeddings for {len(all_chunks)} chunks...")
+        chunk_texts = [c.text for c in all_chunks]
+        text_embeddings = embed_texts(chunk_texts)
 
-    if enable_visual and visual_images:
-        _status(f"Generating visual embeddings for {len(visual_images)} pages...")
+        _status(status_callback, "Storing text vectors...")
+        _insert_chunks(all_chunks, text_embeddings)
+
+        if enable_visual and visual_images:
+            _status(status_callback, f"Generating visual embeddings for {len(visual_images)} pages...")
+            try:
+                vis_embeddings = embed_images_base64(visual_images)
+                _status(status_callback, "Storing visual vectors...")
+                _insert_visual_chunks(document_id, filename, visual_pages, visual_images, vis_embeddings)
+            except Exception as e:
+                logger.warning("Visual embedding failed (continuing): %s", e)
+
+        # ── UPDATE document row with final counts ─────────────────────────────
+        _status(status_callback, "Finalising document record...")
+        _update_document_indexed(document_id, len(pages), len(all_chunks))
+
+        _status(status_callback, "Done!")
+
+        # Return the final record
+        result = supabase.table("rag_documents").select("*").eq("id", document_id).single().execute()
+        return result.data
+
+    except Exception as e:
+        # Mark document as errored so it doesn't linger as 'processing'
         try:
-            vis_embeddings = embed_images_base64(visual_images)
-            _status("Storing visual vectors...")
-            _insert_visual_chunks(document_id, filename, visual_pages, visual_images, vis_embeddings)
-        except Exception as e:
-            # Visual embedding failure is non-fatal
-            logger.warning("Visual embedding failed (continuing without it): %s", e)
-
-    _status("Saving document record...")
-    doc = _insert_document(
-        document_id=document_id,
-        user_id=user_id,
-        filename=filename,
-        file_hash=file_hash,
-        page_count=len(pages),
-        chunk_count=len(all_chunks),
-        file_type="pdf",
-    )
-
-    _status("Done!")
-    return doc
+            supabase.table("rag_documents").update({"status": "error"}).eq("id", document_id).execute()
+        except Exception:
+            pass
+        raise
 
 
-def process_txt(file_path: str, filename: str, user_id: str, status_callback=None) -> dict:
+def process_txt(
+    file_path: str,
+    filename: str,
+    user_id: str,
+    status_callback: StatusCB = None,
+) -> dict:
     """Process a plain text file."""
-    def _status(msg: str):
-        if status_callback:
-            status_callback(msg)
-
-    _status("Hashing file...")
+    _status(status_callback, "Hashing file...")
     file_hash = file_sha256(file_path)
+
     existing = _get_existing_doc(file_hash, user_id)
     if existing:
-        _status("Already indexed (duplicate).")
+        _status(status_callback, "Already indexed (duplicate).")
         return existing
 
     document_id = str(uuid.uuid4())
-    _status("Reading text...")
 
-    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-        text = f.read()
+    _status(status_callback, "Creating document record...")
+    _insert_document_placeholder(document_id, user_id, filename, file_hash, "txt")
 
-    if not text.strip():
-        raise RuntimeError("Text file is empty.")
+    try:
+        _status(status_callback, "Reading text...")
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
 
-    _status("Chunking...")
-    chunks = chunk_document_text(text, document_id, filename)
+        if not text.strip():
+            raise RuntimeError("Text file is empty.")
 
-    _status(f"Generating embeddings for {len(chunks)} chunks...")
-    embeddings = embed_texts([c.text for c in chunks])
+        _status(status_callback, "Chunking...")
+        chunks = chunk_document_text(text, document_id, filename)
 
-    _status("Storing...")
-    _insert_chunks(chunks, embeddings)
+        _status(status_callback, f"Generating embeddings for {len(chunks)} chunks...")
+        embeddings = embed_texts([c.text for c in chunks])
 
-    doc = _insert_document(
-        document_id=document_id,
-        user_id=user_id,
-        filename=filename,
-        file_hash=file_hash,
-        page_count=1,
-        chunk_count=len(chunks),
-        file_type="txt",
-    )
+        _status(status_callback, "Storing...")
+        _insert_chunks(chunks, embeddings)
 
-    _status("Done!")
-    return doc
+        _status(status_callback, "Finalising...")
+        _update_document_indexed(document_id, 1, len(chunks))
+
+        _status(status_callback, "Done!")
+        result = supabase.table("rag_documents").select("*").eq("id", document_id).single().execute()
+        return result.data
+
+    except Exception as e:
+        try:
+            supabase.table("rag_documents").update({"status": "error"}).eq("id", document_id).execute()
+        except Exception:
+            pass
+        raise
 
 
-def process_docx(file_path: str, filename: str, user_id: str, status_callback=None) -> dict:
+def process_docx(
+    file_path: str,
+    filename: str,
+    user_id: str,
+    status_callback: StatusCB = None,
+) -> dict:
     """Process a DOCX file using python-docx."""
     from docx import Document as DocxDocument
 
-    def _status(msg: str):
-        if status_callback:
-            status_callback(msg)
-
-    _status("Hashing file...")
+    _status(status_callback, "Hashing file...")
     file_hash = file_sha256(file_path)
+
     existing = _get_existing_doc(file_hash, user_id)
     if existing:
-        _status("Already indexed (duplicate).")
+        _status(status_callback, "Already indexed (duplicate).")
         return existing
 
     document_id = str(uuid.uuid4())
-    _status("Reading DOCX...")
 
-    doc = DocxDocument(file_path)
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    text = "\n\n".join(paragraphs)
+    _status(status_callback, "Creating document record...")
+    _insert_document_placeholder(document_id, user_id, filename, file_hash, "docx")
 
-    if not text.strip():
-        raise RuntimeError("DOCX file has no extractable text.")
+    try:
+        _status(status_callback, "Reading DOCX...")
+        doc = DocxDocument(file_path)
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        text = "\n\n".join(paragraphs)
 
-    _status("Chunking...")
-    chunks = chunk_document_text(text, document_id, filename)
+        if not text.strip():
+            raise RuntimeError("DOCX file has no extractable text.")
 
-    _status(f"Generating embeddings for {len(chunks)} chunks...")
-    embeddings = embed_texts([c.text for c in chunks])
+        _status(status_callback, "Chunking...")
+        chunks = chunk_document_text(text, document_id, filename)
 
-    _status("Storing...")
-    _insert_chunks(chunks, embeddings)
+        _status(status_callback, f"Generating embeddings for {len(chunks)} chunks...")
+        embeddings = embed_texts([c.text for c in chunks])
 
-    doc_record = _insert_document(
-        document_id=document_id,
-        user_id=user_id,
-        filename=filename,
-        file_hash=file_hash,
-        page_count=1,
-        chunk_count=len(chunks),
-        file_type="docx",
-    )
+        _status(status_callback, "Storing...")
+        _insert_chunks(chunks, embeddings)
 
-    _status("Done!")
-    return doc_record
+        _status(status_callback, "Finalising...")
+        _update_document_indexed(document_id, 1, len(chunks))
+
+        _status(status_callback, "Done!")
+        result = supabase.table("rag_documents").select("*").eq("id", document_id).single().execute()
+        return result.data
+
+    except Exception as e:
+        try:
+            supabase.table("rag_documents").update({"status": "error"}).eq("id", document_id).execute()
+        except Exception:
+            pass
+        raise
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".doc"}
@@ -297,7 +333,7 @@ def process_file(
     file_path: str,
     filename: str,
     user_id: str,
-    status_callback=None,
+    status_callback: StatusCB = None,
 ) -> dict:
     """Route a file to the correct processor based on extension."""
     ext = Path(filename).suffix.lower()
