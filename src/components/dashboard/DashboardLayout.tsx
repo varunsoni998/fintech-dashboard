@@ -1,7 +1,9 @@
 import { SidebarTrigger } from "../../components/ui/sidebar";
-import { Bell, RefreshCw, CheckCheck, Info, AlertTriangle, X } from "lucide-react";
+import { Bell, RefreshCw, Moon, Sun, X, CheckCheck, Info, AlertTriangle } from "lucide-react";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { useDarkMode } from "../../hooks/useDarkMode";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -52,7 +54,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
 ];
 
 function getInitials(name: string | null | undefined, email: string | null | undefined): string {
-  if (name && name.trim()) {
+  if (name?.trim()) {
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     return parts[0].slice(0, 2).toUpperCase();
@@ -62,21 +64,9 @@ function getInitials(name: string | null | undefined, email: string | null | und
 }
 
 const typeStyles = {
-  info: {
-    icon: <Info className="h-3.5 w-3.5" />,
-    bg: "#EEF1FB",
-    color: "#5B6FD0",
-  },
-  success: {
-    icon: <CheckCheck className="h-3.5 w-3.5" />,
-    bg: "#EEFAF4",
-    color: "#2E9E6B",
-  },
-  warning: {
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    bg: "#FEF6EB",
-    color: "#D48A2E",
-  },
+  info: { icon: <Info style={{ width: 13, height: 13 }} />, bg: "#EEF1FB", color: "#5B6FD0" },
+  success: { icon: <CheckCheck style={{ width: 13, height: 13 }} />, bg: "#EEFAF4", color: "#2E9E6B" },
+  warning: { icon: <AlertTriangle style={{ width: 13, height: 13 }} />, bg: "#FEF6EB", color: "#D48A2E" },
 };
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -84,12 +74,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const notifRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const { user, profile } = useAuth();
+  const { dark, toggle: toggleDark } = useDarkMode();
+
   const initials = getInitials(profile?.full_name, user?.email);
   const displayName = profile?.full_name ?? user?.email ?? "User";
-
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const BG = dark ? "#1A1A2E" : "#E8E8F2";
+  const SHADOW_OUT = dark
+    ? "5px 5px 12px #0D0D1A, -5px -5px 12px #272744"
+    : "5px 5px 12px #C4C4D4, -5px -5px 12px #FFFFFF";
+  const TEXT_MUTED = dark ? "#7070A0" : "#9090A8";
+  const TEXT_MAIN = dark ? "#D0D0F0" : "#3A3A5A";
+  const BORDER = dark ? "#2A2A4A" : "#D4D4E4";
+  const PANEL_BG = dark ? "#1E1E35" : "#E8E8F2";
+  const PANEL_SHADOW = dark
+    ? "8px 8px 20px #0D0D1A, -8px -8px 20px #272744"
+    : "8px 8px 20px #C0C0D0, -8px -8px 20px #FFFFFF";
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -97,18 +101,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     window.location.reload();
   }, []);
 
-  const markAllRead = () =>
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-
+  const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   const markRead = (id: number) =>
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   const dismiss = (id: number) =>
     setNotifications((prev) => prev.filter((n) => n.id !== id));
 
-  // Close panel when clicking outside
   useEffect(() => {
     if (!notifOpen) return;
     function handleClick(e: MouseEvent) {
@@ -121,66 +119,85 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [notifOpen]);
 
   const btnStyle: React.CSSProperties = {
-    background: "#E8E8F2",
-    boxShadow: "3px 3px 7px #C4C4D4, -3px -3px 7px #FFFFFF",
-    color: "#9090A8",
+    background: BG,
+    boxShadow: SHADOW_OUT,
+    color: TEXT_MUTED,
     border: "none",
     width: 36,
     height: 36,
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    transition: "all 0.2s",
+    flexShrink: 0,
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0" style={{ background: "#E8E8F2" }}>
+    <div className="flex-1 flex flex-col min-w-0" style={{ background: BG, minHeight: "100vh" }}>
       {/* Header */}
       <header
         className="h-14 flex items-center justify-between px-5"
-        style={{ background: "#E8E8F2" }}
+        style={{ background: BG, borderBottom: `1px solid ${BORDER}` }}
       >
         <SidebarTrigger
           className="rounded-xl transition-all"
-          style={btnStyle}
+          style={{ ...btnStyle }}
         />
 
         <div className="flex items-center gap-3">
-          {/* Refresh */}
+          {/* Dark mode toggle */}
           <button
-            onClick={handleRefresh}
-            className="rounded-xl flex items-center justify-center transition-all"
+            onClick={toggleDark}
+            title={dark ? "Switch to light mode" : "Switch to dark mode"}
             style={btnStyle}
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {dark ? (
+              <Sun style={{ width: 15, height: 15 }} />
+            ) : (
+              <Moon style={{ width: 15, height: 15 }} />
+            )}
+          </button>
+
+          {/* Refresh */}
+          <button onClick={handleRefresh} style={btnStyle} title="Refresh">
+            <RefreshCw
+              style={{ width: 15, height: 15 }}
+              className={refreshing ? "animate-spin" : ""}
+            />
           </button>
 
           {/* Notifications */}
           <div ref={notifRef} style={{ position: "relative" }}>
             <button
               onClick={() => setNotifOpen((o) => !o)}
-              className="rounded-xl flex items-center justify-center transition-all"
               style={{
                 ...btnStyle,
                 ...(notifOpen
-                  ? { boxShadow: "inset 2px 2px 5px #C4C4D4, inset -2px -2px 5px #FFFFFF" }
+                  ? { boxShadow: `inset 2px 2px 5px ${dark ? "#0D0D1A" : "#C4C4D4"}, inset -2px -2px 5px ${dark ? "#272744" : "#FFFFFF"}` }
                   : {}),
               }}
+              title="Notifications"
             >
-              <Bell className="h-4 w-4" />
+              <Bell style={{ width: 15, height: 15 }} />
               {unreadCount > 0 && (
                 <span
                   style={{
                     position: "absolute",
-                    top: 6,
-                    right: 6,
+                    top: 7,
+                    right: 7,
                     width: 8,
                     height: 8,
                     borderRadius: "50%",
                     background: "#E05B5B",
-                    border: "2px solid #E8E8F2",
+                    border: `2px solid ${BG}`,
                   }}
                 />
               )}
             </button>
 
-            {/* Dropdown panel */}
+            {/* Notification panel */}
             {notifOpen && (
               <div
                 style={{
@@ -188,11 +205,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   top: "calc(100% + 10px)",
                   right: 0,
                   width: 340,
-                  background: "#E8E8F2",
+                  background: PANEL_BG,
                   borderRadius: 18,
-                  boxShadow: "8px 8px 20px #C0C0D0, -8px -8px 20px #FFFFFF",
+                  boxShadow: PANEL_SHADOW,
                   zIndex: 50,
                   overflow: "hidden",
+                  border: `1px solid ${BORDER}`,
                 }}
               >
                 {/* Panel header */}
@@ -202,17 +220,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    borderBottom: "1px solid #D8D8E8",
+                    borderBottom: `1px solid ${BORDER}`,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 14,
-                        color: "#4A4A6A",
-                      }}
-                    >
+                    <span style={{ fontWeight: 700, fontSize: 14, color: TEXT_MAIN }}>
                       Notifications
                     </span>
                     {unreadCount > 0 && (
@@ -248,17 +260,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   )}
                 </div>
 
-                {/* Notification list */}
+                {/* List */}
                 <div style={{ maxHeight: 360, overflowY: "auto", padding: "8px 0" }}>
                   {notifications.length === 0 ? (
-                    <div
-                      style={{
-                        padding: "32px 16px",
-                        textAlign: "center",
-                        color: "#9090A8",
-                        fontSize: 13,
-                      }}
-                    >
+                    <div style={{ padding: "32px 16px", textAlign: "center", color: TEXT_MUTED, fontSize: 13 }}>
                       You're all caught up 🎉
                     </div>
                   ) : (
@@ -275,10 +280,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             padding: "10px 14px",
                             cursor: "pointer",
                             background: n.read ? "transparent" : "rgba(123,143,224,0.06)",
-                            transition: "background 0.15s",
                           }}
                         >
-                          {/* Type icon */}
                           <div
                             style={{
                               width: 28,
@@ -295,70 +298,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           >
                             {ts.icon}
                           </div>
-
-                          {/* Content */}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                                marginBottom: 2,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontWeight: n.read ? 500 : 700,
-                                  fontSize: 12.5,
-                                  color: "#3A3A5A",
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                              <span style={{ fontWeight: n.read ? 500 : 700, fontSize: 12.5, color: TEXT_MAIN }}>
                                 {n.title}
                               </span>
                               {!n.read && (
-                                <span
-                                  style={{
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: "50%",
-                                    background: "#7B8FE0",
-                                    flexShrink: 0,
-                                  }}
-                                />
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#7B8FE0", flexShrink: 0 }} />
                               )}
                             </div>
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: 11.5,
-                                color: "#7A7A9A",
-                                lineHeight: 1.4,
-                              }}
-                            >
+                            <p style={{ margin: 0, fontSize: 11.5, color: TEXT_MUTED, lineHeight: 1.4 }}>
                               {n.message}
                             </p>
-                            <span style={{ fontSize: 10.5, color: "#ABABC4", marginTop: 3, display: "block" }}>
+                            <span style={{ fontSize: 10.5, color: TEXT_MUTED, marginTop: 3, display: "block" }}>
                               {n.time}
                             </span>
                           </div>
-
-                          {/* Dismiss */}
                           <button
                             onClick={(e) => { e.stopPropagation(); dismiss(n.id); }}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              color: "#ABABC4",
-                              padding: 2,
-                              flexShrink: 0,
-                              marginTop: 1,
-                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: TEXT_MUTED, padding: 2, flexShrink: 0 }}
                           >
-                            <X className="h-3 w-3" />
+                            <X style={{ width: 11, height: 11 }} />
                           </button>
                         </div>
                       );
@@ -369,22 +329,41 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             )}
           </div>
 
-          {/* Avatar */}
+          {/* Avatar — navigates to /profile */}
           <div
             title={displayName}
-            className="h-9 w-9 rounded-xl flex items-center justify-center text-xs font-semibold text-white select-none"
+            onClick={() => navigate("/profile")}
             style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
               background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
-              boxShadow: "3px 3px 7px #C4C4D4, -2px -2px 5px #FFFFFF",
-              cursor: "default",
+              boxShadow: SHADOW_OUT,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#fff",
+              cursor: "pointer",
+              flexShrink: 0,
+              userSelect: "none",
+              transition: "opacity 0.15s",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
             {initials}
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-6">{children}</main>
+      <main
+        className="flex-1 overflow-auto p-6"
+        style={{ background: BG, color: TEXT_MAIN }}
+      >
+        {children}
+      </main>
     </div>
   );
 }
