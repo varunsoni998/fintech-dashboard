@@ -336,30 +336,60 @@ def generate_image_route(req: ImageRequest):
 
 @router.post("/generate-video")
 def generate_video(req: VideoRequest):
-    try:
-        video_path = generate_video_from_image(
-            image_path=req.image_path,
-            image_prompt=req.image_prompt,
-            video_prompt=req.video_prompt,
-            ratio=req.ratio,
-            duration_seconds=req.duration_seconds,
-        )
-        return {"success": True, "videoPath": video_path}
-    except Exception as error:
-        return {"success": False, "error": str(error)}
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "running", "result": None, "error": None}
+
+    def run():
+        try:
+            video_path = generate_video_from_image(
+                image_path=req.image_path,
+                image_prompt=req.image_prompt,
+                video_prompt=req.video_prompt,
+                ratio=req.ratio,
+                duration_seconds=req.duration_seconds,
+            )
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["result"] = video_path
+        except Exception as e:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["error"] = str(e)
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"success": True, "job_id": job_id}
+
+@router.get("/video-status/{job_id}")
+def video_status(job_id: str):
+    job = jobs.get(job_id)
+    if not job:
+        return {"success": False, "error": "Job not found"}
+    return {
+        "success": True,
+        "status": job["status"],
+        "videoPath": job.get("result"),
+        "error": job.get("error"),
+    }
 
 
 @router.post("/generate-video-text")
 def generate_video_text(req: TextVideoRequest):
-    try:
-        video_path = generate_video_from_text(
-            prompt=req.prompt,
-            ratio=req.ratio,
-            duration_seconds=req.duration_seconds,
-        )
-        return {"success": True, "videoPath": video_path}
-    except Exception as error:
-        return {"success": False, "error": str(error)}
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "running", "result": None, "error": None, "type": "video"}
+
+    def run():
+        try:
+            video_path = generate_video_from_text(
+                req.prompt,
+                ratio=req.ratio,
+                duration_seconds=req.duration_seconds,
+            )
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["result"] = video_path
+        except Exception as error:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["error"] = str(error)
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"success": True, "job_id": job_id}
 
 
 @router.post("/analyze-image")

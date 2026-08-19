@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { DarkModeContext, useDarkModeState } from "@/hooks/useDarkMode";
 
 import Login          from "./pages/Login";
 import Index          from "./pages/index";
@@ -30,6 +31,7 @@ import TodoPage       from "./pages/TodoPage";
 import BookMeeting    from "@/pages/BookMeeting";
 import Creatives      from "./pages/Creatives";
 import Automations    from "./pages/Automations";
+import Profile        from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -92,10 +94,21 @@ function AppRoutes() {
           <Route path="/automations"       element={<Automations />} />
           <Route path="/book"              element={<BookMeeting />} />
           <Route path="/creatives"         element={<Creatives />} />
+          <Route path="/profile"           element={<Profile />} />
           <Route path="*"                  element={<NotFound />} />
         </Routes>
       </div>
     </SidebarProvider>
+  );
+}
+
+// Wraps everything so dark mode context is available everywhere
+function AppWithDarkMode() {
+  const darkMode = useDarkModeState();
+  return (
+    <DarkModeContext.Provider value={darkMode}>
+      <AppRoutes />
+    </DarkModeContext.Provider>
   );
 }
 
@@ -105,7 +118,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppRoutes />
+        <AppWithDarkMode />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
