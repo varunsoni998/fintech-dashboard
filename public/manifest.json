@@ -1,0 +1,33 @@
+{
+  "name": "BusinessOS",
+  "short_name": "BusinessOS",
+  "description": "All-in-one business operating system for modern teams",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E8E8F2",
+  "theme_color": "#7B8FE0",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/favicon.png",
+      "sizes": "1080x1080",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en"
+}
