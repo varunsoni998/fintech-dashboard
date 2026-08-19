@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from database import init_database
-from creatives.routes import router
+from creatives.routes import router as creatives_router
+from rag.routes import router as rag_router
 
 
 @asynccontextmanager
@@ -31,7 +32,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router, prefix="/api")
+app.include_router(creatives_router, prefix="/api")
+app.include_router(rag_router, prefix="/api/rag")
 
 outputs_dir = Path("outputs")
 outputs_dir.mkdir(exist_ok=True)
@@ -51,7 +53,9 @@ def root():
         "endpoints": {
             "storyboard": "/api/generate-full-storyboard",
             "video": "/api/generate-video",
-            "n8n_chat_message": "/api/n8n-result",
+            "rag_upload": "/api/rag/upload",
+            "rag_query": "/api/rag/query",
+            "rag_documents": "/api/rag/documents",
             "chat_messages": "/api/chat-messages",
         },
     }
