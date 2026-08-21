@@ -19,32 +19,23 @@
     /* ── Semantic tokens ── */
     --background: 240 20% 91%;
     --foreground: 245 25% 24%;
-
     --card: 240 20% 93%;
     --card-foreground: 245 25% 24%;
-
     --popover: 240 20% 93%;
     --popover-foreground: 245 25% 24%;
-
     --primary: 232 52% 62%;
     --primary-foreground: 0 0% 100%;
-
     --secondary: 240 18% 88%;
     --secondary-foreground: 245 25% 24%;
-
     --muted: 240 15% 87%;
     --muted-foreground: 245 10% 56%;
-
     --accent: 232 52% 62%;
     --accent-foreground: 0 0% 100%;
-
     --destructive: 0 72% 60%;
     --destructive-foreground: 0 0% 100%;
-
     --border: 240 15% 85%;
     --input: 240 20% 89%;
     --ring: 232 52% 62%;
-
     --radius: 1rem;
 
     /* ── Sidebar ── */
@@ -72,6 +63,53 @@
     --chart-4: 38 92% 50%;
     --chart-5: 0 72% 60%;
   }
+
+  /* ══════════════════════════════════════════
+     DARK MODE OVERRIDES
+     Applied when <html class="dark"> is set
+  ══════════════════════════════════════════ */
+  .dark {
+    /* ── Neumorphic dark base ── */
+    --neu-base:      #1A1A2E;
+    --neu-light:     #272744;
+    --neu-dark:      #0D0D1A;
+    --neu-shadow:    6px 6px 14px #0D0D1A, -6px -6px 14px #272744;
+    --neu-shadow-sm: 3px 3px 8px  #0D0D1A, -3px -3px 8px  #272744;
+    --neu-shadow-lg: 10px 10px 24px #0A0A16, -10px -10px 24px #242442;
+    --neu-inset:     inset 4px 4px 10px #0D0D1A, inset -4px -4px 10px #272744;
+    --neu-inset-sm:  inset 2px 2px 6px  #0D0D1A, inset -2px -2px 6px  #272744;
+
+    /* ── Semantic tokens ── */
+    --background: 240 35% 14%;
+    --foreground: 240 30% 88%;
+    --card: 240 35% 16%;
+    --card-foreground: 240 30% 88%;
+    --popover: 240 35% 16%;
+    --popover-foreground: 240 30% 88%;
+    --primary: 232 52% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 30% 20%;
+    --secondary-foreground: 240 30% 88%;
+    --muted: 240 30% 18%;
+    --muted-foreground: 240 15% 55%;
+    --accent: 232 52% 62%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 25% 22%;
+    --input: 240 30% 18%;
+    --ring: 232 52% 62%;
+
+    /* ── Sidebar ── */
+    --sidebar-background: 240 35% 14%;
+    --sidebar-foreground: 240 20% 60%;
+    --sidebar-primary: 232 52% 62%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 30% 20%;
+    --sidebar-accent-foreground: 240 30% 88%;
+    --sidebar-border: 240 25% 22%;
+    --sidebar-ring: 232 52% 62%;
+  }
 }
 
 @layer base {
@@ -80,67 +118,94 @@
   }
 
   body {
-    background-color: #E8E8F2;
-    color: hsl(var(--foreground));
-    font-family: 'Inter', system-ui, sans-serif;
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3 {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+  /* ── Dark mode: override ALL hardcoded neumorphic inline styles ── */
+  /* This catches every page that uses background: #E8E8F2 inline */
+  .dark [style*="background: #E8E8F2"],
+  .dark [style*="background:#E8E8F2"],
+  .dark [style*='background: "#E8E8F2"'] {
+    background: #1A1A2E !important;
   }
+
+  /* Cards / panels that use bg-card Tailwind class */
+  .dark .bg-card {
+    background: hsl(240 35% 16%) !important;
+  }
+
+  /* Borders */
+  .dark .border-border {
+    border-color: hsl(240 25% 22%) !important;
+  }
+
+  /* Text overrides */
+  .dark .text-foreground,
+  .dark .text-card-foreground {
+    color: hsl(240 30% 88%) !important;
+  }
+
+  .dark .text-muted-foreground {
+    color: hsl(240 15% 55%) !important;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--neu-base); }
+  ::-webkit-scrollbar-thumb { background: var(--neu-dark); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #9090A8; }
 }
 
-@layer utilities {
-  /* ── Neumorphic surfaces ── */
+@layer components {
+  /* ── Neumorphic utility classes (use CSS vars so dark mode applies) ── */
   .neu {
-    background: #E8E8F2;
+    background: var(--neu-base);
     box-shadow: var(--neu-shadow);
-    border-radius: var(--radius);
+    border-radius: 1rem;
     border: none;
   }
 
   .neu-sm {
-    background: #E8E8F2;
+    background: var(--neu-base);
     box-shadow: var(--neu-shadow-sm);
-    border-radius: calc(var(--radius) * 0.75);
+    border-radius: 0.75rem;
     border: none;
   }
 
   .neu-lg {
-    background: #E8E8F2;
+    background: var(--neu-base);
     box-shadow: var(--neu-shadow-lg);
-    border-radius: calc(var(--radius) * 1.5);
+    border-radius: 1.25rem;
     border: none;
   }
 
   .neu-inset {
-    background: #E8E8F2;
+    background: var(--neu-base);
     box-shadow: var(--neu-inset);
-    border-radius: var(--radius);
+    border-radius: 1rem;
     border: none;
   }
 
   .neu-inset-sm {
-    background: #E8E8F2;
+    background: var(--neu-base);
     box-shadow: var(--neu-inset-sm);
-    border-radius: calc(var(--radius) * 0.75);
+    border-radius: 0.5rem;
     border: none;
   }
 
   .neu-btn {
-    background: #E8E8F2;
+    background: var(--neu-base);
     box-shadow: var(--neu-shadow-sm);
-    border-radius: 50rem;
+    border-radius: 0.75rem;
     border: none;
-    transition: box-shadow 0.15s ease, transform 0.1s ease;
     cursor: pointer;
+    transition: box-shadow 0.2s ease, transform 0.1s ease;
   }
 
   .neu-btn:hover {
-    box-shadow: 4px 4px 10px #C4C4D4, -4px -4px 10px #FFFFFF;
+    box-shadow: var(--neu-shadow);
   }
 
   .neu-btn:active {
@@ -150,16 +215,17 @@
 
   .neu-btn-accent {
     background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
-    box-shadow: 3px 3px 8px #B0B0C8, -2px -2px 6px #FFFFFF;
-    border-radius: 50rem;
+    box-shadow: 3px 3px 8px rgba(91, 111, 208, 0.4), -2px -2px 6px rgba(255,255,255,0.1);
+    border-radius: 0.75rem;
     border: none;
-    color: white;
-    transition: box-shadow 0.15s ease, transform 0.1s ease;
     cursor: pointer;
+    color: white;
+    transition: all 0.2s ease;
   }
 
   .neu-btn-accent:hover {
-    box-shadow: 4px 4px 12px #A0A0C0, -2px -2px 8px #FFFFFF;
+    box-shadow: 4px 4px 12px rgba(91, 111, 208, 0.5), -3px -3px 8px rgba(255,255,255,0.15);
+    transform: translateY(-1px);
   }
 
   .neu-btn-accent:active {
@@ -168,57 +234,28 @@
   }
 
   /* ── Text styles ── */
-  .text-neu-primary {
-    color: #3D3D5C;
-  }
+  .text-neu-primary  { color: #3D3D5C; }
+  .dark .text-neu-primary { color: #D0D0F0; }
 
-  .text-neu-muted {
-    color: #9090A8;
-  }
+  .text-neu-muted    { color: #9090A8; }
+  .dark .text-neu-muted { color: #7070A0; }
 
-  .text-neu-accent {
-    color: #6B7FD4;
-  }
+  .text-neu-accent   { color: #6B7FD4; }
 
   /* ── Accent gradient ── */
-  .bg-neu-accent {
-    background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
-  }
+  .bg-neu-accent { background: linear-gradient(135deg, #7B8FE0, #5B6FD0); }
 
   /* ── Sidebar-specific ── */
   .sidebar-neu {
-    background: #E8E8F2;
-    box-shadow: 4px 0 16px rgba(180, 180, 200, 0.4);
+    background: var(--neu-base);
+    box-shadow: 4px 0 16px rgba(0,0,0,0.15);
   }
 
   /* ── Remove default borders on neu elements ── */
-  .neu *, .neu-sm *, .neu-lg *, .neu-inset * {
-    border-color: transparent;
-  }
-
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: #E8E8F2;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #C4C4D4;
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #9090A8;
-  }
+  .neu *, .neu-sm *, .neu-lg *, .neu-inset * { border-color: transparent; }
 
   /* ── Legacy compat ── */
-  .bg-gradient-gold {
-    background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
-  }
+  .bg-gradient-gold  { background: linear-gradient(135deg, #7B8FE0, #5B6FD0); }
 
   .text-gradient-gold {
     background: linear-gradient(135deg, #7B8FE0, #5B6FD0);
@@ -227,16 +264,6 @@
     background-clip: text;
   }
 
-  .shadow-card {
-    box-shadow: var(--neu-shadow-sm);
-  }
-
-  .shadow-elevated {
-    box-shadow: var(--neu-shadow-lg);
-  }
+  .shadow-card     { box-shadow: var(--neu-shadow-sm); }
+  .shadow-elevated { box-shadow: var(--neu-shadow-lg); }
 }
-
-/* ── Import page-level overrides ── */
-/* Add this line at the bottom of index.css:
-   @import './neu-overrides.css';
-   Or paste the contents of neu-overrides.css directly below this comment */

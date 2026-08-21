@@ -16,26 +16,26 @@ const API = "https://fintech-dashboard-61vh.onrender.com/api";
 
 // ─── Neumorphic style tokens ───────────────────────────────
 const neu = {
-  background: "#E8E8F2",
-  boxShadow: "6px 6px 14px #C4C4D4, -6px -6px 14px #FFFFFF",
+  background: "var(--neu-base)",
+  boxShadow: "var(--neu-shadow)",
   borderRadius: "1rem",
   border: "none",
 };
 const neuSm = {
-  background: "#E8E8F2",
-  boxShadow: "3px 3px 8px #C4C4D4, -3px -3px 8px #FFFFFF",
+  background: "var(--neu-base)",
+  boxShadow: "var(--neu-shadow-sm)",
   borderRadius: "0.75rem",
   border: "none",
 };
 const neuInset = {
-  background: "#E8E8F2",
-  boxShadow: "inset 4px 4px 10px #C4C4D4, inset -4px -4px 10px #FFFFFF",
+  background: "var(--neu-base)",
+  boxShadow: "var(--neu-inset)",
   borderRadius: "1rem",
   border: "none",
 };
 const neuBadgePos = {
-  background: "#E8E8F2",
-  boxShadow: "inset 2px 2px 5px #C4C4D4, inset -2px -2px 5px #FFFFFF",
+  background: "var(--neu-base)",
+  boxShadow: "var(--neu-inset-sm)",
   borderRadius: "0.5rem",
   color: "#52A882",
 };
@@ -116,11 +116,11 @@ function StatCard({
         </span>
       </div>
       {loading ? (
-        <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: "#D8D8E8" }} />
+        <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
       ) : (
-        <p className="text-2xl font-bold mb-1" style={{ color: "#3D3D5C" }}>{value}</p>
+        <p className="text-2xl font-bold mb-1" style={{ color: "var(--foreground, #3D3D5C)" }}>{value}</p>
       )}
-      <p className="text-xs tracking-wide uppercase" style={{ color: "#9090A8" }}>{title}</p>
+      <p className="text-xs tracking-wide uppercase" style={{ color: "var(--muted-foreground, #9090A8)" }}>{title}</p>
     </motion.div>
   );
 }
@@ -134,7 +134,7 @@ function RevenueBar({ entries }: { entries: FinanceEntry[] }) {
   })).reverse();
 
   if (!data.length) return (
-    <div className="h-48 flex items-center justify-center text-sm" style={{ color: "#9090A8" }}>
+    <div className="h-48 flex items-center justify-center text-sm" style={{ color: "var(--muted-foreground, #9090A8)" }}>
       No booking data yet
     </div>
   );
@@ -142,9 +142,9 @@ function RevenueBar({ entries }: { entries: FinanceEntry[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} barSize={28}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#D8D8E8" />
-        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#9090A8" }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#9090A8" }} axisLine={false} tickLine={false}
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--neu-dark, #D8D8E8)" />
+        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground, #9090A8)" }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground, #9090A8)" }} axisLine={false} tickLine={false}
           tickFormatter={v => fmtCompact(v)} />
         <Tooltip
           contentStyle={{ background: "#2D2D4C", border: "none", borderRadius: 8, color: "#F0F0F8", fontSize: 12 }}
@@ -160,7 +160,7 @@ function RevenueBar({ entries }: { entries: FinanceEntry[] }) {
 // ─── Lead Pipeline ──────────────────────────────────────────
 function PipelineBar({ leads }: { leads: Lead[] }) {
   const statusOrder = ["new", "contacted", "qualified", "proposal", "booked", "closed"];
-  const colors = ["#6B7FD4", "#9B8FE8", "#E07A5A", "#52A882", "#3DB88A", "#9090A8"];
+  const colors = ["#6B7FD4", "#9B8FE8", "#E07A5A", "#52A882", "#3DB88A", "var(--muted-foreground, #9090A8)"];
 
   const counts = statusOrder.map(s => ({
     name: s.charAt(0).toUpperCase() + s.slice(1),
@@ -169,7 +169,7 @@ function PipelineBar({ leads }: { leads: Lead[] }) {
   const max = Math.max(...counts.map(c => c.count), 1);
 
   if (!leads.length) return (
-    <div className="h-32 flex items-center justify-center text-sm" style={{ color: "#9090A8" }}>
+    <div className="h-32 flex items-center justify-center text-sm" style={{ color: "var(--muted-foreground, #9090A8)" }}>
       No leads data yet
     </div>
   );
@@ -178,7 +178,7 @@ function PipelineBar({ leads }: { leads: Lead[] }) {
     <div className="space-y-3">
       {counts.filter(c => c.count > 0).map((stage, i) => (
         <div key={stage.name} className="flex items-center gap-3">
-          <span className="text-xs w-20 shrink-0" style={{ color: "#9090A8" }}>{stage.name}</span>
+          <span className="text-xs w-20 shrink-0" style={{ color: "var(--muted-foreground, #9090A8)" }}>{stage.name}</span>
           <div className="flex-1 rounded-full h-2.5 overflow-hidden" style={neuInset}>
             <motion.div
               initial={{ width: 0 }}
@@ -188,7 +188,7 @@ function PipelineBar({ leads }: { leads: Lead[] }) {
               style={{ background: colors[i % colors.length] }}
             />
           </div>
-          <span className="text-sm font-semibold w-8 text-right" style={{ color: "#3D3D5C" }}>{stage.count}</span>
+          <span className="text-sm font-semibold w-8 text-right" style={{ color: "var(--foreground, #3D3D5C)" }}>{stage.count}</span>
         </div>
       ))}
     </div>
@@ -213,7 +213,7 @@ function ActivityFeed({ entries, suppliers }: { entries: FinanceEntry[]; supplie
   ].slice(0, 5);
 
   if (!items.length) return (
-    <p className="text-sm text-center py-4" style={{ color: "#9090A8" }}>No recent activity</p>
+    <p className="text-sm text-center py-4" style={{ color: "var(--muted-foreground, #9090A8)" }}>No recent activity</p>
   );
 
   return (
@@ -224,8 +224,8 @@ function ActivityFeed({ entries, suppliers }: { entries: FinanceEntry[]; supplie
             <item.icon style={{ width: 16, height: 16, color: item.color }} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm leading-snug" style={{ color: "#3D3D5C" }}>{item.text}</p>
-            <p className="text-xs mt-0.5" style={{ color: "#9090A8" }}>{item.time}</p>
+            <p className="text-sm leading-snug" style={{ color: "var(--foreground, #3D3D5C)" }}>{item.text}</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground, #9090A8)" }}>{item.time}</p>
           </div>
         </div>
       ))}
@@ -328,10 +328,10 @@ const Index = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "#3D3D5C" }}>
+            <h1 className="text-2xl font-bold" style={{ color: "var(--foreground, #3D3D5C)" }}>
               {greeting} 👋
             </h1>
-            <p className="text-sm mt-1" style={{ color: "#9090A8" }}>
+            <p className="text-sm mt-1" style={{ color: "var(--muted-foreground, #9090A8)" }}>
               Here's your business overview for today
             </p>
           </div>
@@ -344,13 +344,13 @@ const Index = () => {
               </div>
             )}
             {loading && (
-              <Loader2 className="animate-spin" style={{ width: 16, height: 16, color: "#9090A8" }} />
+              <Loader2 className="animate-spin" style={{ width: 16, height: 16, color: "var(--muted-foreground, #9090A8)" }} />
             )}
             <div>
-              <p className="text-sm font-medium" style={{ color: "#3D3D5C" }}>
+              <p className="text-sm font-medium" style={{ color: "var(--foreground, #3D3D5C)" }}>
                 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
               </p>
-              <p className="text-xs mt-0.5 text-right" style={{ color: "#9090A8" }}>
+              <p className="text-xs mt-0.5 text-right" style={{ color: "var(--muted-foreground, #9090A8)" }}>
                 {loading ? "Loading..." : "Live data"}
               </p>
             </div>
@@ -407,8 +407,8 @@ const Index = () => {
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
               className="p-5" style={neu}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold" style={{ color: "#3D3D5C" }}>Revenue by Booking</h3>
-                <div className="flex items-center gap-3 text-xs" style={{ color: "#9090A8" }}>
+                <h3 className="text-sm font-semibold" style={{ color: "var(--foreground, #3D3D5C)" }}>Revenue by Booking</h3>
+                <div className="flex items-center gap-3 text-xs" style={{ color: "var(--muted-foreground, #9090A8)" }}>
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#7B8FE0" }} /> Revenue
                   </span>
@@ -418,7 +418,7 @@ const Index = () => {
                 </div>
               </div>
               {loading ? (
-                <div className="h-48 rounded-xl animate-pulse" style={{ background: "#D8D8E8" }} />
+                <div className="h-48 rounded-xl animate-pulse" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
               ) : (
                 <RevenueBar entries={entries} />
               )}
@@ -428,13 +428,13 @@ const Index = () => {
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
               className="p-5" style={neu}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold" style={{ color: "#3D3D5C" }}>Lead Pipeline</h3>
-                <span className="text-xs" style={{ color: "#9090A8" }}>{totalLeads} total leads</span>
+                <h3 className="text-sm font-semibold" style={{ color: "var(--foreground, #3D3D5C)" }}>Lead Pipeline</h3>
+                <span className="text-xs" style={{ color: "var(--muted-foreground, #9090A8)" }}>{totalLeads} total leads</span>
               </div>
               {loading ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="h-4 rounded-full animate-pulse" style={{ background: "#D8D8E8" }} />
+                    <div key={i} className="h-4 rounded-full animate-pulse" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
                   ))}
                 </div>
               ) : (
@@ -446,7 +446,7 @@ const Index = () => {
             {kpi && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
                 className="p-5" style={neu}>
-                <h3 className="text-sm font-semibold mb-4" style={{ color: "#3D3D5C" }}>
+                <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--foreground, #3D3D5C)" }}>
                   Finance Summary — {kpi.month_start && new Date(kpi.month_start).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -458,7 +458,7 @@ const Index = () => {
                   ].map(item => (
                     <div key={item.label} className="p-3 text-center" style={neuInset}>
                       <p className="text-lg font-bold" style={{ color: item.color }}>{item.value}</p>
-                      <p className="text-xs mt-0.5" style={{ color: "#9090A8" }}>{item.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground, #9090A8)" }}>{item.label}</p>
                     </div>
                   ))}
                 </div>
@@ -506,12 +506,12 @@ const Index = () => {
                 </div>
                 <div>
                   {loading ? (
-                    <div className="h-6 w-16 rounded animate-pulse mb-1" style={{ background: "#D8D8E8" }} />
+                    <div className="h-6 w-16 rounded animate-pulse mb-1" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
                   ) : (
-                    <p className="text-xl font-bold" style={{ color: "#3D3D5C" }}>{value}</p>
+                    <p className="text-xl font-bold" style={{ color: "var(--foreground, #3D3D5C)" }}>{value}</p>
                   )}
-                  <p className="text-xs font-medium" style={{ color: "#3D3D5C" }}>{label}</p>
-                  <p className="text-[10px]" style={{ color: "#9090A8" }}>{sub}</p>
+                  <p className="text-xs font-medium" style={{ color: "var(--foreground, #3D3D5C)" }}>{label}</p>
+                  <p className="text-[10px]" style={{ color: "var(--muted-foreground, #9090A8)" }}>{sub}</p>
                 </div>
               </motion.div>
             ))}
@@ -520,7 +520,7 @@ const Index = () => {
             {kpi && (
               <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
                 className="p-5" style={neu}>
-                <h3 className="text-sm font-semibold mb-4" style={{ color: "#3D3D5C" }}>Monthly Targets</h3>
+                <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--foreground, #3D3D5C)" }}>Monthly Targets</h3>
                 <div className="space-y-4">
                   {[
                     {
@@ -540,8 +540,8 @@ const Index = () => {
                     return (
                       <div key={label}>
                         <div className="flex justify-between text-xs mb-1.5">
-                          <span style={{ color: "#3D3D5C" }}>{label}</span>
-                          <span style={{ color: "#9090A8" }}>{fmtFn(current)} / {fmtFn(target)}</span>
+                          <span style={{ color: "var(--foreground, #3D3D5C)" }}>{label}</span>
+                          <span style={{ color: "var(--muted-foreground, #9090A8)" }}>{fmtFn(current)} / {fmtFn(target)}</span>
                         </div>
                         <div className="h-2.5 rounded-full overflow-hidden" style={neuInset}>
                           <motion.div
@@ -552,7 +552,7 @@ const Index = () => {
                             style={{ background: progress >= 80 ? "#52A882" : progress >= 50 ? "#E0AA5A" : "#E07A5A" }}
                           />
                         </div>
-                        <p className="text-[10px] mt-1 text-right" style={{ color: "#9090A8" }}>
+                        <p className="text-[10px] mt-1 text-right" style={{ color: "var(--muted-foreground, #9090A8)" }}>
                           {progress.toFixed(0)}% achieved
                         </p>
                       </div>
@@ -565,15 +565,15 @@ const Index = () => {
             {/* Recent Activity */}
             <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
               className="p-5" style={neu}>
-              <h3 className="text-sm font-semibold mb-4" style={{ color: "#3D3D5C" }}>Recent Activity</h3>
+              <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--foreground, #3D3D5C)" }}>Recent Activity</h3>
               {loading ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map(i => (
                     <div key={i} className="flex gap-3">
-                      <div className="h-8 w-8 rounded-lg shrink-0 animate-pulse" style={{ background: "#D8D8E8" }} />
+                      <div className="h-8 w-8 rounded-lg shrink-0 animate-pulse" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
                       <div className="flex-1 space-y-1">
-                        <div className="h-3 w-full rounded animate-pulse" style={{ background: "#D8D8E8" }} />
-                        <div className="h-3 w-1/2 rounded animate-pulse" style={{ background: "#D8D8E8" }} />
+                        <div className="h-3 w-full rounded animate-pulse" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
+                        <div className="h-3 w-1/2 rounded animate-pulse" style={{ background: "var(--neu-dark, #D8D8E8)" }} />
                       </div>
                     </div>
                   ))}
