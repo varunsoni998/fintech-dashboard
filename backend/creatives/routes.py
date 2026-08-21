@@ -30,10 +30,6 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MXAI_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# ===========================================================
-# SHARED IN-MEMORY STATE — presence + groups
-# ===========================================================
-
 presence_store: Dict[str, float] = {}
 PRESENCE_TTL_SECONDS = 25
 presence_lock = threading.Lock()
@@ -49,10 +45,6 @@ groups_store: Dict[str, dict] = {
     "Sales":        {"id": "Sales",        "label": "Sales",        "avatar": "SL", "lastMessage": "Sales updates"},
 }
 
-# ===========================================================
-# FILE UPLOADS (chat attachments)
-# ===========================================================
-
 CHAT_UPLOAD_DIR = "outputs/chat-uploads"
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
 
@@ -67,23 +59,19 @@ class StopGenerationRequest(BaseModel):
     workflow: str = ""
     job_id: str = ""
 
-
 class StoryboardRequest(BaseModel):
     destination: str
     ratio: str = "9:16"
     duration_seconds: int = 5
 
-
 class ImageRequest(BaseModel):
     prompt: str
     ratio: str = "9:16"
-
 
 class TextVideoRequest(BaseModel):
     prompt: str
     ratio: str = "9:16"
     duration_seconds: int = 5
-
 
 class VideoRequest(BaseModel):
     image_path: str
@@ -92,13 +80,11 @@ class VideoRequest(BaseModel):
     ratio: str = "9:16"
     duration_seconds: int = 5
 
-
 class ChatMessageRequest(BaseModel):
     text: str
     sender: str = "Daily Digest Bot"
     channel: str = "General"
     self: bool = False
-
 
 class SendMessageRequest(BaseModel):
     text: str
@@ -106,19 +92,16 @@ class SendMessageRequest(BaseModel):
     channel: str = "General"
     attachment: Optional[Dict[str, Any]] = None
 
-
 class AutomationTriggerRequest(BaseModel):
     webhook_path: str
     triggered_by: str = "automations_page"
     triggered_at: str = ""
-
 
 class AutomationResultRequest(BaseModel):
     webhook_path: str
     success: bool
     summary: str
     details: str = ""
-
 
 class SupplierRequest(BaseModel):
     name: str
@@ -131,7 +114,6 @@ class SupplierRequest(BaseModel):
     event: str = ""
     url: str = ""
 
-
 class FinanceKPIRequest(BaseModel):
     month_start: str
     month_end: str
@@ -142,17 +124,14 @@ class FinanceKPIRequest(BaseModel):
     targets: dict
     generated_at: str
 
-
 class MXAIMessageRequest(BaseModel):
     conversation_id: str
     user_name: str
     message: str
 
-
 class MXAIConversationRequest(BaseModel):
     user_name: str
     title: str = "New Chat"
-
 
 class ContentGenerateRequest(BaseModel):
     content_type: str
@@ -202,7 +181,6 @@ def format_supplier(row: dict) -> dict:
     raw_notion_data = row.get("raw_notion_data") or {}
     if not isinstance(raw_notion_data, dict):
         raw_notion_data = {}
-
     supabase_id = str(row.get("id", ""))
     return {
         "id": supabase_id,
@@ -254,7 +232,6 @@ def openrouter_headers() -> dict:
 def health():
     return {"status": "ok"}
 
-
 @router.get("/test")
 def test():
     return {"success": True, "message": "Backend working."}
@@ -282,7 +259,6 @@ def generate_full_storyboard(req: StoryboardRequest):
             for scene in storyboard:
                 if jobs[job_id]["status"] == "stopped":
                     break
-
                 try:
                     image_path = generate_image(scene["image_prompt"])
                 except Exception:
@@ -311,7 +287,6 @@ def storyboard_status(job_id: str):
     job = jobs.get(job_id)
     if not job:
         return {"success": False, "error": "Job not found"}
-
     return {
         "success": True,
         "status": job["status"],
@@ -337,7 +312,7 @@ def generate_image_route(req: ImageRequest):
 @router.post("/generate-video")
 def generate_video(req: VideoRequest):
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "running", "result": None, "error": None}
+    jobs[job_id] = {"status": "running", "result": None, "error": None, "type": "video"}
 
     def run():
         try:
@@ -350,12 +325,13 @@ def generate_video(req: VideoRequest):
             )
             jobs[job_id]["status"] = "done"
             jobs[job_id]["result"] = video_path
-        except Exception as e:
+        except Exception as error:
             jobs[job_id]["status"] = "error"
-            jobs[job_id]["error"] = str(e)
+            jobs[job_id]["error"] = str(error)
 
     threading.Thread(target=run, daemon=True).start()
     return {"success": True, "job_id": job_id}
+
 
 @router.get("/video-status/{job_id}")
 def video_status(job_id: str):
@@ -395,14 +371,12 @@ def generate_video_text(req: TextVideoRequest):
 @router.post("/analyze-image")
 async def analyze_image(file: UploadFile = File(...)):
     os.makedirs("outputs/uploads", exist_ok=True)
-
     extension = file.filename.split(".")[-1] if file.filename and "." in file.filename else "jpg"
     temp_path = f"outputs/uploads/upload_{uuid.uuid4()}.{extension}"
 
     try:
         with open(temp_path, "wb") as output_file:
             shutil.copyfileobj(file.file, output_file)
-
         result = analyze_uploaded_image(temp_path)
         return {
             "success": True,
@@ -425,7 +399,6 @@ async def stop_generation(payload: StopGenerationRequest):
     if payload.job_id and payload.job_id in jobs:
         jobs[payload.job_id]["status"] = "stopped"
         stopped_job = True
-
     return {
         "success": True,
         "comfy_interrupted": False,
@@ -450,21 +423,14 @@ Destination: {payload.destination}
 
 Return only the final content in clean markdown.
 """
-
         response = requests.post(
             OPENROUTER_URL,
             headers=openrouter_headers(),
             json={
                 "model": MXAI_MODEL,
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a professional AI assistant. Write polished marketing content in clean markdown.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt.strip(),
-                    },
+                    {"role": "system", "content": "You are a professional AI assistant. Write polished marketing content in clean markdown."},
+                    {"role": "user", "content": prompt.strip()},
                 ],
                 "stream": False,
             },
@@ -473,10 +439,8 @@ Return only the final content in clean markdown.
         response.raise_for_status()
         data = response.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
         if not content:
             raise RuntimeError("Empty response from OpenRouter")
-
         return {"success": True, "content": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -614,11 +578,7 @@ async def mxai_chat(payload: MXAIMessageRequest):
             with requests.post(
                 OPENROUTER_URL,
                 headers=openrouter_headers(),
-                json={
-                    "model": MXAI_MODEL,
-                    "messages": messages,
-                    "stream": True,
-                },
+                json={"model": MXAI_MODEL, "messages": messages, "stream": True},
                 stream=True,
                 timeout=300,
             ) as response:
@@ -627,15 +587,11 @@ async def mxai_chat(payload: MXAIMessageRequest):
                 for line in response.iter_lines():
                     if not line:
                         continue
-
                     decoded = line.decode("utf-8")
-
                     if decoded.startswith("data: "):
                         decoded = decoded[6:]
-
                     if decoded.strip() == "[DONE]":
                         break
-
                     try:
                         chunk = json.loads(decoded)
                     except Exception:
@@ -651,7 +607,6 @@ async def mxai_chat(payload: MXAIMessageRequest):
                         break
 
             cleaned_raw = clean_think_tags(full_content)
-
             reply_text = ""
             options: list = []
             try:
@@ -760,9 +715,7 @@ async def upsert_chat_group(payload: dict = Body(...)):
     with groups_lock:
         existing = groups_store.get(group_id)
         groups_store[group_id] = {
-            "id": group_id,
-            "label": label,
-            "avatar": avatar,
+            "id": group_id, "label": label, "avatar": avatar,
             "lastMessage": existing["lastMessage"] if existing else "No messages yet",
         }
         saved = groups_store[group_id]
@@ -817,11 +770,9 @@ async def get_chat_upload(filename: str, download: bool = False, name: Optional[
     path = os.path.join(CHAT_UPLOAD_DIR, safe_name)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="File not found")
-
     if download:
         display_name = os.path.basename(name) if name else safe_name
         return FileResponse(path, filename=display_name)
-
     return FileResponse(path)
 
 
@@ -925,17 +876,10 @@ async def trigger_automation(payload: AutomationTriggerRequest):
     try:
         response = requests.post(
             f"http://127.0.0.1:5678/webhook/{webhook_path}",
-            json={
-                "triggered_by": payload.triggered_by,
-                "triggered_at": payload.triggered_at,
-            },
+            json={"triggered_by": payload.triggered_by, "triggered_at": payload.triggered_at},
             timeout=15,
         )
-        return {
-            "success": response.ok,
-            "status_code": response.status_code,
-            "response": response.text[:300],
-        }
+        return {"success": response.ok, "status_code": response.status_code, "response": response.text[:300]}
     except requests.exceptions.ConnectionError:
         raise HTTPException(status_code=503, detail="Could not reach n8n — make sure it is running on localhost:5678")
     except requests.exceptions.Timeout:
@@ -967,12 +911,7 @@ async def get_automation_result(webhook_path: str):
 @router.get("/suppliers")
 async def get_suppliers():
     try:
-        result = (
-            supabase.table("suppliers")
-            .select("*")
-            .order("created_at", desc=True)
-            .execute()
-        )
+        result = supabase.table("suppliers").select("*").order("created_at", desc=True).execute()
         suppliers = [format_supplier(row) for row in (result.data or [])]
         return {"success": True, "suppliers": suppliers}
     except Exception as error:
@@ -1009,18 +948,11 @@ async def create_supplier(payload: SupplierRequest):
         result = supabase.table("suppliers").insert(row_to_insert).execute()
         if not result.data:
             raise RuntimeError("Supabase did not return the created supplier.")
-
         supplier = format_supplier(result.data[0])
-
         try:
-            requests.post(
-                "http://127.0.0.1:5678/webhook/supplier-onboarding",
-                json={"supplier": supplier},
-                timeout=10,
-            )
+            requests.post("http://127.0.0.1:5678/webhook/supplier-onboarding", json={"supplier": supplier}, timeout=10)
         except Exception:
             pass
-
         return {"success": True, "supplier": supplier}
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Could not create supplier: {str(error)}")
@@ -1045,12 +977,7 @@ async def update_supplier(supplier_id: str, payload: SupplierRequest):
     }
 
     try:
-        result = (
-            supabase.table("suppliers")
-            .update(row_to_update)
-            .eq("id", supplier_id)
-            .execute()
-        )
+        result = supabase.table("suppliers").update(row_to_update).eq("id", supplier_id).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="Supplier not found")
         supplier = format_supplier(result.data[0])
@@ -1064,12 +991,7 @@ async def update_supplier(supplier_id: str, payload: SupplierRequest):
 @router.delete("/suppliers/{supplier_id}")
 async def delete_supplier(supplier_id: str):
     try:
-        result = (
-            supabase.table("suppliers")
-            .delete()
-            .eq("id", supplier_id)
-            .execute()
-        )
+        result = supabase.table("suppliers").delete().eq("id", supplier_id).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="Supplier not found")
         return {"success": True, "deleted_id": supplier_id}
