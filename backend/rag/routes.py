@@ -74,7 +74,7 @@ async def upload_document(
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported file type '{ext}'. Supported: PDF, TXT, DOCX",
+            detail=f"Unsupported file type '{ext}'. Supported: PDF, TXT, DOCX, ZIP",
         )
 
     # Save to disk

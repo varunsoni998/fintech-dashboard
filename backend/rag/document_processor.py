@@ -326,7 +326,7 @@ def process_docx(
         raise
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".doc"}
+SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".doc", ".zip"}
 
 
 def process_file(
@@ -343,5 +343,86 @@ def process_file(
         return process_txt(file_path, filename, user_id, status_callback=status_callback)
     elif ext in (".docx", ".doc"):
         return process_docx(file_path, filename, user_id, status_callback=status_callback)
+    elif ext == ".zip":
+        return process_zip(file_path, filename, user_id, status_callback=status_callback)
     else:
-        raise ValueError(f"Unsupported file type: {ext}. Supported: PDF, TXT, DOCX")
+        raise ValueError(f"Unsupported file type: {ext}. Supported: PDF, TXT, DOCX, ZIP")
+
+
+def process_zip(
+    file_path: str,
+    filename: str,
+    user_id: str,
+    status_callback: StatusCB = None,
+) -> dict:
+    """
+    Process a ZIP archive — extracts all readable text/code files,
+    chunks each one individually, embeds, and stores in Supabase.
+    Each file path is preserved in chunk metadata for citations.
+    """
+    from .zip_processor import extract_zip_entries, format_entry_for_chunking
+
+    _status(status_callback, "Hashing file...")
+    file_hash = file_sha256(file_path)
+
+    existing = _get_existing_doc(file_hash, user_id)
+    if existing:
+        _status(status_callback, "Already indexed (duplicate).")
+        return existing
+
+    document_id = str(uuid.uuid4())
+
+    _status(status_callback, "Creating document record...")
+    _insert_document_placeholder(document_id, user_id, filename, file_hash, "zip")
+
+    try:
+        _status(status_callback, "Extracting files from zip...")
+        entries, stats = extract_zip_entries(file_path)
+
+        if not entries:
+            raise RuntimeError(
+                f"No readable text/code files found in zip. "
+                f"({stats['total']} total files, "
+                f"{stats['skipped_type']} skipped as binary/unknown, "
+                f"{stats['skipped_pattern']} skipped as node_modules/.git/etc.)"
+            )
+
+        _status(status_callback, f"Found {stats['extracted']} readable files — chunking...")
+
+        # Chunk each file individually so citations show the correct file path
+        all_chunks: list[Chunk] = []
+        for i, entry in enumerate(entries):
+            # Use file path as the "page" label — store index as page_number
+            # and the relative_path in filename field for this chunk set
+            formatted = format_entry_for_chunking(entry)
+            file_chunks = chunk_page_text(
+                text=formatted,
+                document_id=document_id,
+                filename=entry.relative_path,   # actual file path inside zip
+                page_number=i + 1,              # file index (1-based)
+            )
+            all_chunks.extend(file_chunks)
+
+        if not all_chunks:
+            raise RuntimeError("All files in the zip were empty after extraction.")
+
+        _status(status_callback, f"Generating embeddings for {len(all_chunks)} chunks across {len(entries)} files...")
+        embeddings = embed_texts([c.text for c in all_chunks])
+
+        _status(status_callback, "Storing vectors...")
+        _insert_chunks(all_chunks, embeddings)
+
+        _status(status_callback, "Finalising...")
+        _update_document_indexed(document_id, len(entries), len(all_chunks))
+
+        _status(status_callback, f"Done! Indexed {len(entries)} files, {len(all_chunks)} chunks.")
+
+        result = supabase.table("rag_documents").select("*").eq("id", document_id).single().execute()
+        return result.data
+
+    except Exception as e:
+        try:
+            supabase.table("rag_documents").update({"status": "error"}).eq("id", document_id).execute()
+        except Exception:
+            pass
+        raise
