@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useDarkMode } from "../../hooks/useDarkMode";
 import { useNavigate } from "react-router-dom";
+import { GlobalSearch } from "./GlobalSearch";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,10 +20,10 @@ interface Notification {
 }
 
 const INITIAL_NOTIFICATIONS: Notification[] = [
-  { id: 1, type: "info", title: "New lead assigned", message: "A new lead from Rajesh Mehta has been assigned to you.", time: "2 min ago", read: false },
-  { id: 2, type: "success", title: "Itinerary approved", message: "Kerala Backwaters package itinerary was approved by the client.", time: "1 hr ago", read: false },
-  { id: 3, type: "warning", title: "Supplier response pending", message: "No response from TravelEase Suppliers for 48 hours.", time: "3 hr ago", read: false },
-  { id: 4, type: "info", title: "Campaign scheduled", message: "Diwali campaign has been queued and will go live at 9:00 AM.", time: "Yesterday", read: true },
+  { id: 1, type: "info",    title: "New lead assigned",        message: "A new lead from Rajesh Mehta has been assigned to you.",      time: "2 min ago",  read: false },
+  { id: 2, type: "success", title: "Itinerary approved",       message: "Kerala Backwaters package itinerary was approved by the client.", time: "1 hr ago", read: false },
+  { id: 3, type: "warning", title: "Supplier response pending", message: "No response from TravelEase Suppliers for 48 hours.",          time: "3 hr ago",  read: false },
+  { id: 4, type: "info",    title: "Campaign scheduled",        message: "Diwali campaign has been queued and will go live at 9:00 AM.", time: "Yesterday", read: true  },
 ];
 
 function getInitials(name?: string | null, email?: string | null): string {
@@ -36,34 +37,33 @@ function getInitials(name?: string | null, email?: string | null): string {
 }
 
 const typeStyles = {
-  info:    { icon: <Info style={{ width: 13, height: 13 }} />,       bg: "#EEF1FB", color: "#5B6FD0" },
-  success: { icon: <CheckCheck style={{ width: 13, height: 13 }} />, bg: "#EEFAF4", color: "#2E9E6B" },
+  info:    { icon: <Info style={{ width: 13, height: 13 }} />,        bg: "#EEF1FB", color: "#5B6FD0" },
+  success: { icon: <CheckCheck style={{ width: 13, height: 13 }} />,  bg: "#EEFAF4", color: "#2E9E6B" },
   warning: { icon: <AlertTriangle style={{ width: 13, height: 13 }} />, bg: "#FEF6EB", color: "#D48A2E" },
 };
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [refreshing, setRefreshing]   = useState(false);
-  const [notifOpen, setNotifOpen]     = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [notifOpen, setNotifOpen]   = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const { user, profile } = useAuth();
+  const { user, profile }        = useAuth();
   const { dark, toggle: toggleDark } = useDarkMode();
 
-  // ── theme tokens ──────────────────────────────────────────────
-  const BG          = dark ? "#1A1A2E" : "#E8E8F2";
-  const SHADOW_OUT  = dark
+  // ── Theme tokens ──────────────────────────────────────────────────────────
+  const BG           = dark ? "#1A1A2E" : "#E8E8F2";
+  const SHADOW_OUT   = dark
     ? "5px 5px 12px #0D0D1A, -5px -5px 12px #272744"
     : "5px 5px 12px #C4C4D4, -5px -5px 12px #FFFFFF";
-  const TEXT_MUTED  = dark ? "#7070A0" : "#9090A8";
-  const TEXT_MAIN   = dark ? "#D0D0F0" : "#3A3A5A";
-  const BORDER      = dark ? "#2A2A4A" : "#D4D4E4";
-  const PANEL_BG    = dark ? "#1E1E35" : "#E8E8F2";
+  const TEXT_MUTED   = dark ? "#7070A0" : "#9090A8";
+  const TEXT_MAIN    = dark ? "#D0D0F0" : "#3A3A5A";
+  const BORDER       = dark ? "#2A2A4A" : "#D4D4E4";
+  const PANEL_BG     = dark ? "#1E1E35" : "#E8E8F2";
   const PANEL_SHADOW = dark
     ? "8px 8px 20px #0D0D1A, -8px -8px 20px #272744"
     : "8px 8px 20px #C0C0D0, -8px -8px 20px #FFFFFF";
-  const NOTIF_HOVER_BG = dark ? "rgba(123,143,224,0.08)" : "rgba(123,143,224,0.06)";
 
   const initials    = getInitials(profile?.full_name, user?.email);
   const displayName = profile?.full_name ?? user?.email ?? "User";
@@ -79,7 +79,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const markRead    = (id: number) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   const dismiss     = (id: number) => setNotifications(prev => prev.filter(n => n.id !== id));
 
-  // Close notif panel on outside click
   useEffect(() => {
     if (!notifOpen) return;
     const handler = (e: MouseEvent) => {
@@ -97,14 +96,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    // The outer wrapper covers the full page area so dark BG fills everywhere
     <div className="flex-1 flex flex-col min-w-0" style={{ background: BG, minHeight: "100vh" }}>
 
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="h-14 flex items-center justify-between px-5 flex-shrink-0"
         style={{ background: BG, borderBottom: `1px solid ${BORDER}` }}>
 
-        <SidebarTrigger className="rounded-xl transition-all" style={btnStyle} />
+        <div className="flex items-center gap-3">
+          <SidebarTrigger className="rounded-xl transition-all" style={btnStyle} />
+
+          {/* Global Search — sits left of centre */}
+          <GlobalSearch />
+        </div>
 
         <div className="flex items-center gap-3">
 
@@ -151,7 +154,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 background: PANEL_BG, borderRadius: 18, boxShadow: PANEL_SHADOW,
                 zIndex: 50, overflow: "hidden", border: `1px solid ${BORDER}`,
               }}>
-                {/* Panel header */}
                 <div style={{
                   padding: "14px 16px 10px", display: "flex", alignItems: "center",
                   justifyContent: "space-between", borderBottom: `1px solid ${BORDER}`,
@@ -173,7 +175,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   )}
                 </div>
 
-                {/* List */}
                 <div style={{ maxHeight: 360, overflowY: "auto", padding: "8px 0" }}>
                   {notifications.length === 0 ? (
                     <div style={{ padding: "32px 16px", textAlign: "center", color: TEXT_MUTED, fontSize: 13 }}>
@@ -185,7 +186,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <div key={n.id} onClick={() => markRead(n.id)} style={{
                         display: "flex", alignItems: "flex-start", gap: 10,
                         padding: "10px 14px", cursor: "pointer",
-                        background: n.read ? "transparent" : NOTIF_HOVER_BG,
+                        background: n.read ? "transparent" : "rgba(123,143,224,0.06)",
                       }}>
                         <div style={{
                           width: 28, height: 28, borderRadius: 8, background: ts.bg,
@@ -235,7 +236,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </header>
 
-      {/* ── Main content ─────────────────────────────────────── */}
+      {/* ── Main content ──────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto p-6" style={{ background: BG, color: TEXT_MAIN }}>
         {children}
       </main>
