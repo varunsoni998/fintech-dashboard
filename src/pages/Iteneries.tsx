@@ -180,8 +180,8 @@ const AIAssistant = () => {
 
     for (const file of Array.from(files)) {
       const ext = file.name.split(".").pop()?.toLowerCase();
-      if (!["pdf", "txt", "docx", "doc"].includes(ext || "")) {
-        alert(`"${file.name}" is not a supported format. Please upload PDF, TXT, or DOCX files.`);
+      if (!["pdf", "txt", "docx", "doc", "zip"].includes(ext || "")) {
+        alert(`"${file.name}" is not a supported format. Please upload PDF, TXT, DOCX, or ZIP files.`);
         continue;
       }
 
@@ -496,13 +496,13 @@ const AIAssistant = () => {
                 <p className="text-sm text-muted-foreground">
                   Drop documents here to index them, or click to browse
                 </p>
-                <span className="text-xs text-muted-foreground/60">PDF, DOCX, TXT supported</span>
+                <span className="text-xs text-muted-foreground/60">PDF, DOCX, TXT, ZIP supported</span>
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.txt,.docx,.doc"
+                accept=".pdf,.txt,.docx,.doc,.zip"
                 multiple
                 onChange={e => handleFileUpload(e.target.files)}
               />
@@ -572,7 +572,7 @@ const AIAssistant = () => {
               <div className="rounded-xl border bg-card shadow-card p-5 space-y-3">
                 <p className="text-sm font-medium text-foreground">How it works</p>
                 {[
-                  { icon: <Upload className="h-3.5 w-3.5" />,   text: "Upload PDF, DOCX, or TXT" },
+                  { icon: <Upload className="h-3.5 w-3.5" />,   text: "Upload PDF, DOCX, TXT, or ZIP" },
                   { icon: <Database className="h-3.5 w-3.5" />, text: "Documents are chunked and embedded" },
                   { icon: <Bot className="h-3.5 w-3.5" />,      text: "Ask questions in natural language" },
                   { icon: <Sparkles className="h-3.5 w-3.5" />, text: "Nemotron retrieves and generates answers" },
