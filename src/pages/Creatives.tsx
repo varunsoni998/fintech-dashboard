@@ -189,9 +189,11 @@ function TextToImage() {
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
+  const isGenerating = useRef(false);
 
   const generate = async () => {
     if (!prompt.trim() || loading) return;
+    isGenerating.current = true;
     setLoading(true);
     setImagePath(null);
     const controller = new AbortController();
@@ -208,6 +210,7 @@ function TextToImage() {
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
     } finally {
+      isGenerating.current = false;
       setLoading(false);
       controllerRef.current = null;
     }
@@ -429,6 +432,7 @@ function ImageToVideo() {
   const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
+  const isGenerating = useRef(false);
 
   const imgSrc = imageData ?? (imagePath ? (imagePath.startsWith("http") ? imagePath : `${BASE}/${imagePath}`) : null);
 
@@ -463,7 +467,9 @@ function ImageToVideo() {
   };
 
   const generate = async () => {
-    if (!imgSrc || !videoPrompt.trim() || loading) return;
+    if (!imgSrc || !videoPrompt.trim() || loading || isGenerating.current) return;
+
+    isGenerating.current = true;
     setLoading(true);
     setVideoPath(null);
     const controller = new AbortController();
@@ -495,6 +501,7 @@ function ImageToVideo() {
     } catch (err) {
       if ((err as Error).name !== "AbortError") console.error(err);
     } finally {
+      isGenerating.current = false;
       setLoading(false);
       controllerRef.current = null;
     }
