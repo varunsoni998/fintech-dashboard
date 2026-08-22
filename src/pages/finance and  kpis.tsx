@@ -1,960 +1,316 @@
 import { DashboardLayout } from "../components/dashboard/DashboardLayout";
 import { motion } from "framer-motion";
 import {
-  IndianRupee,
-  TrendingUp,
-  TrendingDown,
-  Target,
-  PieChart,
-  DollarSign,
-  Calendar,
-  CheckCircle,
-  Clock,
-  Briefcase,
+  IndianRupee, TrendingUp, TrendingDown, Target, PieChart,
+  DollarSign, Calendar, CheckCircle, Clock, Briefcase,
+  RefreshCw, AlertCircle,
 } from "lucide-react";
-
 import { useEffect, useState } from "react";
+
+const API = "https://fintech-dashboard-61vh.onrender.com/api";
 
 interface FinanceData {
   month_start: string;
   month_end: string;
-
-  revenue: {
-    realized: number;
-    pending: number;
-    pipeline_total: number;
-  };
-
-  expenses: {
-    supplier_cost: number;
-    overhead: number;
-    refunds: number;
-    total: number;
-  };
-
-  profit: {
-    gross_profit: number;
-    profit_margin: number;
-  };
-
-  bookings: {
-    total: number;
-    confirmed: number;
-    conversion_rate: number;
-  };
-
+  revenue: { realized: number; pending: number; pipeline_total: number };
+  expenses: { supplier_cost: number; overhead: number; refunds: number; total: number };
+  profit: { gross_profit: number; profit_margin: number };
+  bookings: { total: number; confirmed: number; conversion_rate: number };
   targets: {
-    target_revenue: number;
-    target_bookings: number;
-    target_profit_margin: number;
-
-    revenue_variance: number;
-    revenue_variance_pct: number;
-
-    bookings_variance: number;
-
-    margin_variance: number;
+    target_revenue: number; target_bookings: number; target_profit_margin: number;
+    revenue_variance: number; revenue_variance_pct: number;
+    bookings_variance: number; margin_variance: number;
   };
-
   generated_at: string;
 }
 
 interface FinanceEntry {
-  id: string;
-
-  trip_name: string;
-
-  client_name: string;
-
-  revenue: number;
-
-  expense: number;
-
-  profit: number;
-
-  booking_date: string;
+  id: string; trip_name: string; client_name: string;
+  revenue: number; expense: number; profit: number; booking_date: string;
 }
 
 const fade = (delay: number) => ({
   initial: { opacity: 0, y: 12 },
-
   animate: { opacity: 1, y: 0 },
-
-  transition: {
-    duration: 0.4,
-    delay,
-  },
+  transition: { duration: 0.4, delay },
 });
 
 const currency = (n: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(n);
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 const percent = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 const progress = (value: number, target: number) => {
   if (!target) return 0;
-
   return Math.min((value / target) * 100, 100);
 };
 
 export default function FinanceKPIs() {
-  const [finance, setFinance] = useState<FinanceData | null>(null);
-
-  const [entries, setEntries] = useState<FinanceEntry[]>([]);
-
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+  const [finance, setFinance]   = useState<FinanceData | null>(null);
+  const [entries, setEntries]   = useState<FinanceEntry[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   async function loadDashboard() {
+    setLoading(true);
+    setError(null);
     try {
       const [kpiRes, entryRes] = await Promise.all([
-        fetch("https://fintech-dashboard-61vh.onrender.com/api/finance-kpis/latest"),
-        fetch("https://fintech-dashboard-61vh.onrender.com/api/finance-entries"),
+        fetch(`${API}/finance-kpis/latest`),
+        fetch(`${API}/finance-entries`),
       ]);
 
-      const kpi = await kpiRes.json();
+      if (!kpiRes.ok) throw new Error(`KPI endpoint returned ${kpiRes.status}`);
 
+      const kpi          = await kpiRes.json();
       const transactions = await entryRes.json();
 
-      setFinance(kpi);
+      if (!kpi || !kpi.revenue) throw new Error("Invalid data from server");
 
-      setEntries(transactions);
-    } catch (err) {
-      console.error(err);
+      setFinance(kpi);
+      setEntries(Array.isArray(transactions) ? transactions : []);
+    } catch (err: any) {
+      console.error("Finance load failed:", err);
+      setError(err?.message ?? "Could not load finance data");
     } finally {
       setLoading(false);
+      setRetrying(false);
     }
   }
 
+  useEffect(() => { loadDashboard(); }, []);
+
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex justify-center py-40 text-muted-foreground">
-          Loading Finance Dashboard...
+        <div className="flex flex-col items-center justify-center py-40 gap-4 text-muted-foreground">
+          <RefreshCw className="h-8 w-8 animate-spin" />
+          <p className="text-sm">Loading Finance Dashboard...</p>
+          <p className="text-xs opacity-60">Backend may be waking up — this can take 30–60 seconds</p>
         </div>
       </DashboardLayout>
     );
   }
 
-  if (!finance) {
+  // ── Error ────────────────────────────────────────────────────────────────
+  if (error || !finance) {
     return (
       <DashboardLayout>
-        <div className="flex justify-center py-40 text-red-500">
-          Unable to load finance dashboard.
+        <div className="flex flex-col items-center justify-center py-40 gap-5">
+          <div className="h-16 w-16 rounded-2xl bg-red-50 flex items-center justify-center">
+            <AlertCircle className="h-8 w-8 text-red-500" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-foreground mb-1">Unable to load Finance Dashboard</p>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              {error ?? "The backend didn't return valid data."}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 opacity-60">
+              The Render backend may be sleeping — try again in 30 seconds.
+            </p>
+          </div>
+          <button
+            onClick={() => { setRetrying(true); loadDashboard(); }}
+            disabled={retrying}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+            style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)", opacity: retrying ? 0.6 : 1 }}
+          >
+            <RefreshCw className={`h-4 w-4 ${retrying ? "animate-spin" : ""}`} />
+            {retrying ? "Retrying..." : "Try Again"}
+          </button>
         </div>
       </DashboardLayout>
     );
   }
 
+  // ── Main render ──────────────────────────────────────────────────────────
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
 
         <motion.div {...fade(0)}>
-
-          <h1 className="text-3xl font-serif">
-            Finance Dashboard
-          </h1>
-
-          <p className="text-muted-foreground mt-2">
-            Revenue, expenses, margins and business performance
-          </p>
-
+          <h1 className="text-3xl font-serif">Finance Dashboard</h1>
+          <p className="text-muted-foreground mt-2">Revenue, expenses, margins and business performance</p>
         </motion.div>
+
         {/* KPI CARDS */}
-
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-
-          <motion.div
-            {...fade(0.1)}
-            className="rounded-2xl bg-card border shadow-sm p-6"
-          >
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Revenue
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {currency(finance.revenue.realized)}
-                </h2>
-
+          {[
+            { label: "Revenue",       value: currency(finance.revenue.realized),     icon: IndianRupee, bg: "bg-green-100",  color: "text-green-600"  },
+            { label: "Expenses",      value: currency(finance.expenses.total),        icon: TrendingDown, bg: "bg-red-100",   color: "text-red-600"    },
+            { label: "Gross Profit",  value: currency(finance.profit.gross_profit),   icon: TrendingUp,  bg: "bg-blue-100",  color: "text-blue-600"   },
+            { label: "Profit Margin", value: percent(finance.profit.profit_margin),   icon: PieChart,    bg: "bg-yellow-100",color: "text-yellow-600" },
+          ].map(({ label, value, icon: Icon, bg, color }, i) => (
+            <motion.div key={label} {...fade(0.1 + i * 0.05)} className="rounded-2xl bg-card border shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{label}</p>
+                  <h2 className="text-3xl font-bold mt-3">{value}</h2>
+                </div>
+                <div className={`h-12 w-12 rounded-xl ${bg} flex items-center justify-center`}>
+                  <Icon className={`h-6 w-6 ${color}`} />
+                </div>
               </div>
-
-              <div className="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center">
-
-                <IndianRupee className="h-6 w-6 text-green-600"/>
-
-              </div>
-
-            </div>
-
-          </motion.div>
-
-          <motion.div
-            {...fade(0.15)}
-            className="rounded-2xl bg-card border shadow-sm p-6"
-          >
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Expenses
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {currency(finance.expenses.total)}
-                </h2>
-
-              </div>
-
-              <div className="h-12 w-12 rounded-xl bg-red-100 flex items-center justify-center">
-
-                <TrendingDown className="h-6 w-6 text-red-600"/>
-
-              </div>
-
-            </div>
-
-          </motion.div>
-
-          <motion.div
-            {...fade(0.2)}
-            className="rounded-2xl bg-card border shadow-sm p-6"
-          >
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Gross Profit
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {currency(finance.profit.gross_profit)}
-                </h2>
-
-              </div>
-
-              <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center">
-
-                <TrendingUp className="h-6 w-6 text-blue-600"/>
-
-              </div>
-
-            </div>
-
-          </motion.div>
-
-          <motion.div
-            {...fade(0.25)}
-            className="rounded-2xl bg-card border shadow-sm p-6"
-          >
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Profit Margin
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {percent(finance.profit.profit_margin)}
-                </h2>
-
-              </div>
-
-              <div className="h-12 w-12 rounded-xl bg-yellow-100 flex items-center justify-center">
-
-                <PieChart className="h-6 w-6 text-yellow-600"/>
-
-              </div>
-
-            </div>
-
-          </motion.div>
-
+            </motion.div>
+          ))}
         </div>
 
         {/* SECOND ROW */}
-
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-
-          <motion.div
-            {...fade(0.3)}
-            className="rounded-2xl bg-card border p-6"
-          >
-
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Bookings
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {finance.bookings.total}
-                </h2>
-
+          {[
+            { label: "Bookings",   value: String(finance.bookings.total),                 icon: Briefcase,   color: "text-primary"    },
+            { label: "Confirmed",  value: String(finance.bookings.confirmed),              icon: CheckCircle, color: "text-green-600"  },
+            { label: "Conversion", value: percent(finance.bookings.conversion_rate),       icon: Target,      color: "text-blue-600"   },
+            { label: "Updated",    value: new Date(finance.generated_at).toLocaleDateString(), icon: Calendar, color: "text-accent"  },
+          ].map(({ label, value, icon: Icon, color }, i) => (
+            <motion.div key={label} {...fade(0.3 + i * 0.05)} className="rounded-2xl bg-card border p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{label}</p>
+                  <h2 className="text-2xl font-bold mt-3">{value}</h2>
+                </div>
+                <Icon className={`h-7 w-7 ${color}`} />
               </div>
-
-              <Briefcase className="text-primary"/>
-
-            </div>
-
-          </motion.div>
-
-          <motion.div
-            {...fade(0.35)}
-            className="rounded-2xl bg-card border p-6"
-          >
-
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Confirmed
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {finance.bookings.confirmed}
-                </h2>
-
-              </div>
-
-              <CheckCircle className="text-green-600"/>
-
-            </div>
-
-          </motion.div>
-
-          <motion.div
-            {...fade(0.4)}
-            className="rounded-2xl bg-card border p-6"
-          >
-
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Conversion
-                </p>
-
-                <h2 className="text-3xl font-bold mt-3">
-                  {percent(finance.bookings.conversion_rate)}
-                </h2>
-
-              </div>
-
-              <Target className="text-blue-600"/>
-
-            </div>
-
-          </motion.div>
-
-          <motion.div
-            {...fade(0.45)}
-            className="rounded-2xl bg-card border p-6"
-          >
-
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-sm text-muted-foreground">
-                  Updated
-                </p>
-
-                <h2 className="text-lg font-semibold mt-3">
-                  {new Date(finance.generated_at).toLocaleDateString()}
-                </h2>
-
-              </div>
-
-              <Calendar className="text-accent"/>
-
-            </div>
-
-          </motion.div>
-
+            </motion.div>
+          ))}
         </div>
+
         {/* PROGRESS SECTION */}
-
         <div className="grid lg:grid-cols-3 gap-6">
-
-          {/* Revenue Progress */}
-
-          <motion.div
-            {...fade(0.5)}
-            className="rounded-2xl border bg-card p-6"
-          >
-
-            <h3 className="font-semibold text-lg mb-6">
-              Revenue Target
-            </h3>
-
-            <div className="flex justify-between mb-2">
-
-              <span className="text-sm text-muted-foreground">
-                {currency(finance.revenue.realized)}
-              </span>
-
-              <span className="text-sm font-medium">
-                {currency(finance.targets.target_revenue)}
-              </span>
-
-            </div>
-
-            <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
-
-              <div
-                className="bg-green-600 h-3 rounded-full transition-all duration-700"
-                style={{
-                  width: `${progress(
-                    finance.revenue.realized,
-                    finance.targets.target_revenue
-                  )}%`,
-                }}
-              />
-
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-3">
-
-              {progress(
-                finance.revenue.realized,
-                finance.targets.target_revenue
-              ).toFixed(1)}
-              % Complete
-
-            </p>
-
-          </motion.div>
-
-          {/* Booking Progress */}
-
-          <motion.div
-            {...fade(0.55)}
-            className="rounded-2xl border bg-card p-6"
-          >
-
-            <h3 className="font-semibold text-lg mb-6">
-              Booking Target
-            </h3>
-
-            <div className="flex justify-between mb-2">
-
-              <span className="text-sm text-muted-foreground">
-
-                {finance.bookings.total}
-
-              </span>
-
-              <span className="text-sm font-medium">
-
-                {finance.targets.target_bookings}
-
-              </span>
-
-            </div>
-
-            <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
-
-              <div
-                className="bg-blue-600 h-3 rounded-full transition-all duration-700"
-                style={{
-                  width: `${progress(
-                    finance.bookings.total,
-                    finance.targets.target_bookings
-                  )}%`,
-                }}
-              />
-
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-3">
-
-              {progress(
-                finance.bookings.total,
-                finance.targets.target_bookings
-              ).toFixed(1)}
-              % Complete
-
-            </p>
-
-          </motion.div>
-
-          {/* Profit Margin */}
-
-          <motion.div
-            {...fade(0.6)}
-            className="rounded-2xl border bg-card p-6"
-          >
-
-            <h3 className="font-semibold text-lg mb-6">
-              Profit Margin Target
-            </h3>
-
-            <div className="flex justify-between mb-2">
-
-              <span className="text-sm text-muted-foreground">
-
-                {percent(finance.profit.profit_margin)}
-
-              </span>
-
-              <span className="text-sm font-medium">
-
-                {percent(finance.targets.target_profit_margin)}
-
-              </span>
-
-            </div>
-
-            <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
-
-              <div
-                className="bg-yellow-500 h-3 rounded-full transition-all duration-700"
-                style={{
-                  width: `${progress(
-                    finance.profit.profit_margin,
-                    finance.targets.target_profit_margin
-                  )}%`,
-                }}
-              />
-
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-3">
-
-              {progress(
-                finance.profit.profit_margin,
-                finance.targets.target_profit_margin
-              ).toFixed(1)}
-              % Complete
-
-            </p>
-
-          </motion.div>
-
+          {[
+            { title: "Revenue Target",       current: finance.revenue.realized,        target: finance.targets.target_revenue,        fmt: currency, color: "bg-green-600"  },
+            { title: "Booking Target",       current: finance.bookings.total,           target: finance.targets.target_bookings,       fmt: String,   color: "bg-blue-600"   },
+            { title: "Profit Margin Target", current: finance.profit.profit_margin,     target: finance.targets.target_profit_margin,  fmt: percent,  color: "bg-yellow-500" },
+          ].map(({ title, current, target, fmt, color }, i) => (
+            <motion.div key={title} {...fade(0.5 + i * 0.05)} className="rounded-2xl border bg-card p-6">
+              <h3 className="font-semibold text-lg mb-6">{title}</h3>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-muted-foreground">{fmt(current as any)}</span>
+                <span className="text-sm font-medium">{fmt(target as any)}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                <div className={`${color} h-3 rounded-full transition-all duration-700`}
+                  style={{ width: `${progress(current, target)}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                {progress(current, target).toFixed(1)}% Complete
+              </p>
+            </motion.div>
+          ))}
         </div>
-        {/* BREAKDOWN SECTION */}
 
+        {/* BREAKDOWN */}
         <div className="grid lg:grid-cols-2 gap-6">
-
-          {/* Revenue Breakdown */}
-
-          <motion.div
-            {...fade(0.65)}
-            className="rounded-2xl border bg-card p-6"
-          >
-
-            <h3 className="text-lg font-semibold mb-6">
-              Revenue Breakdown
-            </h3>
-
+          <motion.div {...fade(0.65)} className="rounded-2xl border bg-card p-6">
+            <h3 className="text-lg font-semibold mb-6">Revenue Breakdown</h3>
             <div className="space-y-5">
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Realized Revenue
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1">
-                    {currency(finance.revenue.realized)}
-                  </p>
-
+              {[
+                { label: "Realized Revenue", value: finance.revenue.realized,       icon: IndianRupee, color: "text-green-600"  },
+                { label: "Pending Revenue",  value: finance.revenue.pending,         icon: Clock,       color: "text-yellow-600" },
+                { label: "Pipeline Value",   value: finance.revenue.pipeline_total,  icon: TrendingUp,  color: "text-blue-600"   },
+              ].map(({ label, value, icon: Icon, color }) => (
+                <div key={label}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{label}</p>
+                      <p className="text-2xl font-bold mt-1">{currency(value)}</p>
+                    </div>
+                    <Icon className={`h-8 w-8 ${color}`} />
+                  </div>
+                  <hr className="mt-4" />
                 </div>
-
-                <IndianRupee className="h-8 w-8 text-green-600"/>
-
-              </div>
-
-              <hr/>
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Pending Revenue
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1">
-                    {currency(finance.revenue.pending)}
-                  </p>
-
-                </div>
-
-                <Clock className="h-8 w-8 text-yellow-600"/>
-
-              </div>
-
-              <hr/>
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Pipeline Value
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1">
-                    {currency(finance.revenue.pipeline_total)}
-                  </p>
-
-                </div>
-
-                <TrendingUp className="h-8 w-8 text-blue-600"/>
-
-              </div>
-
+              ))}
             </div>
-
           </motion.div>
 
-          {/* Expense Breakdown */}
-
-          <motion.div
-            {...fade(0.7)}
-            className="rounded-2xl border bg-card p-6"
-          >
-
-            <h3 className="text-lg font-semibold mb-6">
-              Expense Breakdown
-            </h3>
-
+          <motion.div {...fade(0.7)} className="rounded-2xl border bg-card p-6">
+            <h3 className="text-lg font-semibold mb-6">Expense Breakdown</h3>
             <div className="space-y-5">
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Supplier Cost
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1">
-                    {currency(finance.expenses.supplier_cost)}
-                  </p>
-
+              {[
+                { label: "Supplier Cost",    value: finance.expenses.supplier_cost, icon: DollarSign,  color: "text-red-500"    },
+                { label: "Operational Cost", value: finance.expenses.overhead,       icon: Briefcase,   color: "text-orange-500" },
+                { label: "Refunds",          value: finance.expenses.refunds,        icon: TrendingDown, color: "text-red-600"  },
+                { label: "Total Expenses",   value: finance.expenses.total,          icon: PieChart,    color: "text-red-600"    },
+              ].map(({ label, value, icon: Icon, color }) => (
+                <div key={label}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{label}</p>
+                      <p className={`text-2xl font-bold mt-1 ${label === "Total Expenses" ? "text-red-600" : ""}`}>{currency(value)}</p>
+                    </div>
+                    <Icon className={`h-8 w-8 ${color}`} />
+                  </div>
+                  <hr className="mt-4" />
                 </div>
-
-                <DollarSign className="h-8 w-8 text-red-500"/>
-
-              </div>
-
-              <hr/>
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Operational Cost
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1">
-                    {currency(finance.expenses.overhead)}
-                  </p>
-
-                </div>
-
-                <Briefcase className="h-8 w-8 text-orange-500"/>
-
-              </div>
-
-              <hr/>
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Refunds
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1">
-                    {currency(finance.expenses.refunds)}
-                  </p>
-
-                </div>
-
-                <TrendingDown className="h-8 w-8 text-red-600"/>
-
-              </div>
-
-              <hr/>
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Total Expenses
-                  </p>
-
-                  <p className="text-2xl font-bold mt-1 text-red-600">
-                    {currency(finance.expenses.total)}
-                  </p>
-
-                </div>
-
-                <PieChart className="h-8 w-8 text-red-600"/>
-
-              </div>
-
+              ))}
             </div>
-
           </motion.div>
-
         </div>
 
-        {/* FINANCIAL SUMMARY */}
-
-        <motion.div
-          {...fade(0.75)}
-          className="rounded-2xl border bg-card p-6"
-        >
-
-          <h3 className="text-lg font-semibold mb-6">
-            Monthly Financial Summary
-          </h3>
-
+        {/* SUMMARY */}
+        <motion.div {...fade(0.75)} className="rounded-2xl border bg-card p-6">
+          <h3 className="text-lg font-semibold mb-6">Monthly Financial Summary</h3>
           <div className="grid md:grid-cols-3 gap-6">
-
-            <div className="rounded-xl bg-muted p-5">
-
-              <p className="text-sm text-muted-foreground">
-                Revenue Variance
-              </p>
-
-              <h2 className="text-2xl font-bold mt-3">
-
-                {currency(finance.targets.revenue_variance)}
-
-              </h2>
-
-              <p className="text-xs mt-2 text-muted-foreground">
-
-                {finance.targets.revenue_variance_pct.toFixed(1)}%
-
-              </p>
-
-            </div>
-
-            <div className="rounded-xl bg-muted p-5">
-
-              <p className="text-sm text-muted-foreground">
-                Booking Variance
-              </p>
-
-              <h2 className="text-2xl font-bold mt-3">
-
-                {finance.targets.bookings_variance}
-
-              </h2>
-
-            </div>
-
-            <div className="rounded-xl bg-muted p-5">
-
-              <p className="text-sm text-muted-foreground">
-                Margin Variance
-              </p>
-
-              <h2 className="text-2xl font-bold mt-3">
-
-                {percent(finance.targets.margin_variance)}
-
-              </h2>
-
-            </div>
-
+            {[
+              { label: "Revenue Variance",  value: currency(finance.targets.revenue_variance),       sub: `${finance.targets.revenue_variance_pct.toFixed(1)}%` },
+              { label: "Booking Variance",  value: String(finance.targets.bookings_variance),         sub: "vs target" },
+              { label: "Margin Variance",   value: percent(finance.targets.margin_variance),           sub: "vs target" },
+            ].map(({ label, value, sub }) => (
+              <div key={label} className="rounded-xl bg-muted p-5">
+                <p className="text-sm text-muted-foreground">{label}</p>
+                <h2 className="text-2xl font-bold mt-3">{value}</h2>
+                <p className="text-xs mt-2 text-muted-foreground">{sub}</p>
+              </div>
+            ))}
           </div>
-
         </motion.div>
-        {/* RECENT TRANSACTIONS */}
 
-        <motion.div
-          {...fade(0.8)}
-          className="rounded-2xl border bg-card overflow-hidden"
-        >
-
+        {/* TRANSACTIONS TABLE */}
+        <motion.div {...fade(0.8)} className="rounded-2xl border bg-card overflow-hidden">
           <div className="px-6 py-5 border-b">
-
-            <h3 className="text-lg font-semibold">
-              Recent Financial Transactions
-            </h3>
-
-            <p className="text-sm text-muted-foreground mt-1">
-              Latest bookings and financial performance
-            </p>
-
+            <h3 className="text-lg font-semibold">Recent Financial Transactions</h3>
+            <p className="text-sm text-muted-foreground mt-1">Latest bookings and financial performance</p>
           </div>
-
           <div className="overflow-x-auto">
-
             <table className="w-full">
-
               <thead className="bg-muted/40">
-
                 <tr>
-
-                  <th className="text-left px-6 py-4 text-sm font-semibold">
-                    Trip
-                  </th>
-
-                  <th className="text-left px-6 py-4 text-sm font-semibold">
-                    Client
-                  </th>
-
-                  <th className="text-right px-6 py-4 text-sm font-semibold">
-                    Revenue
-                  </th>
-
-                  <th className="text-right px-6 py-4 text-sm font-semibold">
-                    Expense
-                  </th>
-
-                  <th className="text-right px-6 py-4 text-sm font-semibold">
-                    Profit
-                  </th>
-
-                  <th className="text-center px-6 py-4 text-sm font-semibold">
-                    Date
-                  </th>
-
+                  {["Trip","Client","Revenue","Expense","Profit","Date"].map(h => (
+                    <th key={h} className={`px-6 py-4 text-sm font-semibold ${["Revenue","Expense","Profit"].includes(h) ? "text-right" : h === "Date" ? "text-center" : "text-left"}`}>{h}</th>
+                  ))}
                 </tr>
-
               </thead>
-
               <tbody>
-
                 {entries.length === 0 ? (
-
-                  <tr>
-
-                    <td
-                      colSpan={6}
-                      className="text-center py-12 text-muted-foreground"
-                    >
-
-                      No finance entries available.
-
-                    </td>
-
+                  <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No finance entries available.</td></tr>
+                ) : entries.map(entry => (
+                  <tr key={entry.id} className="border-t hover:bg-muted/30 transition-colors">
+                    <td className="px-6 py-5 font-medium">{entry.trip_name}</td>
+                    <td className="px-6 py-5">{entry.client_name}</td>
+                    <td className="px-6 py-5 text-right text-green-600 font-semibold">{currency(entry.revenue)}</td>
+                    <td className="px-6 py-5 text-right text-red-500 font-semibold">{currency(entry.expense)}</td>
+                    <td className="px-6 py-5 text-right font-bold">{currency(entry.profit)}</td>
+                    <td className="px-6 py-5 text-center text-muted-foreground">{new Date(entry.booking_date).toLocaleDateString("en-IN")}</td>
                   </tr>
-
-                ) : (
-
-                  entries.map((entry) => (
-
-                    <tr
-                      key={entry.id}
-                      className="border-t hover:bg-muted/30 transition-colors"
-                    >
-
-                      <td className="px-6 py-5 font-medium">
-
-                        {entry.trip_name}
-
-                      </td>
-
-                      <td className="px-6 py-5">
-
-                        {entry.client_name}
-
-                      </td>
-
-                      <td className="px-6 py-5 text-right text-green-600 font-semibold">
-
-                        {currency(entry.revenue)}
-
-                      </td>
-
-                      <td className="px-6 py-5 text-right text-red-500 font-semibold">
-
-                        {currency(entry.expense)}
-
-                      </td>
-
-                      <td className="px-6 py-5 text-right font-bold">
-
-                        {currency(entry.profit)}
-
-                      </td>
-
-                      <td className="px-6 py-5 text-center text-muted-foreground">
-
-                        {new Date(entry.booking_date).toLocaleDateString(
-                          "en-IN"
-                        )}
-
-                      </td>
-
-                    </tr>
-
-                  ))
-
-                )}
-
+                ))}
               </tbody>
-
             </table>
-
           </div>
-
         </motion.div>
+
         {/* FOOTER */}
-
-        <motion.div
-          {...fade(0.85)}
-          className="rounded-2xl border bg-card p-6"
-        >
+        <motion.div {...fade(0.85)} className="rounded-2xl border bg-card p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-
             <div>
-
-              <h3 className="text-lg font-semibold">
-                Finance Dashboard
-              </h3>
-
-              <p className="text-sm text-muted-foreground mt-1">
-                Automatically updated from your n8n Finance KPI workflow.
-              </p>
-
+              <h3 className="text-lg font-semibold">Finance Dashboard</h3>
+              <p className="text-sm text-muted-foreground mt-1">Automatically updated from your n8n Finance KPI workflow.</p>
             </div>
-
             <div className="text-right">
-
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                Last Updated
-              </p>
-
-              <p className="font-medium mt-1">
-                {new Date(finance.generated_at).toLocaleString("en-IN")}
-              </p>
-
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Last Updated</p>
+              <p className="font-medium mt-1">{new Date(finance.generated_at).toLocaleString("en-IN")}</p>
             </div>
-
           </div>
         </motion.div>
 
