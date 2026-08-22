@@ -115,8 +115,8 @@ export default function FinanceKPIs() {
   async function loadDashboard() {
     try {
       const [kpiRes, entryRes] = await Promise.all([
-        fetch("http://127.0.0.1:8000/api/finance-kpis/latest"),
-        fetch("http://127.0.0.1:8000/api/finance-entries"),
+        fetch("https://fintech-dashboard-61vh.onrender.com/api/finance-kpis/latest"),
+        fetch("https://fintech-dashboard-61vh.onrender.com/api/finance-entries"),
       ]);
 
       const kpi = await kpiRes.json();
