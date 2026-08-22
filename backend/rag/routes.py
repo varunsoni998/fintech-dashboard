@@ -25,6 +25,27 @@ from .document_processor import process_file, SUPPORTED_EXTENSIONS
 from .pipeline import run_rag_query
 from .config import UPLOAD_DIR
 
+
+def cleanup_stuck_documents() -> None:
+    """
+    Mark any documents that have been stuck in 'processing' for more than
+    10 minutes as 'error'. Called once at app startup.
+    """
+    try:
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+        result = (
+            supabase.table("rag_documents")
+            .update({"status": "error"})
+            .eq("status", "processing")
+            .lt("created_at", cutoff)
+            .execute()
+        )
+        if result.data:
+            logger.info("Cleaned up %d stuck processing documents", len(result.data))
+    except Exception as e:
+        logger.warning("Could not clean up stuck documents: %s", e)
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -249,3 +270,24 @@ def delete_document(document_id: str, authorization: Optional[str] = Header(None
         raise HTTPException(status_code=500, detail=f"Could not delete document: {e}")
 
     return {"success": True, "deleted_id": document_id}
+
+
+@router.post("/cleanup")
+def cleanup_documents(authorization: Optional[str] = Header(None)):
+    """
+    Mark the current user's stuck 'processing' documents as 'error'.
+    Useful after a failed upload / server restart.
+    """
+    user_id = _get_user_id(authorization)
+    try:
+        result = (
+            supabase.table("rag_documents")
+            .update({"status": "error"})
+            .eq("user_id", user_id)
+            .eq("status", "processing")
+            .execute()
+        )
+        cleaned = len(result.data or [])
+        return {"success": True, "cleaned": cleaned}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
