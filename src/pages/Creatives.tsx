@@ -462,16 +462,6 @@ function ImageToVideo() {
     }
   };
 
-const isGenerating = useRef(false);
-
-const generate = async () => {
-  if (!prompt.trim() || loading || isGenerating.current) return;
-  isGenerating.current = true;
-  // ... rest of generate
-  // at the end:
-  isGenerating.current = false;
-}; 
-  
   const generate = async () => {
     if (!imgSrc || !videoPrompt.trim() || loading) return;
     setLoading(true);
