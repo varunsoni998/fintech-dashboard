@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import {
   IndianRupee, TrendingUp, TrendingDown, Target, PieChart,
   DollarSign, Calendar, CheckCircle, Clock, Briefcase, Database,
+  Plus, Link,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -34,97 +35,105 @@ const fade = (delay: number) => ({
 });
 
 const currency = (n: number) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n ?? 0);
 
-const percent = (n: number) => `${(n * 100).toFixed(1)}%`;
+const percent = (n: number) => `${((n ?? 0) * 100).toFixed(1)}%`;
 
 const progress = (value: number, target: number) => {
   if (!target) return 0;
   return Math.min((value / target) * 100, 100);
 };
 
-// Empty state shown when backend returns {} or no data
-function EmptyState() {
+// ── Skeleton placeholder card ─────────────────────────────────────────────────
+function SkeletonCard({ label, icon: Icon, color }: { label: string; icon: React.ElementType; color: string }) {
   return (
-    <DashboardLayout>
-      <div className="flex flex-col items-center justify-center py-32 gap-6 text-center">
-        <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center">
-          <Database className="h-10 w-10 text-muted-foreground opacity-40" />
-        </div>
+    <div className="rounded-2xl bg-card border shadow-sm p-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-foreground mb-2">No Finance Data Yet</h2>
-          <p className="text-sm text-muted-foreground max-w-md">
-            The Finance KPI dashboard will populate once your n8n Finance KPI workflow runs
-            and posts data to the backend.
-          </p>
-          <p className="text-xs text-muted-foreground mt-3 opacity-60">
-            Connect your n8n workflow to{" "}
-            <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">
-              {API}/finance-kpis
-            </code>
-          </p>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <div className="h-8 w-28 bg-muted rounded-lg mt-3 animate-pulse" />
         </div>
-        <div className="grid grid-cols-2 gap-4 max-w-sm w-full mt-2">
-          {["Revenue", "Expenses", "Profit", "Bookings"].map(label => (
-            <div key={label} className="rounded-xl bg-card border p-4 text-left opacity-40">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <div className="h-6 w-20 bg-muted rounded mt-2 animate-pulse" />
-            </div>
-          ))}
+        <div className={`h-12 w-12 rounded-xl bg-muted flex items-center justify-center`}>
+          <Icon className={`h-6 w-6 ${color} opacity-30`} />
         </div>
       </div>
-    </DashboardLayout>
+    </div>
+  );
+}
+
+// ── Empty / not-connected banner ──────────────────────────────────────────────
+function NotConnectedBanner() {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-border bg-card p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center shrink-0">
+        <Database className="h-6 w-6 text-muted-foreground opacity-50" />
+      </div>
+      <div className="flex-1">
+        <p className="font-semibold text-foreground">No Finance Data Connected</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Connect Tally or post data from Supabase / n8n to populate this dashboard.
+          The endpoint is ready at{" "}
+          <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
+            POST {API}/finance-kpis
+          </code>
+        </p>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-muted text-muted-foreground border border-border">
+          <Link className="h-3 w-3" /> Connect Tally
+        </span>
+        <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-muted text-muted-foreground border border-border">
+          <Plus className="h-3 w-3" /> Add Manual Entry
+        </span>
+      </div>
+    </div>
   );
 }
 
 export default function FinanceKPIs() {
-  const [finance, setFinance]   = useState<FinanceData | null>(null);
-  const [entries, setEntries]   = useState<FinanceEntry[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [isEmpty, setIsEmpty]   = useState(false);
+  const [finance, setFinance] = useState<FinanceData | null>(null);
+  const [entries, setEntries] = useState<FinanceEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hasData, setHasData] = useState(false);
 
   useEffect(() => { loadDashboard(); }, []);
 
   async function loadDashboard() {
     setLoading(true);
-    setIsEmpty(false);
     try {
       const [kpiRes, entryRes] = await Promise.all([
         fetch(`${API}/finance-kpis/latest`),
         fetch(`${API}/finance-entries`),
       ]);
-
-      const kpi          = await kpiRes.json();
+      const kpi = await kpiRes.json();
       const transactions = await entryRes.json();
 
-      // Backend returns {} when no data exists yet
-      if (!kpi || !kpi.revenue) {
-        setIsEmpty(true);
-        return;
+      if (kpi && kpi.revenue) {
+        setFinance(kpi);
+        setHasData(true);
       }
-
-      setFinance(kpi);
       setEntries(Array.isArray(transactions) ? transactions : []);
     } catch (err) {
       console.error("Finance load failed:", err);
-      setIsEmpty(true);
     } finally {
       setLoading(false);
     }
   }
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex flex-col items-center justify-center py-40 gap-4 text-muted-foreground">
-          <div className="h-8 w-8 rounded-full border-2 border-muted border-t-primary animate-spin" />
-          <p className="text-sm">Loading Finance Dashboard...</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  // ── KPI card configs ───────────────────────────────────────────────────────
+  const kpiCards = [
+    { label: "Revenue",       value: finance ? currency(finance.revenue.realized)   : null, icon: IndianRupee, bg: "bg-green-100",  color: "text-green-600"  },
+    { label: "Expenses",      value: finance ? currency(finance.expenses.total)      : null, icon: TrendingDown, bg: "bg-red-100",  color: "text-red-600"    },
+    { label: "Gross Profit",  value: finance ? currency(finance.profit.gross_profit) : null, icon: TrendingUp,  bg: "bg-blue-100", color: "text-blue-600"   },
+    { label: "Profit Margin", value: finance ? percent(finance.profit.profit_margin) : null, icon: PieChart,    bg: "bg-yellow-100", color: "text-yellow-600" },
+  ];
 
-  if (isEmpty || !finance) return <EmptyState />;
+  const row2Cards = [
+    { label: "Bookings",   value: finance ? String(finance.bookings.total)                     : null, icon: Briefcase,   color: "text-primary"    },
+    { label: "Confirmed",  value: finance ? String(finance.bookings.confirmed)                  : null, icon: CheckCircle, color: "text-green-600"  },
+    { label: "Conversion", value: finance ? percent(finance.bookings.conversion_rate)           : null, icon: Target,      color: "text-blue-600"   },
+    { label: "Updated",    value: finance ? new Date(finance.generated_at).toLocaleDateString() : null, icon: Calendar,    color: "text-accent"     },
+  ];
 
   return (
     <DashboardLayout>
@@ -135,66 +144,93 @@ export default function FinanceKPIs() {
           <p className="text-muted-foreground mt-2">Revenue, expenses, margins and business performance</p>
         </motion.div>
 
-        {/* KPI CARDS */}
+        {/* Not connected banner */}
+        {!loading && !hasData && (
+          <motion.div {...fade(0.05)}>
+            <NotConnectedBanner />
+          </motion.div>
+        )}
+
+        {/* KPI CARDS — show skeletons when loading or no data */}
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Revenue",       value: currency(finance.revenue.realized),    icon: IndianRupee, bg: "bg-green-100",  color: "text-green-600"  },
-            { label: "Expenses",      value: currency(finance.expenses.total),       icon: TrendingDown, bg: "bg-red-100",  color: "text-red-600"    },
-            { label: "Gross Profit",  value: currency(finance.profit.gross_profit),  icon: TrendingUp,  bg: "bg-blue-100", color: "text-blue-600"   },
-            { label: "Profit Margin", value: percent(finance.profit.profit_margin),  icon: PieChart,    bg: "bg-yellow-100", color: "text-yellow-600" },
-          ].map(({ label, value, icon: Icon, bg, color }, i) => (
-            <motion.div key={label} {...fade(0.1 + i * 0.05)} className="rounded-2xl bg-card border shadow-sm p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{label}</p>
-                  <h2 className="text-3xl font-bold mt-3">{value}</h2>
+          {kpiCards.map(({ label, value, icon: Icon, bg, color }, i) =>
+            loading || !value ? (
+              <motion.div key={label} {...fade(0.1 + i * 0.05)}>
+                <SkeletonCard label={label} icon={Icon} color={color} />
+              </motion.div>
+            ) : (
+              <motion.div key={label} {...fade(0.1 + i * 0.05)} className="rounded-2xl bg-card border shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <h2 className="text-3xl font-bold mt-3">{value}</h2>
+                  </div>
+                  <div className={`h-12 w-12 rounded-xl ${bg} flex items-center justify-center`}>
+                    <Icon className={`h-6 w-6 ${color}`} />
+                  </div>
                 </div>
-                <div className={`h-12 w-12 rounded-xl ${bg} flex items-center justify-center`}>
-                  <Icon className={`h-6 w-6 ${color}`} />
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            )
+          )}
         </div>
 
         {/* SECOND ROW */}
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Bookings",   value: String(finance.bookings.total),                     icon: Briefcase,   color: "text-primary"    },
-            { label: "Confirmed",  value: String(finance.bookings.confirmed),                  icon: CheckCircle, color: "text-green-600"  },
-            { label: "Conversion", value: percent(finance.bookings.conversion_rate),           icon: Target,      color: "text-blue-600"   },
-            { label: "Updated",    value: new Date(finance.generated_at).toLocaleDateString(), icon: Calendar,    color: "text-accent"     },
-          ].map(({ label, value, icon: Icon, color }, i) => (
-            <motion.div key={label} {...fade(0.3 + i * 0.05)} className="rounded-2xl bg-card border p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{label}</p>
-                  <h2 className="text-2xl font-bold mt-3">{value}</h2>
+          {row2Cards.map(({ label, value, icon: Icon, color }, i) =>
+            loading || !value ? (
+              <motion.div key={label} {...fade(0.3 + i * 0.05)} className="rounded-2xl bg-card border p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <div className="h-7 w-20 bg-muted rounded-lg mt-3 animate-pulse" />
+                  </div>
+                  <Icon className={`h-7 w-7 ${color} opacity-30`} />
                 </div>
-                <Icon className={`h-7 w-7 ${color}`} />
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            ) : (
+              <motion.div key={label} {...fade(0.3 + i * 0.05)} className="rounded-2xl bg-card border p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <h2 className="text-2xl font-bold mt-3">{value}</h2>
+                  </div>
+                  <Icon className={`h-7 w-7 ${color}`} />
+                </div>
+              </motion.div>
+            )
+          )}
         </div>
 
-        {/* PROGRESS */}
+        {/* PROGRESS SECTION */}
         <div className="grid lg:grid-cols-3 gap-6">
           {[
-            { title: "Revenue Target",       current: finance.revenue.realized,       target: finance.targets.target_revenue,       fmt: currency, color: "bg-green-600"  },
-            { title: "Booking Target",       current: finance.bookings.total,          target: finance.targets.target_bookings,      fmt: String,   color: "bg-blue-600"   },
-            { title: "Profit Margin Target", current: finance.profit.profit_margin,    target: finance.targets.target_profit_margin, fmt: percent,  color: "bg-yellow-500" },
-          ].map(({ title, current, target, fmt, color }, i) => (
+            { title: "Revenue Target",       current: finance?.revenue.realized ?? 0,      target: finance?.targets.target_revenue ?? 0,       color: "bg-green-600"  },
+            { title: "Booking Target",       current: finance?.bookings.total ?? 0,         target: finance?.targets.target_bookings ?? 0,      color: "bg-blue-600"   },
+            { title: "Profit Margin Target", current: finance?.profit.profit_margin ?? 0,   target: finance?.targets.target_profit_margin ?? 0, color: "bg-yellow-500" },
+          ].map(({ title, current, target, color }, i) => (
             <motion.div key={title} {...fade(0.5 + i * 0.05)} className="rounded-2xl border bg-card p-6">
               <h3 className="font-semibold text-lg mb-6">{title}</h3>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-muted-foreground">{fmt(current as any)}</span>
-                <span className="text-sm font-medium">{fmt(target as any)}</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
-                <div className={`${color} h-3 rounded-full transition-all duration-700`}
-                  style={{ width: `${progress(current, target)}%` }} />
-              </div>
-              <p className="text-xs text-muted-foreground mt-3">{progress(current, target).toFixed(1)}% Complete</p>
+              {loading || !hasData ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+                    <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-3" />
+                  <div className="h-3 w-24 bg-muted rounded animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">{i === 1 ? current : i === 2 ? percent(current) : currency(current)}</span>
+                    <span className="text-sm font-medium">{i === 1 ? target : i === 2 ? percent(target) : currency(target)}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                    <div className={`${color} h-3 rounded-full transition-all duration-700`} style={{ width: `${progress(current, target)}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">{progress(current, target).toFixed(1)}% Complete</p>
+                </>
+              )}
             </motion.div>
           ))}
         </div>
@@ -203,47 +239,53 @@ export default function FinanceKPIs() {
         <div className="grid lg:grid-cols-2 gap-6">
           <motion.div {...fade(0.65)} className="rounded-2xl border bg-card p-6">
             <h3 className="text-lg font-semibold mb-6">Revenue Breakdown</h3>
-            <div className="space-y-5">
-              {[
-                { label: "Realized Revenue", value: finance.revenue.realized,       icon: IndianRupee, color: "text-green-600"  },
-                { label: "Pending Revenue",  value: finance.revenue.pending,         icon: Clock,       color: "text-yellow-600" },
-                { label: "Pipeline Value",   value: finance.revenue.pipeline_total,  icon: TrendingUp,  color: "text-blue-600"   },
-              ].map(({ label, value, icon: Icon, color }, i, arr) => (
-                <div key={label}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">{label}</p>
-                      <p className="text-2xl font-bold mt-1">{currency(value)}</p>
+            {loading || !hasData || !finance ? (
+              <div className="space-y-5">
+                {[0,1,2].map(i => <div key={i} className="flex items-center justify-between"><div className="space-y-2"><div className="h-3 w-28 bg-muted rounded animate-pulse"/><div className="h-6 w-36 bg-muted rounded animate-pulse"/></div><div className="h-8 w-8 bg-muted rounded animate-pulse"/></div>)}
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {[
+                  { label: "Realized Revenue", value: finance.revenue.realized,      icon: IndianRupee, color: "text-green-600"  },
+                  { label: "Pending Revenue",  value: finance.revenue.pending,        icon: Clock,       color: "text-yellow-600" },
+                  { label: "Pipeline Value",   value: finance.revenue.pipeline_total, icon: TrendingUp,  color: "text-blue-600"   },
+                ].map(({ label, value, icon: Icon, color }, i, arr) => (
+                  <div key={label}>
+                    <div className="flex items-center justify-between">
+                      <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-bold mt-1">{currency(value)}</p></div>
+                      <Icon className={`h-8 w-8 ${color}`} />
                     </div>
-                    <Icon className={`h-8 w-8 ${color}`} />
+                    {i < arr.length - 1 && <hr className="mt-4" />}
                   </div>
-                  {i < arr.length - 1 && <hr className="mt-4" />}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </motion.div>
 
           <motion.div {...fade(0.7)} className="rounded-2xl border bg-card p-6">
             <h3 className="text-lg font-semibold mb-6">Expense Breakdown</h3>
-            <div className="space-y-5">
-              {[
-                { label: "Supplier Cost",    value: finance.expenses.supplier_cost, icon: DollarSign,  color: "text-red-500"    },
-                { label: "Operational Cost", value: finance.expenses.overhead,       icon: Briefcase,   color: "text-orange-500" },
-                { label: "Refunds",          value: finance.expenses.refunds,        icon: TrendingDown, color: "text-red-600"  },
-                { label: "Total Expenses",   value: finance.expenses.total,          icon: PieChart,    color: "text-red-600"    },
-              ].map(({ label, value, icon: Icon, color }, i, arr) => (
-                <div key={label}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">{label}</p>
-                      <p className={`text-2xl font-bold mt-1 ${label === "Total Expenses" ? "text-red-600" : ""}`}>{currency(value)}</p>
+            {loading || !hasData || !finance ? (
+              <div className="space-y-5">
+                {[0,1,2,3].map(i => <div key={i} className="flex items-center justify-between"><div className="space-y-2"><div className="h-3 w-28 bg-muted rounded animate-pulse"/><div className="h-6 w-36 bg-muted rounded animate-pulse"/></div><div className="h-8 w-8 bg-muted rounded animate-pulse"/></div>)}
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {[
+                  { label: "Supplier Cost",    value: finance.expenses.supplier_cost, icon: DollarSign,  color: "text-red-500"    },
+                  { label: "Operational Cost", value: finance.expenses.overhead,       icon: Briefcase,   color: "text-orange-500" },
+                  { label: "Refunds",          value: finance.expenses.refunds,        icon: TrendingDown, color: "text-red-600"  },
+                  { label: "Total Expenses",   value: finance.expenses.total,          icon: PieChart,    color: "text-red-600"    },
+                ].map(({ label, value, icon: Icon, color }, i, arr) => (
+                  <div key={label}>
+                    <div className="flex items-center justify-between">
+                      <div><p className="text-sm text-muted-foreground">{label}</p><p className={`text-2xl font-bold mt-1 ${label === "Total Expenses" ? "text-red-600" : ""}`}>{currency(value)}</p></div>
+                      <Icon className={`h-8 w-8 ${color}`} />
                     </div>
-                    <Icon className={`h-8 w-8 ${color}`} />
+                    {i < arr.length - 1 && <hr className="mt-4" />}
                   </div>
-                  {i < arr.length - 1 && <hr className="mt-4" />}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         </div>
 
@@ -252,13 +294,15 @@ export default function FinanceKPIs() {
           <h3 className="text-lg font-semibold mb-6">Monthly Financial Summary</h3>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { label: "Revenue Variance",  value: currency(finance.targets.revenue_variance),    sub: `${finance.targets.revenue_variance_pct.toFixed(1)}%` },
-              { label: "Booking Variance",  value: String(finance.targets.bookings_variance),       sub: "vs target" },
-              { label: "Margin Variance",   value: percent(finance.targets.margin_variance),         sub: "vs target" },
+              { label: "Revenue Variance",  value: finance ? currency(finance.targets.revenue_variance) : null, sub: finance ? `${finance.targets.revenue_variance_pct.toFixed(1)}%` : "—" },
+              { label: "Booking Variance",  value: finance ? String(finance.targets.bookings_variance)  : null, sub: "vs target" },
+              { label: "Margin Variance",   value: finance ? percent(finance.targets.margin_variance)   : null, sub: "vs target" },
             ].map(({ label, value, sub }) => (
               <div key={label} className="rounded-xl bg-muted p-5">
                 <p className="text-sm text-muted-foreground">{label}</p>
-                <h2 className="text-2xl font-bold mt-3">{value}</h2>
+                {loading || !value
+                  ? <div className="h-7 w-24 bg-muted-foreground/20 rounded-lg mt-3 animate-pulse" />
+                  : <h2 className="text-2xl font-bold mt-3">{value}</h2>}
                 <p className="text-xs mt-2 text-muted-foreground">{sub}</p>
               </div>
             ))}
@@ -281,9 +325,18 @@ export default function FinanceKPIs() {
                 </tr>
               </thead>
               <tbody>
-                {entries.length === 0
-                  ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No transactions yet.</td></tr>
-                  : entries.map(e => (
+                {loading ? (
+                  [0,1,2,3].map(i => (
+                    <tr key={i} className="border-t">
+                      {[0,1,2,3,4,5].map(j => (
+                        <td key={j} className="px-6 py-4"><div className="h-4 bg-muted rounded animate-pulse" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : entries.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No transactions yet. Connect your data source to populate this table.</td></tr>
+                ) : (
+                  entries.map(e => (
                     <tr key={e.id} className="border-t hover:bg-muted/30 transition-colors">
                       <td className="px-6 py-5 font-medium">{e.trip_name}</td>
                       <td className="px-6 py-5">{e.client_name}</td>
@@ -293,25 +346,27 @@ export default function FinanceKPIs() {
                       <td className="px-6 py-5 text-center text-muted-foreground">{new Date(e.booking_date).toLocaleDateString("en-IN")}</td>
                     </tr>
                   ))
-                }
+                )}
               </tbody>
             </table>
           </div>
         </motion.div>
 
         {/* FOOTER */}
-        <motion.div {...fade(0.85)} className="rounded-2xl border bg-card p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold">Finance Dashboard</h3>
-              <p className="text-sm text-muted-foreground mt-1">Updated from your n8n Finance KPI workflow.</p>
+        {hasData && finance && (
+          <motion.div {...fade(0.85)} className="rounded-2xl border bg-card p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold">Finance Dashboard</h3>
+                <p className="text-sm text-muted-foreground mt-1">Updated from your connected data source.</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Last Updated</p>
+                <p className="font-medium mt-1">{new Date(finance.generated_at).toLocaleString("en-IN")}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Last Updated</p>
-              <p className="font-medium mt-1">{new Date(finance.generated_at).toLocaleString("en-IN")}</p>
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
       </div>
     </DashboardLayout>
