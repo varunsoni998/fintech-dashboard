@@ -9,6 +9,24 @@ from database import init_database
 from creatives.routes import router as creatives_router
 from rag.routes import router as rag_router
 
+import threading
+import time
+import requests
+
+
+def keep_alive():
+    """Ping self every 10 minutes to prevent Render free tier spindown"""
+    time.sleep(60)
+    while True:
+        try:
+            requests.get("https://businessos-roan-iota.onrender.com/api/health", timeout=10)
+            print("[keep-alive] ping sent")
+        except Exception as e:
+            print(f"[keep-alive] failed: {e}")
+        time.sleep(600)  # every 10 minutes
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

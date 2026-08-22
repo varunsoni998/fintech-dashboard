@@ -20,7 +20,6 @@ def submit(workflow):
 
 
 def wait(prompt_id, max_minutes=20):
-    """Poll ComfyUI until the job finishes or max_minutes is exceeded."""
     deadline = time.time() + (max_minutes * 60)
     while time.time() < deadline:
         try:
@@ -31,13 +30,19 @@ def wait(prompt_id, max_minutes=20):
             response.raise_for_status()
             history = response.json()
             if prompt_id in history:
-                return history[prompt_id]
+                job = history[prompt_id]
+                # Only return when the job has actual outputs
+                outputs = job.get("outputs", {})
+                status = job.get("status", {})
+                completed = status.get("completed", False)
+                # Check if completed OR has outputs
+                if completed or outputs:
+                    print(f"[wait] Job done. completed={completed}, outputs={bool(outputs)}")
+                    return job
         except Exception as e:
             print(f"[wait] poll error (retrying): {e}")
         time.sleep(3)
-    raise Exception(
-        f"ComfyUI timed out after {max_minutes} minutes for prompt_id={prompt_id}"
-    )
+    raise Exception(f"ComfyUI timed out after {max_minutes} minutes")
 
 
 def push_image(image_path):
