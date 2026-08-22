@@ -20,7 +20,10 @@ def submit(workflow):
 
 
 def wait(prompt_id, max_minutes=20):
+    """Poll ComfyUI until job is actually completed (not just queued)."""
     deadline = time.time() + (max_minutes * 60)
+    found_count = 0  # how many times we've seen this job
+
     while time.time() < deadline:
         try:
             response = requests.get(
@@ -29,20 +32,36 @@ def wait(prompt_id, max_minutes=20):
             )
             response.raise_for_status()
             history = response.json()
+
             if prompt_id in history:
                 job = history[prompt_id]
-                # Only return when the job has actual outputs
                 outputs = job.get("outputs", {})
                 status = job.get("status", {})
                 completed = status.get("completed", False)
-                # Check if completed OR has outputs
-                if completed or outputs:
-                    print(f"[wait] Job done. completed={completed}, outputs={bool(outputs)}")
+                status_str = status.get("status_str", "")
+
+                found_count += 1
+
+                print(f"[wait] poll #{found_count}: completed={completed}, status={status_str}, outputs={bool(outputs)}")
+
+                # Only return when truly done
+                if completed and outputs:
+                    print(f"[wait] Job finished with outputs!")
                     return job
+
+                # Also return if status says completed even without outputs
+                if status_str in ("success", "error") and found_count > 1:
+                    print(f"[wait] Job status={status_str}, returning.")
+                    return job
+
         except Exception as e:
             print(f"[wait] poll error (retrying): {e}")
+
         time.sleep(3)
-    raise Exception(f"ComfyUI timed out after {max_minutes} minutes")
+
+    raise Exception(
+        f"ComfyUI timed out after {max_minutes} minutes for prompt_id={prompt_id}"
+    )
 
 
 def push_image(image_path):
