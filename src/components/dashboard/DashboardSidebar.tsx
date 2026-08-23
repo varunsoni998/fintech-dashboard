@@ -231,6 +231,7 @@ export function DashboardSidebar() {
             { title: "Team Chat",   url: "/chat",         icon: MessageSquare },
             { title: "Creatives",   url: "/creatives",    icon: ImagePlus     },
             { title: "Automations", url: "/automations",  icon: Zap           },
+            { title: "Quote Generator", url: "/quotes", icon: FileText },
           ]}
         />
 

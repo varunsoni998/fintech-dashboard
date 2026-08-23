@@ -11,10 +11,8 @@ from creatives.workflows import load_workflow
 COMFY = os.getenv("COMFY_URL", "https://doorbell-scant-snowy.ngrok-free.dev")
 
 OUTPUT = "outputs/videos"
-
 os.makedirs(OUTPUT, exist_ok=True)
 
-# Resolution presets — matches ltx.py exactly
 RATIO_PRESETS = {
     "16:9": {"width": 1280, "height": 720},
     "9:16": {"width": 720,  "height": 1280},
@@ -22,18 +20,15 @@ RATIO_PRESETS = {
     "4:3":  {"width": 1024, "height": 768},
 }
 
-# Node IDs to patch in ttv.json
-WIDTH_NODE    = "267:257"   # PrimitiveInt "Width"
-HEIGHT_NODE   = "267:258"   # PrimitiveInt "Height"
-DURATION_NODE = "267:225"   # PrimitiveInt "Duration" (seconds)
+WIDTH_NODE    = "267:257"
+HEIGHT_NODE   = "267:258"
+DURATION_NODE = "267:225"
 
 
 def _extract_public_url(get_public_url_result, bucket: str, filename: str) -> str:
     result = get_public_url_result
-
     if isinstance(result, str) and result:
         return result
-
     if isinstance(result, dict):
         candidate = (
             result.get("publicUrl")
@@ -51,12 +46,10 @@ def _extract_public_url(get_public_url_result, bucket: str, filename: str) -> st
             )
             if candidate:
                 return candidate
-
     for attr in ("public_url", "publicUrl", "publicURL"):
         candidate = getattr(result, attr, None)
         if candidate:
             return candidate
-
     raise Exception(
         f"Could not resolve a public URL from Supabase for '{filename}' in bucket "
         f"'{bucket}'. get_public_url() returned: {result!r}."
@@ -65,16 +58,13 @@ def _extract_public_url(get_public_url_result, bucket: str, filename: str) -> st
 
 def _upload_video_to_supabase(local_path: str, new_filename: str) -> str:
     from supabase_client import supabase
-
     bucket = "videos"
-
     with open(local_path, "rb") as f:
         upload_response = supabase.storage.from_(bucket).upload(
             path=new_filename,
             file=f,
             file_options={"content-type": "video/mp4"},
         )
-
     upload_error = None
     if isinstance(upload_response, dict):
         upload_error = upload_response.get("error")
@@ -82,13 +72,10 @@ def _upload_video_to_supabase(local_path: str, new_filename: str) -> str:
         upload_error = getattr(upload_response, "error", None)
     if upload_error:
         raise Exception(f"Supabase upload failed for '{new_filename}': {upload_error}")
-
     public_url_result = supabase.storage.from_(bucket).get_public_url(new_filename)
     public_url = _extract_public_url(public_url_result, bucket, new_filename)
-
     print("\nSUPABASE PUBLIC URL:")
     print(public_url)
-
     return public_url
 
 
@@ -107,7 +94,7 @@ def generate_video_from_text(
 
     workflow = load_workflow("ttv.json")
 
-    # ---- Patch resolution ----
+    # Patch resolution
     preset = RATIO_PRESETS.get(ratio, RATIO_PRESETS["9:16"])
     if WIDTH_NODE in workflow:
         workflow[WIDTH_NODE]["inputs"]["value"] = preset["width"]
@@ -121,7 +108,7 @@ def generate_video_from_text(
     else:
         print(f"WARNING: height node {HEIGHT_NODE} not found in ttv.json")
 
-    # ---- Patch duration ----
+    # Patch duration
     if DURATION_NODE in workflow:
         workflow[DURATION_NODE]["inputs"]["value"] = max(1, duration_seconds)
         print(f"DURATION node {DURATION_NODE} → {duration_seconds}s")
@@ -132,8 +119,8 @@ def generate_video_from_text(
 {prompt}
 
 Ultra photorealistic.
-Luxury travel commercial quality.
-Cinematic. Slow. Meditative. Peaceful.
+Luxury commercial quality.
+Cinematic. Smooth. Meditative.
 Natural, smooth, physically accurate motion.
 8K. HDR. Perfect temporal consistency — no flickering, no morphing.
 No watermark. No logos. No subtitles. No on-screen text.
@@ -169,8 +156,8 @@ No watermark. No logos. No subtitles. No on-screen text.
     print("SWITCH NODE:", switch_node)
 
     prompt_id = submit(workflow)
-
-    print("\nWAITING FOR TTV VIDEO GENERATION...\n")
+    print(f"\n[ttv] Submitted prompt_id: {prompt_id}")
+    print("WAITING FOR TTV VIDEO GENERATION...\n")
 
     result = wait(prompt_id)
 
@@ -183,9 +170,7 @@ No watermark. No logos. No subtitles. No on-screen text.
     print(json.dumps(outputs, indent=4))
 
     for node_id, node in outputs.items():
-
         video = None
-
         if "videos" in node:
             video = node["videos"][0]
         elif "gifs" in node:
@@ -264,5 +249,6 @@ No watermark. No logos. No subtitles. No on-screen text.
     print("VIDEO ERROR")
     print("=" * 100)
     print("No video found in ComfyUI outputs.")
+    print("Raw outputs:", json.dumps(outputs, indent=2))
 
     raise Exception("No video found in ComfyUI outputs.")
