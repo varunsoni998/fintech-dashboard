@@ -38,7 +38,7 @@ def run_rag_query(
 
     # ── Step 1: Embed query ───────────────────────────────────────────────────
     try:
-        query_embedding = embed_text(query)
+        query_embedding = embed_text(query, task="retrieval.query")
     except Exception as e:
         import json
         logger.error("Query embedding failed: %s", e)

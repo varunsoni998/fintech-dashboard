@@ -361,6 +361,38 @@ const AIAssistant = () => {
     }
   };
 
+  const reembedAll = async () => {
+    try {
+      const auth = await getAuthHeader();
+      const resp = await fetch(`${API}/reembed-all`, { method: "POST", headers: { Authorization: auth } });
+      const data = await resp.json();
+      if (data.jobs && data.jobs.length > 0) {
+        // Add all reembed jobs to the upload jobs list so progress is shown
+        const newJobs: UploadJob[] = data.jobs.map((j: any) => ({
+          job_id: j.job_id,
+          filename: j.filename,
+          status: "processing" as const,
+          progress: "Re-embedding...",
+        }));
+        setUploadJobs(prev => [...newJobs, ...prev]);
+        // Poll each job
+        data.jobs.forEach((j: any) => pollJob(j.job_id));
+      }
+    } catch (e) {
+      console.error("Re-embed all failed:", e);
+    }
+  };
+
+  const cleanupStuck = async () => {
+    try {
+      const auth = await getAuthHeader();
+      await fetch(`${API}/cleanup`, { method: "POST", headers: { Authorization: auth } });
+      loadDocuments();
+    } catch (e) {
+      console.error("Cleanup failed:", e);
+    }
+  };
+
   // ── Generate answer (streaming) ────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!query.trim() || loading) return;
@@ -514,9 +546,23 @@ const AIAssistant = () => {
           <div className="rounded-xl border bg-card p-5 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-foreground">Indexed Documents</p>
-              <button onClick={loadDocuments} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition">
-                <RefreshCw className="h-3 w-3" /> Refresh
-              </button>
+              <div className="flex items-center gap-2">
+                {documents.length > 0 && (
+                  <button
+                    onClick={reembedAll}
+                    className="text-xs text-accent hover:text-accent/80 flex items-center gap-1 transition"
+                    title="Re-generate embeddings for all documents using Jina AI (fixes hash-fallback embeddings)"
+                  >
+                    <Sparkles className="h-3 w-3" /> Re-embed all
+                  </button>
+                )}
+                <button onClick={cleanupStuck} className="text-xs text-muted-foreground hover:text-red-500 flex items-center gap-1 transition" title="Mark stuck processing documents as errored">
+                  <X className="h-3 w-3" /> Clear stuck
+                </button>
+                <button onClick={loadDocuments} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition">
+                  <RefreshCw className="h-3 w-3" /> Refresh
+                </button>
+              </div>
             </div>
             {docsLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">

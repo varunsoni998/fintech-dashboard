@@ -26,6 +26,22 @@ from .pipeline import run_rag_query
 from .config import UPLOAD_DIR
 
 
+def check_jina_key() -> None:
+    """Warn at startup if JINA_API_KEY is missing."""
+    from .config import JINA_API_KEY
+    if not JINA_API_KEY:
+        logger.warning(
+            "=" * 60 + "\n"
+            "JINA_API_KEY is not set in backend/.env\n"
+            "RAG embeddings will use hash fallback (poor retrieval).\n"
+            "Get a FREE key at: https://jina.ai/?sui=apikey\n"
+            "Then add: JINA_API_KEY=jina_... to backend/.env\n"
+            + "=" * 60
+        )
+    else:
+        logger.info("Jina AI embedding key configured ✓")
+
+
 def cleanup_stuck_documents() -> None:
     """
     Mark any documents that have been stuck in 'processing' for more than
@@ -291,3 +307,157 @@ def cleanup_documents(authorization: Optional[str] = Header(None)):
         return {"success": True, "cleaned": cleaned}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reembed/{document_id}")
+def reembed_document(document_id: str, authorization: Optional[str] = Header(None)):
+    """
+    Re-generate embeddings for all chunks of a document.
+    Use this after the embedding API recovers to fix hash-fallback chunks.
+    Runs in a background thread — poll /api/rag/status/{job_id} for progress.
+    """
+    user_id = _get_user_id(authorization)
+
+    # Verify ownership
+    try:
+        result = (
+            supabase.table("rag_documents")
+            .select("id, user_id, filename")
+            .eq("id", document_id)
+            .single()
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if result.data["user_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        filename = result.data["filename"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    job_id = str(uuid.uuid4())
+    indexing_jobs[job_id] = {
+        "status": "processing",
+        "filename": filename,
+        "progress": "Fetching chunks...",
+        "document_id": document_id,
+        "error": None,
+    }
+
+    def _run():
+        try:
+            from .embeddings import embed_texts
+
+            # Fetch all existing text chunks
+            indexing_jobs[job_id]["progress"] = "Loading chunks from database..."
+            chunks_result = (
+                supabase.table("rag_chunks")
+                .select("id, text")
+                .eq("document_id", document_id)
+                .execute()
+            )
+            chunks = chunks_result.data or []
+
+            if not chunks:
+                indexing_jobs[job_id]["status"] = "error"
+                indexing_jobs[job_id]["error"] = "No chunks found for this document"
+                return
+
+            indexing_jobs[job_id]["progress"] = f"Re-embedding {len(chunks)} chunks..."
+            texts = [c["text"] for c in chunks]
+            embeddings = embed_texts(texts, use_fallback_on_failure=False)
+
+            indexing_jobs[job_id]["progress"] = "Updating vectors in database..."
+            for chunk, vec in zip(chunks, embeddings):
+                supabase.table("rag_chunks").update({"embedding": vec}).eq("id", chunk["id"]).execute()
+
+            indexing_jobs[job_id]["status"] = "done"
+            indexing_jobs[job_id]["progress"] = f"Re-embedded {len(chunks)} chunks"
+        except Exception as e:
+            logger.error("Re-embed failed for %s: %s", document_id, e)
+            indexing_jobs[job_id]["status"] = "error"
+            indexing_jobs[job_id]["error"] = str(e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"success": True, "job_id": job_id, "document_id": document_id}
+
+
+@router.post("/reembed-all")
+def reembed_all_documents(authorization: Optional[str] = Header(None)):
+    """
+    Re-embed ALL documents belonging to the current user.
+    Use this after adding JINA_API_KEY to fix hash-fallback embeddings.
+    Returns a list of job_ids — poll each via /api/rag/status/{job_id}.
+    """
+    user_id = _get_user_id(authorization)
+
+    try:
+        result = (
+            supabase.table("rag_documents")
+            .select("id, filename")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        docs = result.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not list documents: {e}")
+
+    if not docs:
+        return {"success": True, "message": "No documents to re-embed.", "jobs": []}
+
+    jobs_started = []
+    for doc in docs:
+        job_id = str(uuid.uuid4())
+        doc_id = doc["id"]
+        filename = doc["filename"]
+
+        indexing_jobs[job_id] = {
+            "status": "processing",
+            "filename": filename,
+            "progress": "Queued for re-embedding...",
+            "document_id": doc_id,
+            "error": None,
+        }
+
+        def _run(jid=job_id, did=doc_id, fname=filename):
+            try:
+                from .embeddings import embed_texts
+                indexing_jobs[jid]["progress"] = "Loading chunks..."
+                chunks_result = (
+                    supabase.table("rag_chunks")
+                    .select("id, text")
+                    .eq("document_id", did)
+                    .execute()
+                )
+                chunks = chunks_result.data or []
+                if not chunks:
+                    indexing_jobs[jid]["status"] = "done"
+                    indexing_jobs[jid]["progress"] = "No chunks found"
+                    return
+
+                indexing_jobs[jid]["progress"] = f"Re-embedding {len(chunks)} chunks..."
+                texts = [c["text"] for c in chunks]
+                embeddings = embed_texts(texts, task="retrieval.passage", use_fallback_on_failure=False)
+
+                indexing_jobs[jid]["progress"] = "Writing vectors to database..."
+                for chunk, vec in zip(chunks, embeddings):
+                    supabase.table("rag_chunks").update({"embedding": vec}).eq("id", chunk["id"]).execute()
+
+                indexing_jobs[jid]["status"] = "done"
+                indexing_jobs[jid]["progress"] = f"Re-embedded {len(chunks)} chunks"
+            except Exception as e:
+                logger.error("Re-embed failed for %s: %s", did, e)
+                indexing_jobs[jid]["status"] = "error"
+                indexing_jobs[jid]["error"] = str(e)
+
+        import threading as _threading
+        _threading.Thread(target=_run, daemon=True).start()
+        jobs_started.append({"job_id": job_id, "document_id": doc_id, "filename": filename})
+
+    return {
+        "success": True,
+        "message": f"Started re-embedding {len(jobs_started)} document(s).",
+        "jobs": jobs_started,
+    }
