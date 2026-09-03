@@ -8,23 +8,22 @@ from fastapi.staticfiles import StaticFiles
 from database import init_database
 from creatives.routes import router as creatives_router
 from rag.routes import router as rag_router, cleanup_stuck_documents, check_jina_key
+from itinerary.routes import router as itinerary_router
+from itinerary.supplier_routes import router as suppliers_router
+from gmail.routes import router as gmail_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("\nStarting Custom Holiday AI backend...")
+    print("\nStarting BusinessOS backend...")
     init_database()
     check_jina_key()
     cleanup_stuck_documents()
     yield
-    print("Stopping Custom Holiday AI backend...")
+    print("Stopping BusinessOS backend...")
 
 
-app = FastAPI(
-    title="Custom Holiday AI",
-    version="1.0.0",
-    lifespan=lifespan,
-)
+app = FastAPI(title="BusinessOS", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,29 +34,16 @@ app.add_middleware(
 )
 
 app.include_router(creatives_router, prefix="/api")
-app.include_router(rag_router, prefix="/api/rag")
+app.include_router(rag_router,        prefix="/api/rag")
+app.include_router(itinerary_router,  prefix="/api/itinerary")
+app.include_router(suppliers_router,  prefix="/api/suppliers")
+app.include_router(gmail_router,      prefix="/api/gmail")
 
 outputs_dir = Path("outputs")
 outputs_dir.mkdir(exist_ok=True)
-
-app.mount(
-    "/outputs",
-    StaticFiles(directory="outputs"),
-    name="outputs",
-)
+app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 
 
 @app.get("/")
 def root():
-    return {
-        "status": "running",
-        "service": "AI Travel Studio",
-        "endpoints": {
-            "storyboard": "/api/generate-full-storyboard",
-            "video": "/api/generate-video",
-            "rag_upload": "/api/rag/upload",
-            "rag_query": "/api/rag/query",
-            "rag_documents": "/api/rag/documents",
-            "chat_messages": "/api/chat-messages",
-        },
-    }
+    return {"status": "running", "service": "BusinessOS"}

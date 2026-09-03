@@ -33,6 +33,7 @@ import Creatives      from "./pages/Creatives";
 import Automations    from "./pages/Automations";
 import Profile        from "./pages/Profile";
 import QuoteGenerator from "./pages/QuoteGenerator";
+import KnowledgeBase from "./pages/KnowledgeBase";
 
 const queryClient = new QueryClient();
 
@@ -97,6 +98,7 @@ function AppRoutes() {
           <Route path="/creatives"         element={<Creatives />} />
           <Route path="/profile"           element={<Profile />} />
           <Route path="/quotes" element={<QuoteGenerator />} />
+          <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="*"                  element={<NotFound />} />
         </Routes>
       </div>

@@ -1,844 +1,1505 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
-import ReactMarkdown from "react-markdown";
 import { supabase } from "@/lib/supabase";
 import {
-  Sparkles,
-  Upload,
-  Globe,
-  FileText,
-  Mail,
-  Loader2,
-  X,
-  Plus,
-  Bot,
-  Quote,
-  CheckCircle,
-  AlertCircle,
-  Trash2,
-  RefreshCw,
-  Database,
-  FileCode,
-  FileArchive,
-  File,
+  Plus, Search, ChevronRight, ChevronLeft, Loader2, Star, MapPin,
+  Calendar, Users, DollarSign, Hotel, Activity, Car, Pencil, Trash2,
+  Check, X, FileText, Send, Save, RefreshCw, ChevronDown, ChevronUp,
+  ArrowLeft, Clock, Tag, Building2, Sparkles, Eye, Copy, Download,
 } from "lucide-react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API = "https://fintech-dashboard-61vh.onrender.com/api/rag";
+const API = "https://fintech-dashboard-61vh.onrender.com/api/itinerary";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Source = "email" | "pdf" | "web";
+type View = "list" | "new" | "detail";
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
-interface Citation {
-  source: Source;
-  title: string;
-  snippet: string;
-  page?: number;
-}
-
-interface RAGResult {
-  answer: string;
-  citations: Citation[];
-}
-
-interface IndexedDocument {
+interface ItinerarySummary {
   id: string;
-  filename: string;
-  file_type: string;
-  page_count: number;
-  chunk_count: number;
+  client_name: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  nights: number;
   status: string;
-  created_at: string;
+  final_price: number;
+  currency: string;
+  updated_at: string;
 }
 
-interface UploadJob {
-  job_id: string;
-  filename: string;
-  status: "processing" | "done" | "error";
-  progress: string;
-  error?: string;
-  document_id?: string;
+interface ItineraryFull extends ItinerarySummary {
+  client_email: string;
+  client_phone: string;
+  adults: number;
+  children: number;
+  special_requirements: string;
+  departure_city: string;
+  budget: number;
+  hotel_category: string;
+  meal_plan: string;
+  trip_type: string;
+  special_requests: string;
+  itinerary_content: DayPlan[];
+  selected_hotels: HotelResult[];
+  selected_activities: ActivityResult[];
+  selected_transfers: TransferResult[];
+  hotel_cost: number;
+  activity_cost: number;
+  transfer_cost: number;
+  other_cost: number;
+  supplier_total: number;
+  markup_type: string;
+  markup_value: number;
+  markup_amount: number;
+  discount_amount: number;
+  tax_amount: number;
 }
 
-// ─── Auth helper ─────────────────────────────────────────────────────────────
-async function getAuthHeader(): Promise<string> {
+interface HotelResult {
+  id: string;
+  hotel_name: string;
+  star_rating: number;
+  destination: string;
+  room_type: string;
+  meal_plan: string;
+  price_per_night: number;
+  currency: string;
+  supplier_name: string;
+  valid_from: string;
+  valid_to: string;
+  cancellation_policy: string;
+  source_email: string;
+  source_date: string;
+}
+
+interface ActivityResult {
+  id: string;
+  activity_name: string;
+  description: string;
+  duration_hours: number;
+  price: number;
+  currency: string;
+  price_basis: string;
+  supplier_name: string;
+  valid_from: string;
+  valid_to: string;
+  source_email: string;
+  source_date: string;
+}
+
+interface TransferResult {
+  id: string;
+  transfer_type: string;
+  route: string;
+  vehicle_type: string;
+  price: number;
+  currency: string;
+  price_basis: string;
+  supplier_name: string;
+  source_email: string;
+  source_date: string;
+}
+
+interface DayItem {
+  time: string;
+  type: "hotel" | "activity" | "transfer" | "note" | "free";
+  title: string;
+  description: string;
+  supplier?: string;
+  notes?: string;
+}
+
+interface DayPlan {
+  day_number: number;
+  date: string;
+  title: string;
+  items: DayItem[];
+}
+
+interface FormData {
+  // Step 1 — Client
+  client_name: string;
+  client_email: string;
+  client_phone: string;
+  adults: number;
+  children: number;
+  special_requirements: string;
+  // Step 2 — Trip
+  destination: string;
+  departure_city: string;
+  start_date: string;
+  end_date: string;
+  nights: number;
+  budget: string;
+  currency: string;
+  // Step 3 — Preferences
+  hotel_category: string;
+  meal_plan: string;
+  transport_preference: string;
+  room_preference: string;
+  trip_type: string;
+  activities: string;
+  special_requests: string;
+}
+
+// ─── Auth helper ──────────────────────────────────────────────────────────────
+async function authHeader(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error("Not authenticated");
   return `Bearer ${token}`;
 }
 
-// ─── File type helpers ────────────────────────────────────────────────────────
-const SUPPORTED_EXTS = ["pdf", "txt", "docx", "doc", "zip"];
-
-function getFileIcon(filename: string) {
-  const ext = filename.split(".").pop()?.toLowerCase() || "";
-  if (ext === "pdf") return <FileText className="h-4 w-4 text-red-400" />;
-  if (ext === "zip") return <FileArchive className="h-4 w-4 text-yellow-400" />;
-  if (["docx", "doc"].includes(ext)) return <FileText className="h-4 w-4 text-blue-400" />;
-  if (ext === "txt") return <File className="h-4 w-4 text-gray-400" />;
-  return <FileCode className="h-4 w-4 text-emerald-400" />;
+// ─── Currency formatter ───────────────────────────────────────────────────────
+function fmt(amount: number, currency = "INR"): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency", currency, maximumFractionDigits: 0,
+  }).format(amount);
 }
 
-function getFileTypeLabel(file_type: string) {
-  const map: Record<string, string> = {
-    pdf: "PDF", txt: "TXT", docx: "DOCX", zip: "ZIP",
+function fmtDate(d: string): string {
+  if (!d) return "-";
+  return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+// ─── Status badge ─────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, { label: string; cls: string }> = {
+    draft:     { label: "Draft",     cls: "bg-gray-100 text-gray-600" },
+    generated: { label: "Generated", cls: "bg-blue-50 text-blue-600" },
+    reviewed:  { label: "Reviewed",  cls: "bg-purple-50 text-purple-600" },
+    sent:      { label: "Sent",      cls: "bg-amber-50 text-amber-600" },
+    approved:  { label: "Approved",  cls: "bg-green-50 text-green-600" },
+    cancelled: { label: "Cancelled", cls: "bg-red-50 text-red-500" },
   };
-  return map[file_type] || file_type.toUpperCase();
+  const c = cfg[status] || { label: status, cls: "bg-gray-100 text-gray-600" };
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.cls}`}>{c.label}</span>
+  );
 }
 
-// ─── Markdown renderer ────────────────────────────────────────────────────────
-const AnswerMarkdown = ({ content }: { content: string }) => (
-  <ReactMarkdown
-    components={{
-      p:          ({ children }) => <p className="mb-3 last:mb-0 leading-7 text-sm text-foreground">{children}</p>,
-      h1:         ({ children }) => <h1 className="text-lg font-bold mb-3 mt-4 text-foreground">{children}</h1>,
-      h2:         ({ children }) => <h2 className="text-base font-bold mb-2 mt-4 text-foreground">{children}</h2>,
-      h3:         ({ children }) => <h3 className="text-sm font-semibold mb-2 mt-3 text-foreground">{children}</h3>,
-      ul:         ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1 text-sm text-foreground">{children}</ul>,
-      ol:         ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1 text-sm text-foreground">{children}</ol>,
-      li:         ({ children }) => <li className="leading-6">{children}</li>,
-      strong:     ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-      blockquote: ({ children }) => (
-        <blockquote className="border-l-4 border-accent pl-4 italic text-muted-foreground mb-3">{children}</blockquote>
-      ),
-      code: ({ inline, children, className }: any) => {
-        const lang = (className || "").replace("language-", "");
-        return inline ? (
-          <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">{children}</code>
-        ) : (
-          <div className="relative mb-3">
-            {lang && (
-              <div className="absolute top-0 right-0 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/80 rounded-bl rounded-tr-lg border-b border-l border-border">
-                {lang}
-              </div>
-            )}
-            <pre className="bg-muted rounded-lg p-4 overflow-x-auto text-xs font-mono whitespace-pre-wrap border border-border">
-              <code>{children}</code>
-            </pre>
-          </div>
-        );
-      },
-    }}
-  >
-    {content}
-  </ReactMarkdown>
-);
-
-// ─── Source metadata ──────────────────────────────────────────────────────────
-const SOURCE_META: Record<Source, { label: string; icon: React.ReactNode; color: string }> = {
-  email: { label: "Emails",     icon: <Mail className="h-3.5 w-3.5" />,     color: "bg-sky-50 text-sky-700 border-sky-200" },
-  pdf:   { label: "Documents",  icon: <FileText className="h-3.5 w-3.5" />, color: "bg-amber-50 text-amber-700 border-amber-200" },
-  web:   { label: "Web search", icon: <Globe className="h-3.5 w-3.5" />,    color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-};
-
-// ─── Full-page drop overlay ───────────────────────────────────────────────────
-function DropOverlay({ visible, fileCount }: { visible: boolean; fileCount: number }) {
-  if (!visible) return null;
+// ─── Star rating ──────────────────────────────────────────────────────────────
+function Stars({ n }: { n: number }) {
   return (
-    <div className="fixed inset-0 z-[9999] pointer-events-none">
-      {/* Blurred backdrop */}
-      <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+    <span className="flex items-center gap-0.5">
+      {Array.from({ length: n }).map((_, i) => (
+        <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
+      ))}
+    </span>
+  );
+}
 
-      {/* Animated border */}
-      <div className="absolute inset-4 rounded-3xl border-2 border-dashed border-accent/60 transition-all" />
-
-      {/* Center card */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-5 bg-card border border-border shadow-2xl rounded-2xl px-16 py-12 max-w-sm w-full mx-4">
-
-          {/* Animated upload icon */}
-          <div className="relative">
-            <div className="absolute inset-0 rounded-full bg-accent/20 animate-ping" />
-            <div className="relative h-20 w-20 rounded-full bg-accent/10 border-2 border-accent/40 flex items-center justify-center">
-              <Upload className="h-9 w-9 text-accent" />
-            </div>
-          </div>
-
-          <div className="text-center space-y-1.5">
-            <p className="text-xl font-semibold text-foreground">
-              Drop to index
-              {fileCount > 1 ? ` ${fileCount} files` : ""}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              PDF, DOCX, TXT, ZIP supported
-            </p>
-          </div>
-
-          {/* Supported formats row */}
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            {[
-              { label: "PDF",  color: "bg-red-50 text-red-600 border-red-200" },
-              { label: "DOCX", color: "bg-blue-50 text-blue-600 border-blue-200" },
-              { label: "TXT",  color: "bg-gray-50 text-gray-600 border-gray-200" },
-              { label: "ZIP",  color: "bg-yellow-50 text-yellow-600 border-yellow-200" },
-            ].map(({ label, color }) => (
-              <span
-                key={label}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${color}`}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
+// ─── Source tooltip ───────────────────────────────────────────────────────────
+function SourceTag({ email, date }: { email?: string; date?: string }) {
+  const [open, setOpen] = useState(false);
+  if (!email && !date) return null;
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition px-1.5 py-0.5 rounded border border-border hover:border-foreground/20"
+      >
+        <Eye className="h-2.5 w-2.5" /> Source
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-1 left-0 z-10 bg-popover border border-border rounded-lg shadow-lg p-3 w-64 text-xs space-y-1">
+          {email && <p><span className="text-muted-foreground">From:</span> {email}</p>}
+          {date && <p><span className="text-muted-foreground">Date:</span> {fmtDate(date)}</p>}
+          <button onClick={() => setOpen(false)} className="absolute top-1 right-1 text-muted-foreground hover:text-foreground">
+            <X className="h-3 w-3" />
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-const AIAssistant = () => {
-  const [query, setQuery]   = useState("");
-  const [notes, setNotes]   = useState("");
-  const [sources, setSources] = useState<Source[]>(["pdf"]);
-  const [loading, setLoading] = useState(false);
-  const [streamingAnswer, setStreamingAnswer] = useState("");
-  const [result, setResult] = useState<RAGResult | null>(null);
+// ─── Input component ──────────────────────────────────────────────────────────
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 
-  const [documents, setDocuments]     = useState<IndexedDocument[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [uploadJobs, setUploadJobs]   = useState<UploadJob[]>([]);
-  const [showDocs, setShowDocs]       = useState(false);
+function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full px-3 py-2 rounded-lg border bg-background text-sm text-foreground
+        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30
+        focus:border-accent transition disabled:opacity-50 ${props.className || ""}`}
+    />
+  );
+}
 
-  // Drag state
-  const [isDragging, setIsDragging]   = useState(false);
-  const [dragFileCount, setDragFileCount] = useState(0);
-  const dragCounter = useRef(0);   // tracks nested dragenter/dragleave pairs
+function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`w-full px-3 py-2 rounded-lg border bg-background text-sm text-foreground
+        focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition ${props.className || ""}`}
+    >
+      {children}
+    </select>
+  );
+}
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+function Textarea({ ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`w-full px-3 py-2 rounded-lg border bg-background text-sm text-foreground
+        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30
+        focus:border-accent transition resize-none ${props.className || ""}`}
+    />
+  );
+}
 
-  const toggleSource = (s: Source) =>
-    setSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+function Btn({
+  variant = "primary", size = "md", loading, children, ...props
+}: {
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "sm" | "md";
+  loading?: boolean;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const base = "inline-flex items-center justify-center gap-1.5 font-medium transition rounded-lg disabled:opacity-50";
+  const sizes = { sm: "text-xs px-3 py-1.5", md: "text-sm px-4 py-2" };
+  const variants = {
+    primary: "bg-accent text-accent-foreground hover:bg-accent/90",
+    secondary: "bg-muted text-foreground hover:bg-muted/80 border border-border",
+    ghost: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+    danger: "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200",
+  };
+  return (
+    <button {...props} disabled={props.disabled || loading} className={`${base} ${sizes[size]} ${variants[variant]} ${props.className || ""}`}>
+      {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+      {children}
+    </button>
+  );
+}
 
-  // ── Load indexed documents ─────────────────────────────────────────────────
-  const loadDocuments = useCallback(async () => {
-    setDocsLoading(true);
-    try {
-      const auth = await getAuthHeader();
-      const resp = await fetch(`${API}/documents`, { headers: { Authorization: auth } });
-      const data = await resp.json();
-      if (data.success) setDocuments(data.documents || []);
-    } catch (e) {
-      console.error("Failed to load documents:", e);
-    } finally {
-      setDocsLoading(false);
-    }
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+export default function Iteneries() {
+  const [view, setView] = useState<View>("list");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  return (
+    <DashboardLayout>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {view === "list" && (
+          <ItineraryList
+            onNew={() => setView("new")}
+            onOpen={(id) => { setSelectedId(id); setView("detail"); }}
+          />
+        )}
+        {view === "new" && (
+          <CreateItinerary
+            onBack={() => setView("list")}
+            onSaved={(id) => { setSelectedId(id); setView("detail"); }}
+          />
+        )}
+        {view === "detail" && selectedId && (
+          <ItineraryDetail
+            id={selectedId}
+            onBack={() => setView("list")}
+          />
+        )}
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ITINERARY LIST
+// ═══════════════════════════════════════════════════════════════════════════════
+function ItineraryList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: string) => void }) {
+  const [items, setItems] = useState<ItinerarySummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const auth = await authHeader();
+        const resp = await fetch(`${API}/list`, { headers: { Authorization: auth } });
+        const data = await resp.json();
+        if (data.success) setItems(data.itineraries);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    })();
   }, []);
 
-  useEffect(() => { loadDocuments(); }, [loadDocuments]);
+  const filtered = items.filter(i =>
+    !filter ||
+    i.client_name.toLowerCase().includes(filter.toLowerCase()) ||
+    i.destination.toLowerCase().includes(filter.toLowerCase())
+  );
 
-  // ── Poll indexing job ──────────────────────────────────────────────────────
-  const pollJob = useCallback((job_id: string) => {
-    const poll = async () => {
-      try {
-        const auth = await getAuthHeader();
-        const resp = await fetch(`${API}/status/${job_id}`, { headers: { Authorization: auth } });
-        const data = await resp.json();
-        setUploadJobs(prev => prev.map(j =>
-          j.job_id === job_id
-            ? { ...j, status: data.status, progress: data.progress || j.progress, error: data.error, document_id: data.document_id }
-            : j
-        ));
-        if (data.status === "processing") {
-          setTimeout(poll, 2000);
-        } else if (data.status === "done") {
-          loadDocuments();
-          if (!sources.includes("pdf")) setSources(prev => [...prev, "pdf"]);
-        }
-      } catch (e) {
-        console.error("Poll error:", e);
-      }
-    };
-    poll();
-  }, [loadDocuments, sources]);
+  const stats = {
+    total: items.length,
+    draft: items.filter(i => i.status === "draft").length,
+    sent: items.filter(i => i.status === "sent").length,
+    approved: items.filter(i => i.status === "approved").length,
+  };
 
-  // ── Handle file upload ─────────────────────────────────────────────────────
-  const handleFileUpload = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Itineraries</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage client travel proposals</p>
+        </div>
+        <Btn onClick={onNew}><Plus className="h-4 w-4" /> Create Itinerary</Btn>
+      </div>
 
-    for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "";
-      if (!SUPPORTED_EXTS.includes(ext)) {
-        alert(`"${file.name}" is not supported. Please upload PDF, TXT, DOCX, or ZIP files.`);
-        continue;
-      }
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: "Total", value: stats.total, icon: <FileText className="h-4 w-4" /> },
+          { label: "Drafts", value: stats.draft, icon: <Pencil className="h-4 w-4" /> },
+          { label: "Sent", value: stats.sent, icon: <Send className="h-4 w-4" /> },
+          { label: "Approved", value: stats.approved, icon: <Check className="h-4 w-4" /> },
+        ].map(s => (
+          <div key={s.label} className="rounded-xl border bg-card p-4 flex items-center gap-3">
+            <span className="text-muted-foreground">{s.icon}</span>
+            <div>
+              <p className="text-2xl font-semibold text-foreground">{s.value}</p>
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      const tempId = `temp_${Date.now()}_${Math.random()}`;
-      setUploadJobs(prev => [
-        { job_id: tempId, filename: file.name, status: "processing", progress: "Uploading..." },
-        ...prev,
-      ]);
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="Search by client or destination..."
+          className="w-full pl-9 pr-4 py-2 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition"
+        />
+      </div>
 
-      try {
-        const auth = await getAuthHeader();
-        const formData = new FormData();
-        formData.append("file", file);
-        const resp = await fetch(`${API}/upload`, {
-          method: "POST",
-          headers: { Authorization: auth },
-          body: formData,
-        });
-        const data = await resp.json();
+      {/* Table */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+            <FileText className="h-10 w-10 opacity-20" />
+            <p className="text-sm">No itineraries yet.</p>
+            <Btn variant="secondary" size="sm" onClick={onNew}><Plus className="h-3.5 w-3.5" /> Create your first itinerary</Btn>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Client</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Destination</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Dates</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nights</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Price</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map(item => (
+                <tr
+                  key={item.id}
+                  className="hover:bg-muted/30 cursor-pointer transition"
+                  onClick={() => onOpen(item.id)}
+                >
+                  <td className="px-4 py-3 font-medium text-foreground">{item.client_name}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{item.destination}</span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                    {fmtDate(item.start_date)} – {fmtDate(item.end_date)}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{item.nights}N</td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    {item.final_price ? fmt(item.final_price, item.currency) : "—"}
+                  </td>
+                  <td className="px-4 py-3"><StatusBadge status={item.status} /></td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(item.updated_at)}</td>
+                  <td className="px-4 py-3">
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+}
 
-        if (!resp.ok) {
-          setUploadJobs(prev => prev.map(j =>
-            j.job_id === tempId ? { ...j, status: "error", error: data.detail || "Upload failed" } : j
-          ));
-          continue;
-        }
+// ═══════════════════════════════════════════════════════════════════════════════
+// CREATE ITINERARY — multi-step wizard
+// ═══════════════════════════════════════════════════════════════════════════════
+const DEFAULT_FORM: FormData = {
+  client_name: "", client_email: "", client_phone: "", adults: 2, children: 0, special_requirements: "",
+  destination: "", departure_city: "", start_date: "", end_date: "", nights: 7, budget: "", currency: "INR",
+  hotel_category: "4 star", meal_plan: "Breakfast", transport_preference: "Private", room_preference: "Double",
+  trip_type: "Leisure", activities: "", special_requests: "",
+};
 
-        setUploadJobs(prev => prev.map(j =>
-          j.job_id === tempId ? { ...j, job_id: data.job_id, progress: "Extracting..." } : j
-        ));
-        pollJob(data.job_id);
+function CreateItinerary({ onBack, onSaved }: { onBack: () => void; onSaved: (id: string) => void }) {
+  const [step, setStep] = useState<Step>(1);
+  const [form, setForm] = useState<FormData>(DEFAULT_FORM);
+  const [searchResults, setSearchResults] = useState<{ hotels: HotelResult[]; activities: ActivityResult[]; transfers: TransferResult[] } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [selectedHotels, setSelectedHotels] = useState<HotelResult[]>([]);
+  const [selectedActivities, setSelectedActivities] = useState<ActivityResult[]>([]);
+  const [selectedTransfers, setSelectedTransfers] = useState<TransferResult[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const [generatedDays, setGeneratedDays] = useState<DayPlan[]>([]);
+  const [saving, setSaving] = useState(false);
 
-      } catch (e: any) {
-        setUploadJobs(prev => prev.map(j =>
-          j.job_id === tempId ? { ...j, status: "error", error: e.message || "Network error" } : j
-        ));
-      }
-    }
-  }, [pollJob]);
+  const set = (key: keyof FormData, val: any) => setForm(f => ({ ...f, [key]: val }));
 
-  // ── Full-page drag-and-drop (window-level listeners) ──────────────────────
+  // Auto-calculate nights from dates
   useEffect(() => {
-    const onDragEnter = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter.current += 1;
-      if (dragCounter.current === 1) {
-        const count = e.dataTransfer?.items?.length || 0;
-        setDragFileCount(count);
-        setIsDragging(true);
-      }
-    };
-
-    const onDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      // Required to allow drop
-    };
-
-    const onDragLeave = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter.current -= 1;
-      if (dragCounter.current === 0) {
-        setIsDragging(false);
-        setDragFileCount(0);
-      }
-    };
-
-    const onDrop = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter.current = 0;
-      setIsDragging(false);
-      setDragFileCount(0);
-      if (e.dataTransfer?.files) {
-        handleFileUpload(e.dataTransfer.files);
-      }
-    };
-
-    window.addEventListener("dragenter", onDragEnter);
-    window.addEventListener("dragover",  onDragOver);
-    window.addEventListener("dragleave", onDragLeave);
-    window.addEventListener("drop",      onDrop);
-
-    return () => {
-      window.removeEventListener("dragenter", onDragEnter);
-      window.removeEventListener("dragover",  onDragOver);
-      window.removeEventListener("dragleave", onDragLeave);
-      window.removeEventListener("drop",      onDrop);
-    };
-  }, [handleFileUpload]);
-
-  // ── Delete document ────────────────────────────────────────────────────────
-  const deleteDocument = async (docId: string) => {
-    try {
-      const auth = await getAuthHeader();
-      await fetch(`${API}/documents/${docId}`, { method: "DELETE", headers: { Authorization: auth } });
-      setDocuments(prev => prev.filter(d => d.id !== docId));
-    } catch (e) {
-      console.error("Delete failed:", e);
+    if (form.start_date && form.end_date) {
+      const diff = Math.round((new Date(form.end_date).getTime() - new Date(form.start_date).getTime()) / 86400000);
+      if (diff > 0) set("nights", diff);
     }
-  };
+  }, [form.start_date, form.end_date]);
 
-  const reembedAll = async () => {
+  const STEPS = [
+    { n: 1, label: "Client" },
+    { n: 2, label: "Trip" },
+    { n: 3, label: "Preferences" },
+    { n: 4, label: "Search" },
+    { n: 5, label: "Generate" },
+    { n: 6, label: "Save" },
+  ];
+
+  const handleSearch = async () => {
+    setSearching(true);
+    setSearchResults(null);
     try {
-      const auth = await getAuthHeader();
-      const resp = await fetch(`${API}/reembed-all`, { method: "POST", headers: { Authorization: auth } });
-      const data = await resp.json();
-      if (data.jobs && data.jobs.length > 0) {
-        // Add all reembed jobs to the upload jobs list so progress is shown
-        const newJobs: UploadJob[] = data.jobs.map((j: any) => ({
-          job_id: j.job_id,
-          filename: j.filename,
-          status: "processing" as const,
-          progress: "Re-embedding...",
-        }));
-        setUploadJobs(prev => [...newJobs, ...prev]);
-        // Poll each job
-        data.jobs.forEach((j: any) => pollJob(j.job_id));
-      }
-    } catch (e) {
-      console.error("Re-embed all failed:", e);
-    }
-  };
-
-  const cleanupStuck = async () => {
-    try {
-      const auth = await getAuthHeader();
-      await fetch(`${API}/cleanup`, { method: "POST", headers: { Authorization: auth } });
-      loadDocuments();
-    } catch (e) {
-      console.error("Cleanup failed:", e);
-    }
-  };
-
-  // ── Generate answer (streaming) ────────────────────────────────────────────
-  const handleGenerate = async () => {
-    if (!query.trim() || loading) return;
-    setLoading(true);
-    setResult(null);
-    setStreamingAnswer("");
-
-    try {
-      const auth = await getAuthHeader();
-      const resp = await fetch(`${API}/query`, {
+      const auth = await authHeader();
+      const resp = await fetch(`${API}/suppliers/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: auth },
-        body: JSON.stringify({ query: query.trim(), notes, sources }),
+        body: JSON.stringify({
+          destination: form.destination,
+          hotel_category: form.hotel_category,
+          meal_plan: form.meal_plan,
+          start_date: form.start_date,
+          end_date: form.end_date,
+          activities: form.activities ? form.activities.split(",").map(s => s.trim()).filter(Boolean) : [],
+          budget: form.budget ? parseFloat(form.budget) : undefined,
+          currency: form.currency,
+          trip_type: form.trip_type,
+        }),
       });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: "Query failed" }));
-        throw new Error(err.detail || "Query failed");
+      const data = await resp.json();
+      if (data.success) {
+        setSearchResults(data);
+        setStep(4);
       }
+    } catch (e) { console.error(e); }
+    finally { setSearching(false); }
+  };
+
+  const toggleHotel = (h: HotelResult) => {
+    setSelectedHotels(prev =>
+      prev.find(x => x.id === h.id) ? prev.filter(x => x.id !== h.id) : [h] // only one hotel at a time
+    );
+  };
+  const toggleActivity = (a: ActivityResult) => {
+    setSelectedActivities(prev =>
+      prev.find(x => x.id === a.id) ? prev.filter(x => x.id !== a.id) : [...prev, a]
+    );
+  };
+  const toggleTransfer = (t: TransferResult) => {
+    setSelectedTransfers(prev =>
+      prev.find(x => x.id === t.id) ? prev.filter(x => x.id !== t.id) : [...prev, t]
+    );
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setStreamText("");
+    setGeneratedDays([]);
+    setStep(5);
+    try {
+      const auth = await authHeader();
+      const resp = await fetch(`${API}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: auth },
+        body: JSON.stringify({
+          client_name: form.client_name,
+          adults: form.adults,
+          children: form.children,
+          special_requirements: form.special_requirements,
+          destination: form.destination,
+          departure_city: form.departure_city,
+          start_date: form.start_date,
+          end_date: form.end_date,
+          nights: form.nights,
+          budget: form.budget ? parseFloat(form.budget) : undefined,
+          currency: form.currency,
+          hotel_category: form.hotel_category,
+          meal_plan: form.meal_plan,
+          trip_type: form.trip_type,
+          special_requests: form.special_requests,
+          selected_hotels: selectedHotels,
+          selected_activities: selectedActivities,
+          selected_transfers: selectedTransfers,
+        }),
+      });
 
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let fullAnswer = "";
+      let fullText = "";
 
-      if (!reader) throw new Error("No response body");
-
+      if (!reader) throw new Error("No body");
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
-
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           try {
             const payload = JSON.parse(line.slice(6));
-            if (payload.raw_token) {
-              fullAnswer += payload.raw_token;
-              setStreamingAnswer(fullAnswer);
+            if (payload.token) {
+              fullText += payload.token;
+              setStreamText(fullText);
             }
-            if (payload.done) {
-              setResult({ answer: payload.answer || fullAnswer, citations: payload.citations || [] });
-              setStreamingAnswer("");
+            if (payload.done && payload.itinerary?.days) {
+              setGeneratedDays(payload.itinerary.days);
+              setStreamText("");
             }
             if (payload.error) throw new Error(payload.error);
-          } catch { /* ignore parse errors */ }
+          } catch { }
         }
       }
     } catch (e: any) {
-      setResult({
-        answer: `**Error:** ${e.message || "Something went wrong. Please try again."}`,
-        citations: [],
-      });
+      console.error(e);
     } finally {
-      setLoading(false);
-      setStreamingAnswer("");
+      setGenerating(false);
     }
   };
 
-  const handleReset = () => { setResult(null); setQuery(""); setNotes(""); setStreamingAnswer(""); };
+  // Calculate costs
+  const hotelCost = selectedHotels.reduce((s, h) => s + h.price_per_night * form.nights, 0);
+  const activityCost = selectedActivities.reduce((s, a) => s + a.price * (form.adults + form.children), 0);
+  const transferCost = selectedTransfers.reduce((s, t) => s + t.price, 0);
 
-  const activeJobs  = uploadJobs.filter(j => j.status === "processing");
-  const doneJobs    = uploadJobs.filter(j => j.status === "done").slice(0, 3);
-  const errorJobs   = uploadJobs.filter(j => j.status === "error").slice(0, 3);
-
-  const EXAMPLE_PROMPTS = [
-    "Summarise the key points from the uploaded documents",
-    "What are the main financial figures mentioned?",
-    "Extract all dates and deadlines mentioned",
-    "What are the terms and conditions in this document?",
-  ];
+  const handleSave = async (status = "draft") => {
+    setSaving(true);
+    try {
+      const auth = await authHeader();
+      const resp = await fetch(`${API}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: auth },
+        body: JSON.stringify({
+          client_name: form.client_name,
+          client_email: form.client_email,
+          client_phone: form.client_phone,
+          adults: form.adults,
+          children: form.children,
+          special_requirements: form.special_requirements,
+          destination: form.destination,
+          departure_city: form.departure_city,
+          start_date: form.start_date,
+          end_date: form.end_date,
+          nights: form.nights,
+          budget: form.budget ? parseFloat(form.budget) : undefined,
+          currency: form.currency,
+          hotel_category: form.hotel_category,
+          meal_plan: form.meal_plan,
+          transport_preference: form.transport_preference,
+          room_preference: form.room_preference,
+          trip_type: form.trip_type,
+          activities: form.activities ? form.activities.split(",").map(s => s.trim()).filter(Boolean) : [],
+          special_requests: form.special_requests,
+          itinerary_content: generatedDays,
+          selected_hotels: selectedHotels,
+          selected_activities: selectedActivities,
+          selected_transfers: selectedTransfers,
+          hotel_cost: hotelCost,
+          activity_cost: activityCost,
+          transfer_cost: transferCost,
+          other_cost: 0,
+          markup_type: "percentage",
+          markup_value: 0,
+          discount_amount: 0,
+          tax_amount: 0,
+          status,
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) onSaved(data.itinerary.id);
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  };
 
   return (
-    <DashboardLayout>
-      {/* Full-page drop overlay — renders above everything */}
-      <DropOverlay visible={isDragging} fileCount={dragFileCount} />
+    <>
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition">
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Create Itinerary</h1>
+          <p className="text-sm text-muted-foreground">Build a new client travel proposal</p>
+        </div>
+      </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        accept=".pdf,.txt,.docx,.doc,.zip"
-        multiple
-        onChange={e => handleFileUpload(e.target.files)}
-      />
-
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-serif text-foreground">RAG Model</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Upload documents, then ask questions — powered by Nemotron vector search
-            </p>
+      {/* Step indicator */}
+      <div className="flex items-center gap-0">
+        {STEPS.map((s, i) => (
+          <div key={s.n} className="flex items-center">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              step === s.n ? "bg-accent text-accent-foreground" :
+              step > s.n ? "text-accent" : "text-muted-foreground"
+            }`}>
+              {step > s.n ? <Check className="h-3.5 w-3.5" /> : <span>{s.n}</span>}
+              {s.label}
+            </div>
+            {i < STEPS.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/40 mx-1" />}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-accent/40 text-accent hover:bg-accent/5 transition"
-            >
-              <Upload className="h-3.5 w-3.5" /> Upload files
-            </button>
-            <button
-              onClick={() => { setShowDocs(v => !v); if (!showDocs) loadDocuments(); }}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border text-muted-foreground hover:text-foreground hover:border-foreground/20 transition"
-            >
-              <Database className="h-3.5 w-3.5" />
-              {documents.length} document{documents.length !== 1 ? "s" : ""} indexed
-            </button>
+        ))}
+      </div>
+
+      {/* ── STEP 1: Client ── */}
+      {step === 1 && (
+        <div className="rounded-xl border bg-card p-6 space-y-5">
+          <h2 className="font-semibold text-foreground flex items-center gap-2"><Users className="h-4 w-4 text-accent" /> Client Details</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Client Name" required>
+              <Input value={form.client_name} onChange={e => set("client_name", e.target.value)} placeholder="Rahul Sharma" />
+            </Field>
+            <Field label="Email">
+              <Input type="email" value={form.client_email} onChange={e => set("client_email", e.target.value)} placeholder="rahul@example.com" />
+            </Field>
+            <Field label="Phone">
+              <Input value={form.client_phone} onChange={e => set("client_phone", e.target.value)} placeholder="+91 98765 43210" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Adults" required>
+                <Input type="number" min={1} value={form.adults} onChange={e => set("adults", parseInt(e.target.value) || 1)} />
+              </Field>
+              <Field label="Children">
+                <Input type="number" min={0} value={form.children} onChange={e => set("children", parseInt(e.target.value) || 0)} />
+              </Field>
+            </div>
+          </div>
+          <Field label="Special Requirements">
+            <Textarea rows={2} value={form.special_requirements} onChange={e => set("special_requirements", e.target.value)} placeholder="Wheelchair access, dietary restrictions, etc." />
+          </Field>
+          <div className="flex justify-end">
+            <Btn onClick={() => setStep(2)} disabled={!form.client_name.trim()}>
+              Next: Trip Details <ChevronRight className="h-4 w-4" />
+            </Btn>
           </div>
         </div>
+      )}
 
-        {/* Upload job banners */}
-        {(activeJobs.length > 0 || doneJobs.length > 0 || errorJobs.length > 0) && (
-          <div className="space-y-2">
-            {activeJobs.map(job => (
-              <div key={job.job_id} className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                <span className="font-medium truncate flex-1">{job.filename}</span>
-                <span className="text-blue-500 text-xs shrink-0">{job.progress}</span>
+      {/* ── STEP 2: Trip ── */}
+      {step === 2 && (
+        <div className="rounded-xl border bg-card p-6 space-y-5">
+          <h2 className="font-semibold text-foreground flex items-center gap-2"><MapPin className="h-4 w-4 text-accent" /> Trip Details</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Destination" required>
+              <Select value={form.destination} onChange={e => set("destination", e.target.value)}>
+                <option value="">Select destination...</option>
+                {["Dubai", "Goa", "Singapore", "Bali", "Maldives", "Thailand", "Europe", "USA"].map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Departure City">
+              <Input value={form.departure_city} onChange={e => set("departure_city", e.target.value)} placeholder="Mumbai" />
+            </Field>
+            <Field label="Start Date" required>
+              <Input type="date" value={form.start_date} onChange={e => set("start_date", e.target.value)} />
+            </Field>
+            <Field label="End Date" required>
+              <Input type="date" value={form.end_date} onChange={e => set("end_date", e.target.value)} />
+            </Field>
+            <Field label="Nights">
+              <Input type="number" value={form.nights} onChange={e => set("nights", parseInt(e.target.value) || 1)} />
+            </Field>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <Field label="Budget">
+                  <Input type="number" value={form.budget} onChange={e => set("budget", e.target.value)} placeholder="150000" />
+                </Field>
               </div>
-            ))}
-            {doneJobs.map(job => (
-              <div key={job.job_id} className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-sm">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                <span className="font-medium truncate flex-1">{job.filename}</span>
-                <span className="text-emerald-500 text-xs shrink-0">Indexed successfully</span>
-                <button onClick={() => setUploadJobs(prev => prev.filter(j => j.job_id !== job.job_id))}>
-                  <X className="h-3.5 w-3.5 text-emerald-400 hover:text-emerald-600" />
-                </button>
-              </div>
-            ))}
-            {errorJobs.map(job => (
-              <div key={job.job_id} className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span className="font-medium truncate flex-1">{job.filename}</span>
-                <span className="text-red-500 text-xs shrink-0 max-w-xs truncate">{job.error}</span>
-                <button onClick={() => setUploadJobs(prev => prev.filter(j => j.job_id !== job.job_id))}>
-                  <X className="h-3.5 w-3.5 text-red-400 hover:text-red-600" />
-                </button>
-              </div>
-            ))}
+              <Field label="Currency">
+                <Select value={form.currency} onChange={e => set("currency", e.target.value)}>
+                  {["INR", "USD", "AED", "SGD", "EUR"].map(c => <option key={c}>{c}</option>)}
+                </Select>
+              </Field>
+            </div>
           </div>
-        )}
+          <div className="flex justify-between">
+            <Btn variant="secondary" onClick={() => setStep(1)}><ChevronLeft className="h-4 w-4" /> Back</Btn>
+            <Btn onClick={() => setStep(3)} disabled={!form.destination || !form.start_date || !form.end_date}>
+              Next: Preferences <ChevronRight className="h-4 w-4" />
+            </Btn>
+          </div>
+        </div>
+      )}
 
-        {/* Document library */}
-        {showDocs && (
-          <div className="rounded-xl border bg-card p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground">Indexed Documents</p>
-              <div className="flex items-center gap-2">
-                {documents.length > 0 && (
-                  <button
-                    onClick={reembedAll}
-                    className="text-xs text-accent hover:text-accent/80 flex items-center gap-1 transition"
-                    title="Re-generate embeddings for all documents using Jina AI (fixes hash-fallback embeddings)"
-                  >
-                    <Sparkles className="h-3 w-3" /> Re-embed all
-                  </button>
-                )}
-                <button onClick={cleanupStuck} className="text-xs text-muted-foreground hover:text-red-500 flex items-center gap-1 transition" title="Mark stuck processing documents as errored">
-                  <X className="h-3 w-3" /> Clear stuck
-                </button>
-                <button onClick={loadDocuments} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition">
-                  <RefreshCw className="h-3 w-3" /> Refresh
-                </button>
+      {/* ── STEP 3: Preferences ── */}
+      {step === 3 && (
+        <div className="rounded-xl border bg-card p-6 space-y-5">
+          <h2 className="font-semibold text-foreground flex items-center gap-2"><Tag className="h-4 w-4 text-accent" /> Preferences</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Hotel Category">
+              <Select value={form.hotel_category} onChange={e => set("hotel_category", e.target.value)}>
+                {["3 star", "4 star", "5 star", "Luxury"].map(c => <option key={c}>{c}</option>)}
+              </Select>
+            </Field>
+            <Field label="Meal Plan">
+              <Select value={form.meal_plan} onChange={e => set("meal_plan", e.target.value)}>
+                {["Room Only", "Breakfast", "Half Board", "Full Board", "All Inclusive"].map(m => <option key={m}>{m}</option>)}
+              </Select>
+            </Field>
+            <Field label="Trip Type">
+              <Select value={form.trip_type} onChange={e => set("trip_type", e.target.value)}>
+                {["Leisure", "Honeymoon", "Family", "Business", "Adventure", "Group"].map(t => <option key={t}>{t}</option>)}
+              </Select>
+            </Field>
+            <Field label="Room Preference">
+              <Select value={form.room_preference} onChange={e => set("room_preference", e.target.value)}>
+                {["Double", "Twin", "Suite", "Villa", "Family Room"].map(r => <option key={r}>{r}</option>)}
+              </Select>
+            </Field>
+            <Field label="Transportation">
+              <Select value={form.transport_preference} onChange={e => set("transport_preference", e.target.value)}>
+                {["Private", "Shared", "Self-drive", "Public"].map(t => <option key={t}>{t}</option>)}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Requested Activities (comma-separated)">
+            <Textarea rows={2} value={form.activities} onChange={e => set("activities", e.target.value)}
+              placeholder="Burj Khalifa, Desert Safari, Dhow Cruise..." />
+          </Field>
+          <Field label="Special Requests">
+            <Textarea rows={2} value={form.special_requests} onChange={e => set("special_requests", e.target.value)}
+              placeholder="Anniversary decoration, early check-in, etc." />
+          </Field>
+          <div className="flex justify-between">
+            <Btn variant="secondary" onClick={() => setStep(2)}><ChevronLeft className="h-4 w-4" /> Back</Btn>
+            <Btn onClick={handleSearch} loading={searching}>
+              <Search className="h-4 w-4" /> Search Suppliers
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 4: Search Results ── */}
+      {step === 4 && searchResults && (
+        <div className="space-y-5">
+          <div className="rounded-xl border bg-card p-4 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-foreground">Supplier Results for {form.destination}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Select items to include in the itinerary</p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>{selectedHotels.length} hotel · {selectedActivities.length} activities · {selectedTransfers.length} transfers selected</span>
+              <Btn onClick={() => setStep(3)} variant="ghost" size="sm"><RefreshCw className="h-3.5 w-3.5" /> Refine</Btn>
+            </div>
+          </div>
+
+          {/* Hotels */}
+          {searchResults.hotels.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-foreground flex items-center gap-2"><Hotel className="h-4 w-4 text-accent" /> Hotels</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {searchResults.hotels.map(h => {
+                  const sel = selectedHotels.find(x => x.id === h.id);
+                  return (
+                    <div key={h.id} className={`rounded-xl border p-4 space-y-3 transition cursor-pointer ${sel ? "border-accent bg-accent/5" : "bg-card hover:border-accent/40"}`}
+                      onClick={() => toggleHotel(h)}>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium text-foreground">{h.hotel_name}</p>
+                          <Stars n={h.star_rating} />
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${sel ? "border-accent bg-accent" : "border-muted-foreground/30"}`}>
+                          {sel && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <span>{h.room_type}</span>
+                        <span>{h.meal_plan === "BB" ? "Breakfast" : h.meal_plan === "MAP" ? "Half Board" : h.meal_plan === "AP" ? "Full Board" : h.meal_plan}</span>
+                        <span className="font-semibold text-foreground text-sm col-span-2">{fmt(h.price_per_night, h.currency)}<span className="font-normal text-muted-foreground">/night</span></span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">{h.supplier_name}</span>
+                        <SourceTag email={h.source_email} date={h.source_date} />
+                      </div>
+                      {h.cancellation_policy && (
+                        <p className="text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded">{h.cancellation_policy}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            {docsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading...
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Database className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No documents indexed yet.</p>
-                <p className="text-xs mt-1">Drop a file anywhere on the page to get started.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {documents.map(doc => (
-                  <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background hover:bg-muted/30 transition group">
-                    {getFileIcon(doc.filename)}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{doc.filename}</p>
-                      <p className="text-xs text-muted-foreground">
-                        <span className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded mr-1.5">{getFileTypeLabel(doc.file_type)}</span>
-                        {doc.page_count} {doc.file_type === "zip" ? "file" : "page"}{doc.page_count !== 1 ? "s" : ""} · {doc.chunk_count} chunks · {new Date(doc.created_at).toLocaleDateString()}
-                      </p>
+          )}
+
+          {/* Activities */}
+          {searchResults.activities.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-accent" /> Activities</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {searchResults.activities.map(a => {
+                  const sel = selectedActivities.find(x => x.id === a.id);
+                  return (
+                    <div key={a.id} className={`rounded-xl border p-4 space-y-2 transition cursor-pointer ${sel ? "border-accent bg-accent/5" : "bg-card hover:border-accent/40"}`}
+                      onClick={() => toggleActivity(a)}>
+                      <div className="flex items-start justify-between">
+                        <p className="font-medium text-foreground">{a.activity_name}</p>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${sel ? "border-accent bg-accent" : "border-muted-foreground/30"}`}>
+                          {sel && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                      </div>
+                      {a.description && <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>}
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-foreground">
+                          {fmt(a.price, a.currency)}<span className="text-xs font-normal text-muted-foreground">/{a.price_basis.replace("per_", "")}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />{a.duration_hours}h</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">{a.supplier_name}</span>
+                        <SourceTag email={a.source_email} date={a.source_date} />
+                      </div>
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border shrink-0 ${
-                      doc.status === "indexed"    ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
-                      doc.status === "processing" ? "bg-blue-50 text-blue-600 border-blue-200" :
-                                                    "bg-red-50 text-red-600 border-red-200"
-                    }`}>
-                      {doc.status}
-                    </span>
-                    <button
-                      onClick={() => deleteDocument(doc.id)}
-                      className="opacity-0 group-hover:opacity-100 transition text-muted-foreground hover:text-red-500 p-1"
-                      title="Delete document"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Transfers */}
+          {searchResults.transfers.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-foreground flex items-center gap-2"><Car className="h-4 w-4 text-accent" /> Transfers</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {searchResults.transfers.map(t => {
+                  const sel = selectedTransfers.find(x => x.id === t.id);
+                  return (
+                    <div key={t.id} className={`rounded-xl border p-4 space-y-2 transition cursor-pointer ${sel ? "border-accent bg-accent/5" : "bg-card hover:border-accent/40"}`}
+                      onClick={() => toggleTransfer(t)}>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium text-foreground">{t.transfer_type}</p>
+                          <p className="text-xs text-muted-foreground">{t.route}</p>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${sel ? "border-accent bg-accent" : "border-muted-foreground/30"}`}>
+                          {sel && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t.vehicle_type}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-foreground">{fmt(t.price, t.currency)}<span className="text-xs font-normal text-muted-foreground">/{t.price_basis?.replace("per_", "")}</span></span>
+                        <span className="text-xs text-muted-foreground">{t.supplier_name}</span>
+                      </div>
+                      <SourceTag email={t.source_email} date={t.source_date} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between pt-2">
+            <Btn variant="secondary" onClick={() => setStep(3)}><ChevronLeft className="h-4 w-4" /> Back</Btn>
+            <Btn onClick={handleGenerate} disabled={selectedHotels.length === 0 && selectedActivities.length === 0}>
+              <Sparkles className="h-4 w-4" /> Generate Itinerary
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 5: Generation ── */}
+      {step === 5 && (
+        <div className="space-y-5">
+          <div className="rounded-xl border bg-card p-5">
+            <h2 className="font-semibold text-foreground flex items-center gap-2 mb-4">
+              <Sparkles className="h-4 w-4 text-accent" /> AI Itinerary Generation
+            </h2>
+
+            {generating && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Generating day-by-day itinerary...
+                </div>
+                {streamText && (
+                  <pre className="text-xs text-muted-foreground bg-muted rounded-lg p-4 max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
+                    {streamText}
+                  </pre>
+                )}
+              </div>
+            )}
+
+            {!generating && generatedDays.length > 0 && (
+              <div className="space-y-4">
+                <p className="text-sm text-green-600 flex items-center gap-1.5"><Check className="h-4 w-4" /> Itinerary generated — {generatedDays.length} days</p>
+                {generatedDays.map(day => (
+                  <DayCard key={day.day_number} day={day} editable={false} />
                 ))}
               </div>
             )}
           </div>
-        )}
 
-        {!result && !streamingAnswer ? (
-          /* ── Query form ── */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 rounded-xl border bg-card p-6 space-y-5">
-              <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-accent" />
-                <span className="text-sm font-medium text-foreground">Ask anything about your documents</span>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">What do you need?</label>
-                <textarea
-                  rows={4}
-                  placeholder="e.g. What are the key terms in this contract? Summarise the financial data. What does the Button component do?"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleGenerate(); }}
-                  className="w-full px-4 py-2.5 rounded-lg border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition resize-none"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_PROMPTS.map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setQuery(p)}
-                    className="text-xs px-3 py-1.5 rounded-full border text-muted-foreground hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition"
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Additional context <span className="normal-case text-muted-foreground/60">(optional)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Any constraints, tone, or specifics I should factor in…"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition resize-none"
-                />
-              </div>
-
-              {/* Click-to-upload area (drag handled globally) */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full border-2 border-dashed rounded-xl px-4 py-6 flex flex-col items-center gap-2 text-center hover:border-accent/50 hover:bg-accent/5 transition group"
-              >
-                <div className="h-10 w-10 rounded-full bg-muted group-hover:bg-accent/10 flex items-center justify-center transition">
-                  <Upload className="h-5 w-5 text-muted-foreground group-hover:text-accent transition" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground group-hover:text-foreground transition">
-                    Click to upload, or <span className="text-accent font-medium">drag anywhere on the page</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground/60 mt-0.5">PDF · DOCX · TXT · ZIP</p>
-                </div>
-              </button>
-
-              <button
-                onClick={handleGenerate}
-                disabled={!query.trim() || loading}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {loading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Searching knowledge base…</>
-                ) : (
-                  <><Sparkles className="h-4 w-4" /> Generate answer</>
+          {!generating && (
+            <div className="flex justify-between">
+              <Btn variant="secondary" onClick={() => setStep(4)}><ChevronLeft className="h-4 w-4" /> Back to Selection</Btn>
+              <div className="flex gap-2">
+                {generatedDays.length > 0 && (
+                  <Btn variant="secondary" onClick={handleGenerate}><RefreshCw className="h-4 w-4" /> Regenerate</Btn>
                 )}
-              </button>
-              <p className="text-center text-xs text-muted-foreground/50">⌘ + Enter to generate</p>
+                <Btn onClick={() => setStep(6)} disabled={generatedDays.length === 0}>
+                  Review & Save <ChevronRight className="h-4 w-4" />
+                </Btn>
+              </div>
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Sidebar */}
-            <div className="space-y-4">
-              <div className="rounded-xl border bg-card p-5 space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Data sources</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">PDF · DOCX · TXT · ZIP fully supported.</p>
-                </div>
-                {(["pdf", "email", "web"] as Source[]).map(s => {
-                  const meta = SOURCE_META[s];
-                  const active = sources.includes(s);
-                  const comingSoon = s !== "pdf";
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => !comingSoon && toggleSource(s)}
-                      disabled={comingSoon}
-                      className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg border text-sm transition ${
-                        comingSoon
-                          ? "opacity-40 cursor-not-allowed border-border bg-background text-muted-foreground"
-                          : active
-                          ? "border-accent/40 bg-accent/5 text-foreground"
-                          : "border-border bg-background text-muted-foreground hover:border-accent/20"
-                      }`}
-                    >
-                      <span className={`flex items-center justify-center w-7 h-7 rounded-md border ${meta.color}`}>
-                        {meta.icon}
-                      </span>
-                      <span className="flex-1 text-left">{meta.label}</span>
-                      {comingSoon
-                        ? <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Soon</span>
-                        : (
-                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition ${active ? "border-accent bg-accent" : "border-muted-foreground/40"}`}>
-                            {active && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                        )
-                      }
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="rounded-xl border bg-card p-5 space-y-3">
-                <p className="text-sm font-medium text-foreground">How it works</p>
-                {[
-                  { icon: <Upload className="h-3.5 w-3.5" />,    text: "Upload PDF, DOCX, TXT, or ZIP" },
-                  { icon: <Database className="h-3.5 w-3.5" />,  text: "Files are chunked and vector-embedded" },
-                  { icon: <Bot className="h-3.5 w-3.5" />,       text: "Ask questions in natural language" },
-                  { icon: <Sparkles className="h-3.5 w-3.5" />,  text: "Nemotron retrieves and generates answers" },
-                  { icon: <Quote className="h-3.5 w-3.5" />,     text: "Answers include page and file citations" },
-                ].map(({ icon, text }) => (
-                  <div key={text} className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                    <span className="text-accent shrink-0">{icon}</span>
-                    {text}
+      {/* ── STEP 6: Save ── */}
+      {step === 6 && (
+        <div className="space-y-5">
+          {/* Pricing summary */}
+          <div className="rounded-xl border bg-card p-5 space-y-4">
+            <h2 className="font-semibold text-foreground flex items-center gap-2"><DollarSign className="h-4 w-4 text-accent" /> Pricing Summary</h2>
+            <div className="space-y-2 text-sm">
+              {[
+                { label: "Hotel Cost", value: hotelCost, note: `${selectedHotels[0]?.hotel_name || "—"} × ${form.nights}N` },
+                { label: "Activity Cost", value: activityCost, note: `${selectedActivities.length} activities` },
+                { label: "Transfer Cost", value: transferCost, note: `${selectedTransfers.length} transfers` },
+              ].map(row => (
+                <div key={row.label} className="flex items-center justify-between py-2 border-b border-border/50">
+                  <div>
+                    <p className="text-foreground">{row.label}</p>
+                    <p className="text-xs text-muted-foreground">{row.note}</p>
                   </div>
-                ))}
+                  <p className="font-medium text-foreground">{fmt(row.value, form.currency)}</p>
+                </div>
+              ))}
+              <div className="flex items-center justify-between py-2 border-b border-border font-semibold">
+                <p>Supplier Total</p>
+                <p>{fmt(hotelCost + activityCost + transferCost, form.currency)}</p>
               </div>
+              <div className="flex items-center justify-between py-2 text-lg font-bold text-foreground">
+                <p>Total (before markup)</p>
+                <p>{fmt(hotelCost + activityCost + transferCost, form.currency)}</p>
+              </div>
+              <p className="text-xs text-muted-foreground">Markup and discounts can be applied after saving.</p>
             </div>
           </div>
-        ) : (
-          /* ── Result view ── */
-          <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h2 className="text-lg font-serif text-foreground truncate max-w-xl">{query}</h2>
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  {sources.map(s => {
-                    const meta = SOURCE_META[s];
-                    return (
-                      <span key={s} className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${meta.color}`}>
-                        {meta.icon}{meta.label}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border text-muted-foreground hover:text-foreground hover:border-foreground/20 transition"
-                >
-                  <Upload className="h-3.5 w-3.5" /> Upload
-                </button>
-                <button
-                  onClick={handleReset}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border text-muted-foreground hover:text-foreground hover:border-foreground/20 transition"
-                >
-                  <Plus className="h-3.5 w-3.5" /> New query
-                </button>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Answer */}
-              <div className="lg:col-span-3 rounded-xl border bg-card overflow-hidden">
-                <div className="px-6 py-4 border-b bg-muted/30 flex items-center gap-2">
-                  <Bot className="h-4 w-4 text-accent" />
-                  <h3 className="text-sm font-medium text-foreground">Answer</h3>
-                  {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-auto" />}
-                </div>
-                <div className="px-6 py-5">
-                  {streamingAnswer && !result ? (
-                    <div className="text-sm leading-7 text-foreground whitespace-pre-wrap">
-                      {streamingAnswer}
-                      <span className="inline-block w-1.5 h-4 bg-accent/70 animate-pulse ml-0.5 align-middle" />
-                    </div>
-                  ) : result ? (
-                    <AnswerMarkdown content={result.answer} />
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Citations */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">Sources cited</p>
-                {loading && !result ? (
-                  <div className="rounded-xl border bg-card p-4 text-xs text-muted-foreground flex items-center gap-2">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Retrieving…
-                  </div>
-                ) : result && result.citations.length === 0 ? (
-                  <div className="rounded-xl border bg-card p-4 text-xs text-muted-foreground">
-                    No specific passages cited.
-                  </div>
-                ) : result ? (
-                  result.citations.map((c, i) => {
-                    const meta = SOURCE_META[c.source] || SOURCE_META.pdf;
-                    const isCode = !c.page || c.page === 0;
-                    return (
-                      <div key={i} className="rounded-xl border bg-card p-4 space-y-2">
-                        <div className="flex items-start gap-2">
-                          <span className={`flex items-center justify-center w-6 h-6 rounded-md border shrink-0 ${meta.color}`}>
-                            {meta.icon}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-foreground truncate" title={c.title}>{c.title}</p>
-                            {!isCode && c.page && c.page > 0 && (
-                              <p className="text-[10px] text-muted-foreground">Page {c.page}</p>
-                            )}
-                          </div>
-                        </div>
-                        {c.snippet && (
-                          <div className="flex gap-1.5">
-                            <Quote className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
-                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">{c.snippet}</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                ) : null}
-              </div>
+          {/* Trip summary */}
+          <div className="rounded-xl border bg-card p-5 space-y-3">
+            <h2 className="font-semibold text-foreground">Trip Summary</h2>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div><p className="text-muted-foreground text-xs">Client</p><p className="font-medium">{form.client_name}</p></div>
+              <div><p className="text-muted-foreground text-xs">Destination</p><p className="font-medium">{form.destination}</p></div>
+              <div><p className="text-muted-foreground text-xs">Travelers</p><p className="font-medium">{form.adults}A {form.children > 0 ? `${form.children}C` : ""}</p></div>
+              <div><p className="text-muted-foreground text-xs">Dates</p><p className="font-medium">{fmtDate(form.start_date)} – {fmtDate(form.end_date)}</p></div>
+              <div><p className="text-muted-foreground text-xs">Nights</p><p className="font-medium">{form.nights} nights</p></div>
+              <div><p className="text-muted-foreground text-xs">Hotel</p><p className="font-medium">{selectedHotels[0]?.hotel_name || "—"}</p></div>
             </div>
           </div>
-        )}
-      </div>
-    </DashboardLayout>
+
+          <div className="flex justify-between">
+            <Btn variant="secondary" onClick={() => setStep(5)}><ChevronLeft className="h-4 w-4" /> Back</Btn>
+            <div className="flex gap-2">
+              <Btn variant="secondary" loading={saving} onClick={() => handleSave("draft")}><Save className="h-4 w-4" /> Save as Draft</Btn>
+              <Btn loading={saving} onClick={() => handleSave("generated")}><Check className="h-4 w-4" /> Save & Review</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
-};
+}
 
-export default AIAssistant;
+// ─── Day card (used in wizard + detail view) ──────────────────────────────────
+function DayCard({ day, editable, onUpdate }: {
+  day: DayPlan;
+  editable: boolean;
+  onUpdate?: (updated: DayPlan) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const icons: Record<string, React.ReactNode> = {
+    hotel: <Hotel className="h-3.5 w-3.5" />,
+    activity: <Activity className="h-3.5 w-3.5" />,
+    transfer: <Car className="h-3.5 w-3.5" />,
+    note: <FileText className="h-3.5 w-3.5" />,
+    free: <Clock className="h-3.5 w-3.5" />,
+  };
+  const itemColors: Record<string, string> = {
+    hotel: "bg-blue-50 text-blue-600",
+    activity: "bg-emerald-50 text-emerald-600",
+    transfer: "bg-amber-50 text-amber-600",
+    note: "bg-gray-50 text-gray-500",
+    free: "bg-purple-50 text-purple-600",
+  };
+
+  return (
+    <div className="rounded-xl border bg-background overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition"
+        onClick={() => setCollapsed(v => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded-full">
+            Day {day.day_number}
+          </span>
+          <span className="font-medium text-foreground text-sm">{day.title}</span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          {day.date && <span>{fmtDate(day.date)}</span>}
+          {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        </div>
+      </button>
+      {!collapsed && (
+        <div className="p-4 space-y-2">
+          {day.items.map((item, i) => (
+            <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20">
+              <div className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${itemColors[item.type] || "bg-gray-50 text-gray-500"}`}>
+                {icons[item.type] || <FileText className="h-3.5 w-3.5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  {item.time && <span className="text-[10px] text-muted-foreground font-mono">{item.time}</span>}
+                  <p className="text-sm font-medium text-foreground">{item.title}</p>
+                </div>
+                {item.description && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.description}</p>}
+                {item.supplier && <p className="text-[10px] text-muted-foreground mt-1">{item.supplier}</p>}
+                {item.notes && <p className="text-[10px] text-blue-600 mt-1 italic">{item.notes}</p>}
+              </div>
+            </div>
+          ))}
+          {day.items.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">No items for this day</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ITINERARY DETAIL
+// ═══════════════════════════════════════════════════════════════════════════════
+function ItineraryDetail({ id, onBack }: { id: string; onBack: () => void }) {
+  const [data, setData] = useState<ItineraryFull | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"itinerary" | "pricing" | "proposal">("itinerary");
+  const [saving, setSaving] = useState(false);
+  const [markup, setMarkup] = useState({ type: "percentage", value: 0 });
+  const [discount, setDiscount] = useState(0);
+  const [tax, setTax] = useState(0);
+  const [editingDay, setEditingDay] = useState<number | null>(null);
+  const [days, setDays] = useState<DayPlan[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const auth = await authHeader();
+        const resp = await fetch(`${API}/${id}`, { headers: { Authorization: auth } });
+        const result = await resp.json();
+        if (result.success) {
+          setData(result.itinerary);
+          setDays(result.itinerary.itinerary_content || []);
+          setMarkup({ type: result.itinerary.markup_type || "percentage", value: result.itinerary.markup_value || 0 });
+          setDiscount(result.itinerary.discount_amount || 0);
+          setTax(result.itinerary.tax_amount || 0);
+        }
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    })();
+  }, [id]);
+
+  const saveChanges = async (newStatus?: string) => {
+    if (!data) return;
+    setSaving(true);
+    try {
+      const auth = await authHeader();
+      await fetch(`${API}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: auth },
+        body: JSON.stringify({
+          id: data.id,
+          client_name: data.client_name,
+          client_email: data.client_email,
+          client_phone: data.client_phone,
+          adults: data.adults,
+          children: data.children,
+          special_requirements: data.special_requirements,
+          destination: data.destination,
+          departure_city: data.departure_city,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          nights: data.nights,
+          budget: data.budget,
+          currency: data.currency,
+          hotel_category: data.hotel_category,
+          meal_plan: data.meal_plan,
+          trip_type: data.trip_type,
+          itinerary_content: days,
+          selected_hotels: data.selected_hotels || [],
+          selected_activities: data.selected_activities || [],
+          selected_transfers: data.selected_transfers || [],
+          hotel_cost: data.hotel_cost,
+          activity_cost: data.activity_cost,
+          transfer_cost: data.transfer_cost,
+          other_cost: data.other_cost,
+          markup_type: markup.type,
+          markup_value: markup.value,
+          discount_amount: discount,
+          tax_amount: tax,
+          status: newStatus || data.status,
+        }),
+      });
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  };
+
+  // Pricing calculations
+  const supplierTotal = data ? (data.hotel_cost + data.activity_cost + data.transfer_cost + data.other_cost) : 0;
+  const markupAmt = markup.type === "percentage" ? supplierTotal * (markup.value / 100) : markup.value;
+  const finalPrice = Math.max(0, supplierTotal + markupAmt - discount + tax);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" /> Loading itinerary...
+      </div>
+    );
+  }
+
+  if (!data) return (
+    <div className="text-center py-20 text-muted-foreground">
+      <p>Itinerary not found.</p>
+      <Btn variant="secondary" size="sm" className="mt-3" onClick={onBack}>Back</Btn>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-foreground">{data.client_name} — {data.destination}</h1>
+              <StatusBadge status={data.status} />
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {fmtDate(data.start_date)} – {fmtDate(data.end_date)} · {data.nights} nights · {data.adults}A{data.children > 0 ? ` ${data.children}C` : ""}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Btn variant="secondary" size="sm" loading={saving} onClick={() => saveChanges()}><Save className="h-3.5 w-3.5" /> Save</Btn>
+          <Btn variant="secondary" size="sm" onClick={() => saveChanges("sent")}><Send className="h-3.5 w-3.5" /> Mark Sent</Btn>
+          <Btn size="sm" onClick={() => saveChanges("approved")}><Check className="h-3.5 w-3.5" /> Approve</Btn>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-border">
+        {(["itinerary", "pricing", "proposal"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`px-4 py-2.5 text-sm font-medium capitalize transition border-b-2 -mb-px ${
+              activeTab === t
+                ? "border-accent text-accent"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Itinerary tab ── */}
+      {activeTab === "itinerary" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">{days.length} days · Click a day to expand</p>
+          </div>
+
+          {days.length === 0 ? (
+            <div className="rounded-xl border bg-card p-10 text-center text-muted-foreground">
+              <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-20" />
+              <p className="text-sm">No itinerary generated yet.</p>
+            </div>
+          ) : (
+            days.map(day => <DayCard key={day.day_number} day={day} editable={true} />)
+          )}
+
+          {/* Selected items summary */}
+          {(data.selected_hotels?.length > 0 || data.selected_activities?.length > 0 || data.selected_transfers?.length > 0) && (
+            <div className="rounded-xl border bg-card p-5 space-y-4">
+              <h3 className="font-medium text-foreground">Selected Supplier Items</h3>
+              {data.selected_hotels?.map(h => (
+                <div key={h.id} className="flex items-center justify-between py-2 border-b border-border/50 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Hotel className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="font-medium">{h.hotel_name}</span>
+                    <Stars n={h.star_rating} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-muted-foreground">{h.supplier_name}</span>
+                    <span className="font-medium">{fmt(h.price_per_night, h.currency)}/night</span>
+                    <SourceTag email={h.source_email} date={h.source_date} />
+                  </div>
+                </div>
+              ))}
+              {data.selected_activities?.map(a => (
+                <div key={a.id} className="flex items-center justify-between py-2 border-b border-border/50 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="font-medium">{a.activity_name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-muted-foreground">{a.supplier_name}</span>
+                    <span className="font-medium">{fmt(a.price, a.currency)}/{a.price_basis?.replace("per_", "")}</span>
+                    <SourceTag email={a.source_email} date={a.source_date} />
+                  </div>
+                </div>
+              ))}
+              {data.selected_transfers?.map(t => (
+                <div key={t.id} className="flex items-center justify-between py-2 border-b border-border/50 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Car className="h-3.5 w-3.5 text-amber-500" />
+                    <span className="font-medium">{t.transfer_type}</span>
+                    <span className="text-muted-foreground text-xs">{t.route}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-muted-foreground">{t.supplier_name}</span>
+                    <span className="font-medium">{fmt(t.price, t.currency)}</span>
+                    <SourceTag email={t.source_email} date={t.source_date} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Pricing tab ── */}
+      {activeTab === "pricing" && (
+        <div className="grid grid-cols-2 gap-6">
+          <div className="rounded-xl border bg-card p-5 space-y-4">
+            <h3 className="font-medium text-foreground">Cost Breakdown</h3>
+            <div className="space-y-3 text-sm">
+              {[
+                { label: "Hotel Cost", value: data.hotel_cost, sub: `${data.nights} nights` },
+                { label: "Activity Cost", value: data.activity_cost, sub: `${data.selected_activities?.length || 0} activities` },
+                { label: "Transfer Cost", value: data.transfer_cost, sub: `${data.selected_transfers?.length || 0} transfers` },
+                { label: "Other", value: data.other_cost || 0, sub: "" },
+              ].map(row => (
+                <div key={row.label} className="flex justify-between items-center py-2 border-b border-border/50">
+                  <div>
+                    <p className="text-foreground">{row.label}</p>
+                    {row.sub && <p className="text-xs text-muted-foreground">{row.sub}</p>}
+                  </div>
+                  <p className="font-medium">{fmt(row.value, data.currency)}</p>
+                </div>
+              ))}
+              <div className="flex justify-between items-center py-2 border-b border-border font-semibold">
+                <p>Supplier Total</p>
+                <p>{fmt(supplierTotal, data.currency)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-5 space-y-4">
+            <h3 className="font-medium text-foreground">Markup & Final Price</h3>
+            <div className="space-y-4">
+              <Field label="Markup Type">
+                <Select value={markup.type} onChange={e => setMarkup(m => ({ ...m, type: e.target.value }))}>
+                  <option value="percentage">Percentage (%)</option>
+                  <option value="fixed">Fixed Amount</option>
+                </Select>
+              </Field>
+              <Field label={markup.type === "percentage" ? "Markup %" : `Markup Amount (${data.currency})`}>
+                <Input type="number" value={markup.value} onChange={e => setMarkup(m => ({ ...m, value: parseFloat(e.target.value) || 0 }))} />
+              </Field>
+              <Field label={`Discount (${data.currency})`}>
+                <Input type="number" value={discount} onChange={e => setDiscount(parseFloat(e.target.value) || 0)} />
+              </Field>
+              <Field label={`Tax (${data.currency})`}>
+                <Input type="number" value={tax} onChange={e => setTax(parseFloat(e.target.value) || 0)} />
+              </Field>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-border text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Supplier Total</span><span>{fmt(supplierTotal, data.currency)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Markup ({markup.type === "percentage" ? `${markup.value}%` : "fixed"})</span>
+                <span>+ {fmt(markupAmt, data.currency)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount</span><span>- {fmt(discount, data.currency)}</span>
+                </div>
+              )}
+              {tax > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Tax</span><span>+ {fmt(tax, data.currency)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-lg text-foreground border-t border-border pt-2">
+                <span>Final Price</span><span>{fmt(finalPrice, data.currency)}</span>
+              </div>
+            </div>
+
+            <Btn className="w-full" loading={saving} onClick={() => saveChanges()}>
+              <Save className="h-4 w-4" /> Save Pricing
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── Proposal tab ── */}
+      {activeTab === "proposal" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Client-facing proposal preview</p>
+            <div className="flex gap-2">
+              <Btn variant="secondary" size="sm" onClick={() => {
+                const text = generateProposalText(data, days, finalPrice);
+                navigator.clipboard.writeText(text);
+              }}><Copy className="h-3.5 w-3.5" /> Copy Text</Btn>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-white dark:bg-card p-8 space-y-6 font-serif">
+            {/* Proposal header */}
+            <div className="text-center border-b border-border pb-6">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Travel Proposal</p>
+              <h1 className="text-2xl font-bold text-foreground">{data.destination} Itinerary</h1>
+              <p className="text-muted-foreground mt-1">Prepared for {data.client_name}</p>
+              <p className="text-sm text-muted-foreground">{fmtDate(data.start_date)} – {fmtDate(data.end_date)} · {data.nights} Nights</p>
+            </div>
+
+            {/* Trip overview */}
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              {[
+                { label: "Travelers", value: `${data.adults} Adult(s)${data.children > 0 ? `, ${data.children} Child(ren)` : ""}` },
+                { label: "Accommodation", value: data.selected_hotels?.[0]?.hotel_name || "—" },
+                { label: "Meal Plan", value: data.meal_plan || "—" },
+                { label: "Hotel Category", value: data.hotel_category || "—" },
+                { label: "Transfer", value: data.transport_preference || "Private" },
+                { label: "Trip Type", value: data.trip_type || "Leisure" },
+              ].map(item => (
+                <div key={item.label} className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">{item.label}</p>
+                  <p className="font-medium text-foreground mt-0.5">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Day-by-day */}
+            {days.length > 0 && (
+              <div>
+                <h2 className="text-base font-bold text-foreground mb-3 uppercase tracking-wide text-xs text-muted-foreground">Day-by-Day Itinerary</h2>
+                <div className="space-y-4">
+                  {days.map(day => (
+                    <div key={day.day_number} className="border-l-2 border-accent/30 pl-4 space-y-1">
+                      <p className="font-bold text-foreground text-sm">{day.title}</p>
+                      {day.date && <p className="text-xs text-muted-foreground">{fmtDate(day.date)}</p>}
+                      <ul className="space-y-1">
+                        {day.items.map((item, i) => (
+                          <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                            <span className="text-muted-foreground mt-0.5">•</span>
+                            <span>{item.title}{item.description ? ` — ${item.description}` : ""}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pricing */}
+            <div className="border-t border-border pt-4">
+              <h2 className="text-xs uppercase tracking-wide text-muted-foreground font-bold mb-3">Package Price</h2>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground space-y-1">
+                  {data.selected_hotels?.[0] && <p>• Accommodation: {data.nights} nights at {data.selected_hotels[0].hotel_name}</p>}
+                  {data.selected_activities?.map(a => <p key={a.id}>• {a.activity_name}</p>)}
+                  {data.selected_transfers?.map(t => <p key={t.id}>• {t.transfer_type}: {t.route}</p>)}
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground">{fmt(finalPrice, data.currency)}</p>
+                  <p className="text-xs text-muted-foreground">for {data.adults} adult(s)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            {data.special_requests && (
+              <div className="bg-muted/30 rounded-lg p-4 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-1">Special Arrangements</p>
+                <p>{data.special_requests}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function generateProposalText(data: ItineraryFull, days: DayPlan[], finalPrice: number): string {
+  let text = `TRAVEL PROPOSAL\n================\n\n`;
+  text += `Client: ${data.client_name}\n`;
+  text += `Destination: ${data.destination}\n`;
+  text += `Dates: ${fmtDate(data.start_date)} – ${fmtDate(data.end_date)} (${data.nights} nights)\n`;
+  text += `Travelers: ${data.adults} adult(s)${data.children > 0 ? `, ${data.children} child(ren)` : ""}\n\n`;
+  text += `ITINERARY\n---------\n`;
+  days.forEach(day => {
+    text += `\n${day.title}\n`;
+    day.items.forEach(item => {
+      text += `  • ${item.title}${item.description ? ` — ${item.description}` : ""}\n`;
+    });
+  });
+  text += `\nPACKAGE PRICE: ${fmt(finalPrice, data.currency)}\n`;
+  return text;
+}
