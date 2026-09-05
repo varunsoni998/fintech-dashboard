@@ -28,6 +28,10 @@ from .auth import (
 )
 from .ingestion import run_ingestion
 
+# Frontend URL — where to redirect after OAuth callback
+# Defaults to Vercel frontend; override with FRONTEND_URL env var
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://businessos-roan-iota.vercel.app")
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -98,11 +102,11 @@ def oauth_callback(
     Exchanges code for tokens, stores them, redirects to frontend.
     """
     if error:
-        return RedirectResponse(url=f"/itineraries?gmail_error={error}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error={error}")
 
     user_id = state
     if not user_id:
-        return RedirectResponse(url="/itineraries?gmail_error=missing_state")
+        return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error=missing_state")
 
     try:
         tokens = exchange_code_for_tokens(code)
@@ -114,11 +118,11 @@ def oauth_callback(
         save_tokens(user_id, tokens, gmail_email)
 
         logger.info("Gmail connected for user %s: %s", user_id, gmail_email)
-        return RedirectResponse(url="/itineraries?gmail_connected=1")
+        return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_connected=1")
 
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
-        return RedirectResponse(url=f"/itineraries?gmail_error={str(e)[:100]}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error={str(e)[:100]}")
 
 
 # ── Manual sync ───────────────────────────────────────────────────────────────
