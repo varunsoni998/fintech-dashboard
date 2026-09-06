@@ -6,32 +6,35 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { DarkModeContext, useDarkModeState } from "@/hooks/useDarkMode";
 
-import Login           from "./pages/Login";
-import Index           from "./pages/index";
-import Analytics       from "./pages/Analytics";
-import Leads           from "./pages/Leads";
-import Suppliers       from "./pages/suppliers";
-import Itineraries     from "./pages/Iteneries";
-import KnowledgeBase   from "./pages/KnowledgeBase";
-import RagModel        from "./pages/RagPage";
-import Operations      from "./pages/Operations";
-import Content         from "./pages/Content";
-import Chat            from "./pages/Chat";
-import NotFound        from "./pages/Notfound";
-import CampaignDesign  from "./pages/CampaignDesigner";
-import Scheduling      from "./pages/Scheduling";
-import ClientPMS       from "./pages/Client and pms";
-import FinanceKPIs     from "./pages/finance and  kpis";
-import LeadAnalytics   from "./pages/Leadanalytics";
-import WebAnalytics    from "./pages/Web analytics";
+import Login            from "./pages/Login";
+import Index            from "./pages/index";
+import Analytics        from "./pages/Analytics";
+import Leads            from "./pages/Leads";
+import Suppliers        from "./pages/suppliers";
+import Itineraries      from "./pages/Iteneries";
+import KnowledgeBase    from "./pages/KnowledgeBase";
+import RagModel         from "./pages/RagPage";
+import Operations       from "./pages/Operations";
+import Content          from "./pages/Content";
+import Chat             from "./pages/Chat";
+import NotFound         from "./pages/Notfound";
+import CampaignDesign   from "./pages/CampaignDesigner";
+import Scheduling       from "./pages/Scheduling";
+import ClientPMS        from "./pages/Client and pms";
+import FinanceKPIs      from "./pages/finance and  kpis";
+import LeadAnalytics    from "./pages/Leadanalytics";
+import WebAnalytics     from "./pages/Web analytics";
 import SupplierReachout from "./pages/SupplierReachout";
-import ActiveDeals     from "./pages/ActiveDeals";
-import MXAI            from "./pages/MXAI";
-import TodoPage        from "./pages/TodoPage";
-import BookMeeting     from "@/pages/BookMeeting";
-import Creatives       from "./pages/Creatives";
-import Automations     from "./pages/Automations";
+import ActiveDeals      from "./pages/ActiveDeals";
+import MXAI             from "./pages/MXAI";
+import TodoPage         from "./pages/TodoPage";
+import BookMeeting      from "@/pages/BookMeeting";
+import Creatives        from "./pages/Creatives";
+import Automations      from "./pages/Automations";
+import Profile          from "./pages/Profile";
+import QuoteGenerator   from "./pages/QuoteGenerator";
 
 const queryClient = new QueryClient();
 
@@ -40,11 +43,12 @@ function AppRoutes() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#E8E8F2" }}>
+      <div className="min-h-screen flex items-center justify-center"
+        style={{ background: "var(--neu-base, #E8E8F2)" }}>
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 rounded-2xl flex items-center justify-center animate-pulse"
-            style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)", boxShadow: "6px 6px 14px #C4C4D4, -6px -6px 14px #FFFFFF" }} />
-          <p className="text-sm" style={{ color: "#9090A8" }}>Loading...</p>
+            style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)" }} />
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
@@ -54,14 +58,14 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*"      element={<Navigate to="/login" replace />} />
       </Routes>
     );
   }
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full" style={{ background: "#E8E8F2" }}>
+      <div className="flex min-h-screen w-full" style={{ background: "var(--neu-base, #E8E8F2)" }}>
         <DashboardSidebar />
         <Routes>
           <Route path="/"                  element={<Index />} />
@@ -88,10 +92,22 @@ function AppRoutes() {
           <Route path="/automations"       element={<Automations />} />
           <Route path="/book"              element={<BookMeeting />} />
           <Route path="/creatives"         element={<Creatives />} />
+          <Route path="/profile"           element={<Profile />} />
+          <Route path="/quotes"            element={<QuoteGenerator />} />
           <Route path="*"                  element={<NotFound />} />
         </Routes>
       </div>
     </SidebarProvider>
+  );
+}
+
+// Wraps everything so DarkModeContext is available in every component
+function AppWithDarkMode() {
+  const darkMode = useDarkModeState();
+  return (
+    <DarkModeContext.Provider value={darkMode}>
+      <AppRoutes />
+    </DarkModeContext.Provider>
   );
 }
 
@@ -101,7 +117,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppRoutes />
+        <AppWithDarkMode />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
