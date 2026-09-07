@@ -1,15 +1,8 @@
 """
-Gmail integration API routes.
-Mounted at /api/gmail/...
+Gmail integration API routes — mounted at /api/gmail/...
 
-Endpoints:
-  GET  /api/gmail/status              — connection status + token info
-  GET  /api/gmail/oauth/url           — get OAuth2 authorization URL
-  GET  /api/gmail/oauth/callback      — OAuth2 callback (redirect from Google)
-  POST /api/gmail/sync                — trigger manual sync (background)
-  GET  /api/gmail/sync/status/{job}   — poll sync job progress
-  POST /api/gmail/disconnect          — revoke tokens
-  GET  /api/gmail/processed           — list processed emails
+Auto-polling starts immediately when Gmail is connected.
+No manual sync needed — emails are fetched every 10 minutes automatically.
 """
 import json
 import logging
@@ -27,16 +20,17 @@ from .auth import (
     save_tokens, get_tokens, get_valid_access_token, disconnect,
     GOOGLE_CLIENT_ID,
 )
-from .ingestion import run_ingestion
-
-# Frontend URL — where to redirect after OAuth callback
-# Defaults to Vercel frontend; override with FRONTEND_URL env var
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://businessos-roan-iota.vercel.app")
+from .ingestion import (
+    run_ingestion, start_auto_poll, stop_auto_poll,
+    get_auto_poll_status, _latest_result, _sync_log,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# In-memory sync job tracker
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://businessos-roan-iota.vercel.app")
+
+# In-memory manual sync jobs (for on-demand syncs in addition to auto-poll)
 sync_jobs: dict[str, dict] = {}
 
 
@@ -59,24 +53,40 @@ def _get_user_id(authorization: Optional[str]) -> str:
 
 @router.get("/status")
 def gmail_status(authorization: Optional[str] = Header(None)):
-    """Return Gmail connection status for the current user."""
     user_id = _get_user_id(authorization)
 
     if not GOOGLE_CLIENT_ID:
         return {
             "connected": False,
             "configured": False,
-            "message": "Google OAuth not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env",
+            "message": "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env",
         }
 
     tokens = get_tokens(user_id)
     if not tokens or not tokens.get("connected"):
         return {"connected": False, "configured": True, "gmail_email": None}
 
+    poll_status = get_auto_poll_status()
     return {
-        "connected": True,
-        "configured": True,
-        "gmail_email": tokens.get("gmail_email"),
+        "connected":    True,
+        "configured":   True,
+        "gmail_email":  tokens.get("gmail_email"),
+        "auto_polling": poll_status["running"],
+        "is_syncing":   poll_status["is_syncing"],
+        "interval_min": poll_status["interval_s"] // 60,
+        "latest":       poll_status["latest"],
+    }
+
+
+@router.get("/live-log")
+def live_log(authorization: Optional[str] = Header(None)):
+    """Return the latest sync log lines — frontend polls this for live updates."""
+    _get_user_id(authorization)
+    poll = get_auto_poll_status()
+    return {
+        "is_syncing": poll["is_syncing"],
+        "log":        poll["log"],
+        "latest":     poll["latest"],
     }
 
 
@@ -84,12 +94,10 @@ def gmail_status(authorization: Optional[str] = Header(None)):
 
 @router.get("/oauth/url")
 def get_oauth_url(authorization: Optional[str] = Header(None)):
-    """Return the Google OAuth authorization URL."""
     user_id = _get_user_id(authorization)
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=400, detail="Google OAuth not configured")
-    url = get_auth_url(state=user_id)
-    return {"url": url}
+    return {"url": get_auth_url(state=user_id)}
 
 
 @router.get("/oauth/callback")
@@ -98,10 +106,6 @@ def oauth_callback(
     state: str = Query(""),
     error: str = Query(None),
 ):
-    """
-    Google OAuth2 callback.
-    Exchanges code for tokens, stores them, redirects to frontend.
-    """
     if error:
         return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error={error}")
 
@@ -117,8 +121,11 @@ def oauth_callback(
 
         gmail_email = get_gmail_user_email(access_token)
         save_tokens(user_id, tokens, gmail_email)
-
         logger.info("Gmail connected for user %s: %s", user_id, gmail_email)
+
+        # Start auto-polling immediately after connect
+        start_auto_poll(user_id)
+
         return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_connected=1")
 
     except Exception as e:
@@ -126,62 +133,63 @@ def oauth_callback(
         return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error={str(e)[:100]}")
 
 
-# ── Manual sync ───────────────────────────────────────────────────────────────
+# ── Auto-poll control ─────────────────────────────────────────────────────────
 
-@router.post("/sync")
-def trigger_sync(
-    authorization: Optional[str] = Header(None),
-    max_emails: int = Query(20, ge=1, le=100),
-):
-    """Trigger a manual Gmail sync in a background thread."""
+@router.post("/start-polling")
+def start_polling(authorization: Optional[str] = Header(None)):
+    """Explicitly start auto-polling (called on app boot if already connected)."""
     user_id = _get_user_id(authorization)
-
     access_token = get_valid_access_token(user_id)
     if not access_token:
-        raise HTTPException(
-            status_code=400,
-            detail="Gmail not connected. Please connect your Gmail account first.",
-        )
+        raise HTTPException(status_code=400, detail="Gmail not connected")
+    start_auto_poll(user_id)
+    return {"success": True, "message": "Auto-polling started"}
+
+
+@router.post("/stop-polling")
+def stop_polling(authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    stop_auto_poll()
+    return {"success": True, "message": "Auto-polling stopped"}
+
+
+# ── Manual trigger (in addition to auto-poll) ─────────────────────────────────
+
+@router.post("/sync-now")
+def sync_now(
+    authorization: Optional[str] = Header(None),
+    max_emails: int = Query(50, ge=1, le=200),
+):
+    """Trigger an immediate sync (runs alongside auto-poll, not instead of it)."""
+    user_id = _get_user_id(authorization)
+    access_token = get_valid_access_token(user_id)
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Gmail not connected")
 
     job_id = str(uuid.uuid4())
-    sync_jobs[job_id] = {
-        "status": "running",
-        "progress": "Starting sync...",
-        "log": [],
-        "result": None,
-    }
+    sync_jobs[job_id] = {"status": "running", "progress": "Starting...", "log": [], "result": None}
 
     def _run():
         log_lines = []
-
-        def _update(msg: str):
+        def _upd(msg: str):
             log_lines.append(msg)
             sync_jobs[job_id]["progress"] = msg
             sync_jobs[job_id]["log"] = log_lines[-30:]
 
         try:
-            result = run_ingestion(user_id, max_emails=max_emails, status_callback=_update)
+            result = run_ingestion(user_id, max_emails=max_emails, status_callback=_upd)
             sync_jobs[job_id]["status"] = "done"
             sync_jobs[job_id]["result"] = result.to_dict()
-            sync_jobs[job_id]["log"] = result.log[-50:]
-            sync_jobs[job_id]["progress"] = (
-                f"Done — {result.hotels_added} hotels, "
-                f"{result.activities_added} activities, "
-                f"{result.transfers_added} transfers added"
-            )
         except Exception as e:
-            logger.error("Sync job failed: %s", e)
             sync_jobs[job_id]["status"] = "error"
-            sync_jobs[job_id]["progress"] = f"Error: {e}"
+            sync_jobs[job_id]["progress"] = str(e)
 
     threading.Thread(target=_run, daemon=True).start()
-
     return {"success": True, "job_id": job_id}
 
 
 @router.get("/sync/status/{job_id}")
 def sync_status(job_id: str):
-    """Poll the status of a sync job."""
     job = sync_jobs.get(job_id)
     if not job:
         return {"success": False, "error": "Job not found"}
@@ -192,17 +200,16 @@ def sync_status(job_id: str):
 
 @router.post("/disconnect")
 def gmail_disconnect(authorization: Optional[str] = Header(None)):
-    """Revoke Gmail access and delete stored tokens."""
     user_id = _get_user_id(authorization)
+    stop_auto_poll()
     disconnect(user_id)
-    return {"success": True, "message": "Gmail disconnected"}
+    return {"success": True, "message": "Gmail disconnected and auto-polling stopped"}
 
 
 # ── Processed emails log ──────────────────────────────────────────────────────
 
 @router.get("/processed")
 def list_processed(authorization: Optional[str] = Header(None)):
-    """List recently processed Gmail messages."""
     user_id = _get_user_id(authorization)
     try:
         result = (
@@ -210,7 +217,7 @@ def list_processed(authorization: Optional[str] = Header(None)):
             .select("*")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
-            .limit(50)
+            .limit(100)
             .execute()
         )
         return {"success": True, "emails": result.data or []}

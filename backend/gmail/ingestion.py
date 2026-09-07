@@ -1,35 +1,85 @@
 """
-Gmail ingestion pipeline.
-Orchestrates: fetch → classify → extract → validate → store.
-Can be triggered manually via API or run as a background job.
+Gmail ingestion pipeline — runs automatically in background.
+Polls every POLL_INTERVAL_SECONDS (default 600 = 10 minutes).
+Also populates the `suppliers` table so Supplier Reachout / Active Deals
+pages stay in sync with incoming emails.
 """
 import logging
+import time
+import threading
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Callable
 
 from supabase_client import supabase
-
 from .auth import get_valid_access_token
 from .fetcher import (
-    list_messages,
-    get_message,
-    get_attachment,
-    extract_email_body,
-    extract_attachments,
-    get_message_metadata,
-    get_already_processed_ids,
-    mark_processed,
-    SUPPLIER_QUERY,
+    list_messages, get_message, get_attachment,
+    extract_email_body, extract_attachments,
+    get_message_metadata, get_already_processed_ids,
+    mark_processed, SUPPLIER_QUERY,
 )
 from .extractor import classify_email, extract_supplier_data, extract_text_from_attachment
 
 logger = logging.getLogger(__name__)
 
-# Categories that contain extractable supplier data
+POLL_INTERVAL_SECONDS = 600   # poll every 10 minutes
 EXTRACTABLE_CATEGORIES = {
     "HOTEL_RATE", "ACTIVITY_RATE", "TRANSFER_RATE",
     "CONTRACT", "GENERAL_SUPPLIER",
 }
+
+# Global auto-poll state
+_auto_poll_thread: Optional[threading.Thread] = None
+_auto_poll_stop   = threading.Event()
+_latest_result: dict = {}
+_is_syncing       = False
+_sync_log: list[str] = []
+
+
+def get_auto_poll_status() -> dict:
+    return {
+        "running":     _auto_poll_thread is not None and _auto_poll_thread.is_alive(),
+        "is_syncing":  _is_syncing,
+        "latest":      _latest_result,
+        "log":         _sync_log[-30:],
+        "interval_s":  POLL_INTERVAL_SECONDS,
+    }
+
+
+def start_auto_poll(user_id: str) -> None:
+    """Start the background auto-poll thread for a user. Idempotent."""
+    global _auto_poll_thread
+    if _auto_poll_thread and _auto_poll_thread.is_alive():
+        logger.info("[Gmail] Auto-poll already running")
+        return
+    _auto_poll_stop.clear()
+    _auto_poll_thread = threading.Thread(
+        target=_auto_poll_loop,
+        args=(user_id,),
+        daemon=True,
+        name="gmail-auto-poll",
+    )
+    _auto_poll_thread.start()
+    logger.info("[Gmail] Auto-poll started for user %s (interval %ds)", user_id, POLL_INTERVAL_SECONDS)
+
+
+def stop_auto_poll() -> None:
+    """Signal the background thread to stop."""
+    _auto_poll_stop.set()
+    logger.info("[Gmail] Auto-poll stopped")
+
+
+def _auto_poll_loop(user_id: str) -> None:
+    """Main loop — run ingestion, sleep, repeat."""
+    while not _auto_poll_stop.is_set():
+        logger.info("[Gmail] Auto-poll: running ingestion for user %s", user_id)
+        run_ingestion(user_id, max_emails=50)
+        # Sleep in small increments so stop signal is responsive
+        for _ in range(POLL_INTERVAL_SECONDS * 2):
+            if _auto_poll_stop.is_set():
+                break
+            time.sleep(0.5)
+    logger.info("[Gmail] Auto-poll loop exited")
 
 
 class IngestionResult:
@@ -41,26 +91,61 @@ class IngestionResult:
         self.hotels_added = 0
         self.activities_added = 0
         self.transfers_added = 0
+        self.suppliers_created = 0
         self.errors = 0
         self.log: list[str] = []
 
     def to_dict(self) -> dict:
         return {
-            "fetched": self.fetched,
-            "skipped_already_processed": self.skipped_already_processed,
-            "skipped_irrelevant": self.skipped_irrelevant,
-            "extracted": self.extracted,
-            "hotels_added": self.hotels_added,
-            "activities_added": self.activities_added,
-            "transfers_added": self.transfers_added,
-            "errors": self.errors,
-            "log": self.log[-50:],  # last 50 log lines
+            "fetched":                    self.fetched,
+            "skipped_already_processed":  self.skipped_already_processed,
+            "skipped_irrelevant":         self.skipped_irrelevant,
+            "extracted":                  self.extracted,
+            "hotels_added":               self.hotels_added,
+            "activities_added":           self.activities_added,
+            "transfers_added":            self.transfers_added,
+            "suppliers_created":          self.suppliers_created,
+            "errors":                     self.errors,
+            "log":                        self.log[-50:],
         }
+
+
+def _upsert_supplier(supplier_name: str, sender_email: str) -> Optional[str]:
+    """
+    Ensure this supplier exists in the `suppliers` table.
+    Returns the supplier id. Creates a new record if not found.
+    This keeps Supplier Reachout / Active Deals in sync.
+    """
+    if not supplier_name or supplier_name == "Unknown Supplier":
+        return None
+    try:
+        # Check by name
+        existing = (
+            supabase.table("suppliers")
+            .select("id")
+            .ilike("name", supplier_name)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return existing.data[0]["id"]
+
+        # Create new supplier record
+        result = supabase.table("suppliers").insert({
+            "name":          supplier_name,
+            "email":         sender_email,
+            "supplier_type": "Tour Operator",   # default; can be updated manually
+            "onboarding_status": "new",
+        }).execute()
+        if result.data:
+            return result.data[0]["id"]
+    except Exception as e:
+        logger.warning("Could not upsert supplier %s: %s", supplier_name, e)
+    return None
 
 
 def _insert_hotels(hotels: list[dict], result: IngestionResult) -> None:
     for hotel in hotels:
-        # Validate required fields
         if not hotel.get("hotel_name") or not hotel.get("destination"):
             continue
         try:
@@ -84,9 +169,9 @@ def _insert_hotels(hotels: list[dict], result: IngestionResult) -> None:
                 "source_date":        hotel.get("source_date"),
             }).execute()
             result.hotels_added += 1
-            result.log.append(f"  ✓ Hotel: {hotel['hotel_name']} — {hotel.get('currency', 'INR')} {price}/night")
+            result.log.append(f"  ✓ Hotel: {hotel['hotel_name']} — {hotel.get('currency','INR')} {price}/night")
         except Exception as e:
-            logger.error("Failed to insert hotel %s: %s", hotel.get("hotel_name"), e)
+            logger.error("Insert hotel failed: %s", e)
             result.errors += 1
 
 
@@ -114,9 +199,9 @@ def _insert_activities(activities: list[dict], result: IngestionResult) -> None:
                 "source_date":    act.get("source_date"),
             }).execute()
             result.activities_added += 1
-            result.log.append(f"  ✓ Activity: {act['activity_name']} — {act.get('currency', 'INR')} {price}/{act.get('price_basis', 'person')}")
+            result.log.append(f"  ✓ Activity: {act['activity_name']} — {act.get('currency','INR')} {price}")
         except Exception as e:
-            logger.error("Failed to insert activity %s: %s", act.get("activity_name"), e)
+            logger.error("Insert activity failed: %s", e)
             result.errors += 1
 
 
@@ -143,142 +228,142 @@ def _insert_transfers(transfers: list[dict], result: IngestionResult) -> None:
                 "source_date":    tr.get("source_date"),
             }).execute()
             result.transfers_added += 1
-            result.log.append(f"  ✓ Transfer: {tr['transfer_type']} {tr['destination']} — {tr.get('currency', 'INR')} {price}")
+            result.log.append(f"  ✓ Transfer: {tr['transfer_type']} {tr['destination']} — {tr.get('currency','INR')} {price}")
         except Exception as e:
-            logger.error("Failed to insert transfer: %s", e)
+            logger.error("Insert transfer failed: %s", e)
             result.errors += 1
 
 
 def run_ingestion(
     user_id: str,
-    max_emails: int = 20,
-    status_callback=None,
+    max_emails: int = 50,
+    status_callback: Optional[Callable[[str], None]] = None,
 ) -> IngestionResult:
-    """
-    Main ingestion function.
-    Fetches unprocessed emails, classifies, extracts, stores.
-    """
+    global _is_syncing, _sync_log, _latest_result
+
     result = IngestionResult()
+    _is_syncing = True
+    _sync_log = []
 
     def _log(msg: str):
         result.log.append(msg)
+        _sync_log.append(msg)
+        if len(_sync_log) > 200:
+            _sync_log = _sync_log[-200:]
         if status_callback:
             status_callback(msg)
         logger.info("[Gmail] %s", msg)
 
-    # Get valid access token
-    access_token = get_valid_access_token(user_id)
-    if not access_token:
-        _log("ERROR: No valid Gmail access token. Please connect Gmail first.")
-        return result
-
-    # Get already-processed message IDs
-    already_processed = get_already_processed_ids(user_id)
-    _log(f"Already processed: {len(already_processed)} emails")
-
-    # Fetch recent messages
-    _log("Fetching messages from Gmail...")
     try:
+        access_token = get_valid_access_token(user_id)
+        if not access_token:
+            _log("No valid Gmail token — skipping ingestion")
+            return result
+
+        already_processed = get_already_processed_ids(user_id)
+        _log(f"Already processed: {len(already_processed)} emails")
+
         messages_data = list_messages(access_token, query=SUPPLIER_QUERY, max_results=max_emails)
-    except Exception as e:
-        _log(f"ERROR fetching messages: {e}")
-        return result
+        messages = messages_data.get("messages", [])
+        result.fetched = len(messages)
+        _log(f"Found {len(messages)} messages to check")
 
-    messages = messages_data.get("messages", [])
-    result.fetched = len(messages)
-    _log(f"Found {len(messages)} messages to check")
+        for msg_ref in messages:
+            msg_id = msg_ref["id"]
 
-    for msg_ref in messages:
-        msg_id = msg_ref["id"]
-
-        # Skip already processed
-        if msg_id in already_processed:
-            result.skipped_already_processed += 1
-            continue
-
-        try:
-            # Get full message
-            message = get_message(access_token, msg_id)
-            meta = get_message_metadata(message)
-            body = extract_email_body(message)
-            attachments = extract_attachments(message)
-
-            _log(f"\nProcessing: {meta['subject'][:60]} | From: {meta['from'][:40]}")
-
-            # Classify the email
-            classification = classify_email(
-                subject=meta["subject"],
-                body=body,
-                sender=meta["from"],
-            )
-            category = classification.get("category", "IRRELEVANT")
-            supplier_name = classification.get("supplier_name", "Unknown Supplier")
-            confidence = classification.get("confidence", 0)
-
-            _log(f"  → Category: {category} (confidence: {confidence:.0%})")
-
-            if category == "IRRELEVANT" or confidence < 0.5:
-                mark_processed(user_id, msg_id, meta["thread_id"], "irrelevant", supplier_name)
-                result.skipped_irrelevant += 1
+            if msg_id in already_processed:
+                result.skipped_already_processed += 1
                 continue
 
-            if category not in EXTRACTABLE_CATEGORIES:
-                mark_processed(user_id, msg_id, meta["thread_id"], category.lower(), supplier_name)
-                continue
+            try:
+                message = get_message(access_token, msg_id)
+                meta = get_message_metadata(message)
+                body = extract_email_body(message)
+                attachments = extract_attachments(message)
 
-            # Extract text from attachments
-            attachment_text = ""
-            for att in attachments:
-                _log(f"  Downloading attachment: {att['filename']}")
-                try:
-                    att_bytes = get_attachment(access_token, msg_id, att["attachment_id"])
-                    att_text = extract_text_from_attachment(att_bytes, att["filename"])
-                    if att_text:
-                        attachment_text += f"\n\n--- Attachment: {att['filename']} ---\n{att_text}"
-                except Exception as e:
-                    _log(f"  WARNING: Could not process attachment {att['filename']}: {e}")
+                _log(f"\nProcessing: {meta['subject'][:60]}")
 
-            # Extract structured data
-            source_date = meta["date"][:10] if meta["date"] else None
-            extracted = extract_supplier_data(
-                body=body,
-                subject=meta["subject"],
-                sender=meta["from"],
-                supplier_name=supplier_name,
-                source_email_id=msg_id,
-                source_date=source_date,
-                attachment_text=attachment_text,
-            )
+                classification = classify_email(
+                    subject=meta["subject"],
+                    body=body,
+                    sender=meta["from"],
+                )
+                category      = classification.get("category", "IRRELEVANT")
+                supplier_name = classification.get("supplier_name", "Unknown Supplier")
+                confidence    = classification.get("confidence", 0)
 
-            hotels = extracted.get("hotels", [])
-            activities = extracted.get("activities", [])
-            transfers = extracted.get("transfers", [])
+                _log(f"  → {category} ({confidence:.0%}) — {supplier_name}")
 
-            total_extracted = len(hotels) + len(activities) + len(transfers)
-            _log(f"  Extracted: {len(hotels)} hotels, {len(activities)} activities, {len(transfers)} transfers")
+                if category == "IRRELEVANT" or confidence < 0.5:
+                    mark_processed(user_id, msg_id, meta["thread_id"], "irrelevant", supplier_name)
+                    result.skipped_irrelevant += 1
+                    continue
 
-            if total_extracted > 0:
-                _insert_hotels(hotels, result)
-                _insert_activities(activities, result)
-                _insert_transfers(transfers, result)
-                result.extracted += 1
-                mark_processed(user_id, msg_id, meta["thread_id"], "processed", supplier_name, category)
-            else:
-                _log("  No structured data extracted")
-                mark_processed(user_id, msg_id, meta["thread_id"], "no_data", supplier_name, category)
+                # Upsert into suppliers table — links to SupplierReachout / ActiveDeals
+                supplier_id = _upsert_supplier(supplier_name, meta["from"])
+                if supplier_id:
+                    result.suppliers_created += 1
 
-        except Exception as e:
-            logger.error("Error processing message %s: %s", msg_id, e)
-            _log(f"  ERROR: {e}")
-            result.errors += 1
+                if category not in EXTRACTABLE_CATEGORIES:
+                    mark_processed(user_id, msg_id, meta["thread_id"], category.lower(), supplier_name)
+                    continue
 
-    summary = (
-        f"\nIngestion complete: "
-        f"{result.extracted} emails extracted | "
-        f"{result.hotels_added} hotels | "
-        f"{result.activities_added} activities | "
-        f"{result.transfers_added} transfers | "
-        f"{result.errors} errors"
-    )
-    _log(summary)
+                # Process attachments
+                attachment_text = ""
+                for att in attachments:
+                    try:
+                        att_bytes = get_attachment(access_token, msg_id, att["attachment_id"])
+                        att_text = extract_text_from_attachment(att_bytes, att["filename"])
+                        if att_text:
+                            attachment_text += f"\n\n--- {att['filename']} ---\n{att_text}"
+                        _log(f"  ↳ Attachment: {att['filename']}")
+                    except Exception as e:
+                        _log(f"  ⚠ Attachment error {att['filename']}: {e}")
+
+                source_date = meta["date"][:10] if meta.get("date") else None
+                extracted = extract_supplier_data(
+                    body=body,
+                    subject=meta["subject"],
+                    sender=meta["from"],
+                    supplier_name=supplier_name,
+                    source_email_id=msg_id,
+                    source_date=source_date,
+                    attachment_text=attachment_text,
+                )
+
+                hotels     = extracted.get("hotels", [])
+                activities = extracted.get("activities", [])
+                transfers  = extracted.get("transfers", [])
+                total      = len(hotels) + len(activities) + len(transfers)
+
+                _log(f"  Extracted: {len(hotels)} hotels, {len(activities)} activities, {len(transfers)} transfers")
+
+                if total > 0:
+                    _insert_hotels(hotels, result)
+                    _insert_activities(activities, result)
+                    _insert_transfers(transfers, result)
+                    result.extracted += 1
+                    mark_processed(user_id, msg_id, meta["thread_id"], "processed", supplier_name, category)
+                else:
+                    _log("  No structured data extracted")
+                    mark_processed(user_id, msg_id, meta["thread_id"], "no_data", supplier_name, category)
+
+            except Exception as e:
+                logger.error("Error processing %s: %s", msg_id, e)
+                _log(f"  ERROR: {e}")
+                result.errors += 1
+
+        summary = (
+            f"\n✓ Done: {result.extracted} extracted | "
+            f"{result.hotels_added}H {result.activities_added}A {result.transfers_added}T | "
+            f"{result.suppliers_created} suppliers | "
+            f"{result.errors} errors"
+        )
+        _log(summary)
+        _latest_result = result.to_dict()
+        _latest_result["last_run"] = datetime.utcnow().isoformat()
+
+    finally:
+        _is_syncing = False
+
     return result

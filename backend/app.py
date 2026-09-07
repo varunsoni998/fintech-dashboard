@@ -1,3 +1,8 @@
+"""
+app.py — BusinessOS backend.
+Auto-starts Gmail polling on boot for any user who has connected Gmail.
+"""
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -11,6 +16,32 @@ from rag.routes import router as rag_router, cleanup_stuck_documents, check_jina
 from itinerary.routes import router as itinerary_router
 from itinerary.supplier_routes import router as suppliers_router
 from gmail.routes import router as gmail_router
+from gmail.ingestion import start_auto_poll
+from supabase_client import supabase
+
+logger = logging.getLogger(__name__)
+
+
+def _resume_auto_poll() -> None:
+    """
+    On startup, find any users who have Gmail connected and restart
+    their auto-poll thread. This way polling survives server restarts.
+    """
+    try:
+        result = (
+            supabase.table("gmail_tokens")
+            .select("user_id, gmail_email")
+            .eq("connected", True)
+            .execute()
+        )
+        users = result.data or []
+        for row in users:
+            uid = row["user_id"]
+            email = row.get("gmail_email", "?")
+            logger.info("Resuming Gmail auto-poll for %s (%s)", uid, email)
+            start_auto_poll(uid)
+    except Exception as e:
+        logger.warning("Could not resume Gmail auto-poll on startup: %s", e)
 
 
 @asynccontextmanager
@@ -19,6 +50,7 @@ async def lifespan(app: FastAPI):
     init_database()
     check_jina_key()
     cleanup_stuck_documents()
+    _resume_auto_poll()          # ← auto-start Gmail polling for connected users
     yield
     print("Stopping BusinessOS backend...")
 
