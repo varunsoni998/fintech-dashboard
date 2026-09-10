@@ -148,13 +148,28 @@ function OverviewPanel() {
   }, []);
 
   useEffect(() => {
-    loadStatus();
-    loadProcessed();
+    const init = async () => {
+      await loadStatus();
+      await loadProcessed();
+
+      // If connected but polling stopped (e.g. after server restart),
+      // automatically restart the poll thread
+      try {
+        const auth = await authHeader();
+        const sResp = await fetch(`${API_GMAIL}/status`, { headers: { Authorization: auth } });
+        const s = await sResp.json();
+        if (s.connected && !s.auto_polling) {
+          await fetch(`${API_GMAIL}/start-polling`, { method: "POST", headers: { Authorization: auth } });
+          setTimeout(loadStatus, 2000);
+        }
+      } catch (e) { console.error(e); }
+    };
+
+    init();
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("gmail_connected") === "1") {
       window.history.replaceState({}, "", window.location.pathname);
-      loadStatus();
     }
   }, [loadStatus, loadProcessed]);
 

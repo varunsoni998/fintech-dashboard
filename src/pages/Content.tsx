@@ -11,7 +11,7 @@ import {
 import ReactMarkdown from "react-markdown";
 
 // ── API ──────────────────────────────────────────────────────────────────────
-const API = "https://businessos-roan-iota.onrender.com/api";
+const API = "https://fintech-dashboard-61vh.onrender.com/api";
 
 // ── Mock BusinessOS Data ─────────────────────────────────────────────────────
 const MOCK_CLIENTS = [
