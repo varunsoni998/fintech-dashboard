@@ -415,13 +415,24 @@ async def stop_generation(payload: StopGenerationRequest):
 async def generate_content(payload: ContentGenerateRequest):
     try:
         prompt = f"""
-Write a {payload.tone.lower()} {payload.content_type}.
+You are an expert travel agency content writer.
 
-Topic: {payload.topic}
+Write the following content and return it in clean, well-structured markdown format.
+
+Content Type: {payload.content_type}
+Tone: {payload.tone}
+Topic/Instructions: {payload.topic}
 Audience: {payload.audience}
 Destination: {payload.destination}
 
-Return only the final content in clean markdown.
+FORMATTING RULES:
+- Use proper markdown headers (##, ###)
+- Use bullet points for lists
+- Use **bold** for key terms
+- Add line breaks between sections
+- Keep paragraphs short (2-3 sentences max)
+- Do NOT return one big paragraph
+- Return ONLY the content, no preamble like "Here is your content:"
 """
         response = requests.post(
             OPENROUTER_URL,
@@ -429,12 +440,15 @@ Return only the final content in clean markdown.
             json={
                 "model": MXAI_MODEL,
                 "messages": [
-                    {"role": "system", "content": "You are a professional AI assistant. Write polished marketing content in clean markdown."},
+                    {
+                        "role": "system",
+                        "content": "You are an expert travel agency content writer. Always respond in clean, well-structured markdown. Never write one big paragraph. Use headers, bullets and short paragraphs."
+                    },
                     {"role": "user", "content": prompt.strip()},
                 ],
                 "stream": False,
             },
-            timeout=300,
+            timeout=120,
         )
         response.raise_for_status()
         data = response.json()
