@@ -23,7 +23,7 @@ from .auth import (
     save_tokens, get_tokens, get_valid_access_token, disconnect,
     GOOGLE_CLIENT_ID,
 )
-from .ingestion import run_ingestion, get_auto_poll_status, _latest_result, _sync_log
+from .ingestion import run_ingestion, get_auto_poll_status
 from .fetcher import delete_processed
 
 logger = logging.getLogger(__name__)
@@ -282,3 +282,34 @@ def clear_processed(authorization: Optional[str] = Header(None)):
         return {"success": True, "message": "All records cleared — next sync will re-process everything"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/debug")
+def gmail_debug(authorization: Optional[str] = Header(None)):
+    """
+    Debug endpoint — shows token status, last sync time, processed count,
+    and the current state of the sync log. Use to diagnose fetch issues.
+    """
+    user_id = _get_user_id(authorization)
+    from .auth import get_tokens, get_valid_access_token
+    from .fetcher import get_already_processed_ids
+
+    tokens = get_tokens(user_id)
+    has_valid_token = get_valid_access_token(user_id) is not None
+    already_done = get_already_processed_ids(user_id)
+    poll = get_auto_poll_status()
+    last = _last_sync.get(user_id, 0)
+
+    import time
+    return {
+        "gmail_email":         tokens.get("gmail_email") if tokens else None,
+        "token_stored":        bool(tokens),
+        "has_valid_token":     has_valid_token,
+        "refresh_token_set":   bool(tokens.get("refresh_token")) if tokens else False,
+        "already_processed":   len(already_done),
+        "last_sync_ago_secs":  int(time.time() - last) if last else None,
+        "is_syncing":          poll["is_syncing"],
+        "sync_log_lines":      len(poll["log"]),
+        "latest":              poll["latest"],
+        "log_tail":            poll["log"][-10:],
+    }

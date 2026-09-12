@@ -243,7 +243,7 @@ def run_ingestion(
 
     result = IngestionResult()
     _is_syncing = True
-    _sync_log = []
+    _sync_log.clear()  # mutate in-place so references stay valid
 
     def _log(msg: str):
         result.log.append(msg)

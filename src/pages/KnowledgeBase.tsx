@@ -225,9 +225,25 @@ function OverviewPanel() {
     setSyncingNow(true);
     try {
       const auth = await authHeader();
+      // First check debug state
+      const dbgResp = await fetch(`${API_GMAIL}/debug`, { headers: { Authorization: auth } });
+      const dbg = await dbgResp.json();
+      console.log("[Gmail Debug]", dbg);
+      if (dbg.already_processed > 0 && !dbg.has_valid_token) {
+        alert(`Gmail token issue detected. Please disconnect and reconnect Gmail.`);
+        setSyncingNow(false);
+        return;
+      }
+      // Trigger sync
       await fetch(`${API_GMAIL}/sync-now?max_emails=100`, { method: "POST", headers: { Authorization: auth } });
       setNextSyncIn(600);
-      setTimeout(async () => { await loadLog(); await loadProcessed(); setSyncingNow(false); }, 2000);
+      // Poll log every second for 30 seconds to catch activity
+      let checks = 0;
+      const interval = setInterval(async () => {
+        await loadLog();
+        checks++;
+        if (checks >= 30) { clearInterval(interval); await loadProcessed(); setSyncingNow(false); }
+      }, 1000);
     } catch (e) { console.error(e); setSyncingNow(false); }
   };
 
