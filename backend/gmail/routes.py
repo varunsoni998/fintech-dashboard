@@ -1,12 +1,7 @@
 """
-Gmail integration routes — /api/gmail/...
-
-Polling strategy: Instead of relying on a background thread (which dies
-when Render's free tier spins down), the frontend sends a heartbeat ping
-every 5 minutes. Each ping triggers ingestion if enough time has passed.
-This is reliable across server restarts and sleep cycles.
+Gmail routes — /api/gmail/...
+Heartbeat-based polling. All exceptions logged explicitly.
 """
-import json
 import logging
 import os
 import threading
@@ -29,13 +24,12 @@ from .fetcher import delete_processed
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://businessos-roan-iota.vercel.app")
-POLL_INTERVAL_SECONDS = 600   # 10 minutes between auto-syncs
+FRONTEND_URL          = os.getenv("FRONTEND_URL", "https://businessos-roan-iota.vercel.app")
+POLL_INTERVAL_SECONDS = 600
 
-# Per-user last sync timestamps
-_last_sync: dict[str, float] = {}
+_last_sync:  dict[str, float]          = {}
 _sync_locks: dict[str, threading.Lock] = {}
-sync_jobs: dict[str, dict] = {}
+sync_jobs:   dict[str, dict]           = {}
 
 
 def _get_user_id(authorization: Optional[str]) -> str:
@@ -53,35 +47,26 @@ def _get_user_id(authorization: Optional[str]) -> str:
         raise HTTPException(status_code=401, detail=f"Auth failed: {e}")
 
 
-# ── Status ─────────────────────────────────────────────────────────────────────
-
 @router.get("/status")
 def gmail_status(authorization: Optional[str] = Header(None)):
     user_id = _get_user_id(authorization)
-
     if not GOOGLE_CLIENT_ID:
         return {"connected": False, "configured": False,
                 "message": "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env"}
-
     tokens = get_tokens(user_id)
     if not tokens or not tokens.get("connected"):
         return {"connected": False, "configured": True, "gmail_email": None}
-
     poll = get_auto_poll_status()
     last = _last_sync.get(user_id, 0)
-    secs_since = int(time.time() - last) if last else None
     next_in = max(0, POLL_INTERVAL_SECONDS - (time.time() - last)) if last else 0
-
     return {
-        "connected":    True,
-        "configured":   True,
-        "gmail_email":  tokens.get("gmail_email"),
-        "auto_polling": True,   # always true — heartbeat-based
-        "is_syncing":   poll["is_syncing"],
+        "connected": True, "configured": True,
+        "gmail_email": tokens.get("gmail_email"),
+        "auto_polling": True,
+        "is_syncing": poll["is_syncing"],
         "interval_min": POLL_INTERVAL_SECONDS // 60,
-        "secs_since_last_sync": secs_since,
         "next_sync_in_secs": int(next_in),
-        "latest":       poll["latest"],
+        "latest": poll["latest"],
     }
 
 
@@ -89,53 +74,67 @@ def gmail_status(authorization: Optional[str] = Header(None)):
 def live_log(authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
     poll = get_auto_poll_status()
+    return {"is_syncing": poll["is_syncing"], "log": poll["log"], "latest": poll["latest"]}
+
+
+@router.get("/debug")
+def gmail_debug(authorization: Optional[str] = Header(None)):
+    user_id = _get_user_id(authorization)
+    tokens = get_tokens(user_id)
+    poll = get_auto_poll_status()
+    last = _last_sync.get(user_id, 0)
+    token_ok = False
+    token_error = None
+    try:
+        tok = get_valid_access_token(user_id)
+        token_ok = tok is not None
+    except Exception as e:
+        token_error = str(e)
+    try:
+        from .fetcher import get_already_processed_ids
+        processed_count = len(get_already_processed_ids(user_id))
+    except Exception:
+        processed_count = -1
     return {
+        "gmail_email": tokens.get("gmail_email") if tokens else None,
+        "token_valid": token_ok,
+        "token_error": token_error,
+        "refresh_token_set": bool(tokens.get("refresh_token")) if tokens else False,
+        "already_processed": processed_count,
+        "last_sync_ago_secs": int(time.time() - last) if last else None,
         "is_syncing": poll["is_syncing"],
-        "log":        poll["log"],
-        "latest":     poll["latest"],
+        "log_lines": len(poll["log"]),
+        "log_tail": poll["log"][-15:],
+        "latest_result": poll["latest"],
     }
 
 
-# ── Heartbeat — frontend calls this every 5 min ────────────────────────────────
-
 @router.post("/heartbeat")
 def heartbeat(authorization: Optional[str] = Header(None)):
-    """
-    Called by the frontend every 5 minutes while the page is open.
-    Triggers ingestion if POLL_INTERVAL_SECONDS have passed since last sync.
-    This replaces the background thread approach which breaks on Render free tier.
-    """
     user_id = _get_user_id(authorization)
-
-    access_token = get_valid_access_token(user_id)
-    if not access_token:
-        return {"synced": False, "reason": "no_token"}
-
     now = time.time()
     last = _last_sync.get(user_id, 0)
-
     if now - last < POLL_INTERVAL_SECONDS:
         remaining = int(POLL_INTERVAL_SECONDS - (now - last))
         return {"synced": False, "reason": "too_soon", "next_in_secs": remaining}
-
-    # Avoid double-runs if two heartbeats arrive simultaneously
     lock = _sync_locks.setdefault(user_id, threading.Lock())
     if not lock.acquire(blocking=False):
         return {"synced": False, "reason": "already_running"}
-
     _last_sync[user_id] = now
 
     def _run():
         try:
-            run_ingestion(user_id, max_emails=50)
+            logger.info("[Heartbeat] ingestion start user=%s", user_id[:8])
+            result = run_ingestion(user_id, max_emails=50)
+            logger.info("[Heartbeat] done: %s", result.to_dict())
+        except Exception as e:
+            logger.error("[Heartbeat] FAILED: %s", e, exc_info=True)
         finally:
             lock.release()
 
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run, daemon=True, name=f"hb-{user_id[:8]}").start()
     return {"synced": True, "message": "Ingestion started"}
 
-
-# ── OAuth ──────────────────────────────────────────────────────────────────────
 
 @router.get("/oauth/url")
 def get_oauth_url(authorization: Optional[str] = Header(None)):
@@ -146,11 +145,7 @@ def get_oauth_url(authorization: Optional[str] = Header(None)):
 
 
 @router.get("/oauth/callback")
-def oauth_callback(
-    code: str = Query(...),
-    state: str = Query(""),
-    error: str = Query(None),
-):
+def oauth_callback(code: str = Query(...), state: str = Query(""), error: str = Query(None)):
     if error:
         return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error={error}")
     if not state:
@@ -162,8 +157,7 @@ def oauth_callback(
             raise ValueError("No access token")
         gmail_email = get_gmail_user_email(access_token)
         save_tokens(state, tokens, gmail_email)
-        logger.info("Gmail connected for user %s: %s", state, gmail_email)
-        # Trigger first sync immediately
+        logger.info("Gmail connected: %s → %s", state[:8], gmail_email)
         _last_sync[state] = 0
         return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_connected=1")
     except Exception as e:
@@ -171,37 +165,34 @@ def oauth_callback(
         return RedirectResponse(url=f"{FRONTEND_URL}/knowledge-base?gmail_error={str(e)[:100]}")
 
 
-# ── Manual sync ────────────────────────────────────────────────────────────────
-
 @router.post("/sync-now")
-def sync_now(
-    authorization: Optional[str] = Header(None),
-    max_emails: int = Query(50, ge=1, le=200),
-):
+def sync_now(authorization: Optional[str] = Header(None), max_emails: int = Query(50, ge=1, le=200)):
     user_id = _get_user_id(authorization)
     access_token = get_valid_access_token(user_id)
     if not access_token:
-        raise HTTPException(status_code=400, detail="Gmail not connected")
-
+        raise HTTPException(status_code=400,
+            detail="Gmail token invalid. Please disconnect and reconnect Gmail.")
     job_id = str(uuid.uuid4())
-    sync_jobs[job_id] = {"status": "running", "progress": "Starting...", "log": [], "result": None}
+    sync_jobs[job_id] = {"status": "running", "progress": "Starting...", "result": None}
     _last_sync[user_id] = time.time()
 
     def _run():
-        log_lines = []
-        def _upd(msg: str):
-            log_lines.append(msg)
-            sync_jobs[job_id]["progress"] = msg
-            sync_jobs[job_id]["log"] = log_lines[-30:]
         try:
-            result = run_ingestion(user_id, max_emails=max_emails, status_callback=_upd)
+            logger.info("[SyncNow] start user=%s max=%d", user_id[:8], max_emails)
+            result = run_ingestion(user_id, max_emails=max_emails)
             sync_jobs[job_id]["status"] = "done"
+            sync_jobs[job_id]["progress"] = (
+                f"Done — {result.hotels_added}H {result.activities_added}A "
+                f"{result.transfers_added}T from {result.extracted} emails"
+            )
             sync_jobs[job_id]["result"] = result.to_dict()
+            logger.info("[SyncNow] done: %s", result.to_dict())
         except Exception as e:
+            logger.error("[SyncNow] FAILED: %s", e, exc_info=True)
             sync_jobs[job_id]["status"] = "error"
             sync_jobs[job_id]["progress"] = str(e)
 
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run, daemon=True, name=f"syncnow-{user_id[:8]}").start()
     return {"success": True, "job_id": job_id}
 
 
@@ -213,11 +204,8 @@ def sync_status(job_id: str):
     return {"success": True, **job}
 
 
-# ── Keep-alive (legacy compat) ─────────────────────────────────────────────────
-
 @router.post("/start-polling")
 def start_polling(authorization: Optional[str] = Header(None)):
-    """Resets the last-sync timer so the next heartbeat triggers immediately."""
     user_id = _get_user_id(authorization)
     _last_sync[user_id] = 0
     return {"success": True, "message": "Next heartbeat will trigger sync"}
@@ -226,10 +214,8 @@ def start_polling(authorization: Optional[str] = Header(None)):
 @router.post("/stop-polling")
 def stop_polling(authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
-    return {"success": True, "message": "Polling is heartbeat-based; it stops when the page is closed"}
+    return {"success": True}
 
-
-# ── Disconnect ────────────────────────────────────────────────────────────────
 
 @router.post("/disconnect")
 def gmail_disconnect(authorization: Optional[str] = Header(None)):
@@ -239,19 +225,14 @@ def gmail_disconnect(authorization: Optional[str] = Header(None)):
     return {"success": True, "message": "Gmail disconnected"}
 
 
-# ── Processed emails ──────────────────────────────────────────────────────────
-
 @router.get("/processed")
 def list_processed(authorization: Optional[str] = Header(None)):
     user_id = _get_user_id(authorization)
     try:
         result = (
             supabase.table("gmail_processed_emails")
-            .select("*")
-            .eq("user_id", user_id)
-            .order("created_at", desc=True)
-            .limit(100)
-            .execute()
+            .select("*").eq("user_id", user_id)
+            .order("created_at", desc=True).limit(100).execute()
         )
         return {"success": True, "emails": result.data or []}
     except Exception as e:
@@ -260,56 +241,20 @@ def list_processed(authorization: Optional[str] = Header(None)):
 
 @router.delete("/processed/{message_id}")
 def delete_processed_email(message_id: str, authorization: Optional[str] = Header(None)):
-    """
-    Remove a processed email record so it will be re-processed on next sync.
-    Useful for re-extracting data from an email that was previously missed.
-    """
     user_id = _get_user_id(authorization)
     try:
         delete_processed(message_id, user_id)
-        return {"success": True, "message_id": message_id}
+        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/processed")
-def clear_processed(authorization: Optional[str] = Header(None)):
-    """Clear ALL processed email records for this user — forces full re-scan."""
+def clear_all_processed(authorization: Optional[str] = Header(None)):
     user_id = _get_user_id(authorization)
     try:
         supabase.table("gmail_processed_emails").delete().eq("user_id", user_id).execute()
-        _last_sync[user_id] = 0   # trigger immediate re-sync
-        return {"success": True, "message": "All records cleared — next sync will re-process everything"}
+        _last_sync[user_id] = 0
+        return {"success": True, "message": "Cleared — next sync re-processes everything"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/debug")
-def gmail_debug(authorization: Optional[str] = Header(None)):
-    """
-    Debug endpoint — shows token status, last sync time, processed count,
-    and the current state of the sync log. Use to diagnose fetch issues.
-    """
-    user_id = _get_user_id(authorization)
-    from .auth import get_tokens, get_valid_access_token
-    from .fetcher import get_already_processed_ids
-
-    tokens = get_tokens(user_id)
-    has_valid_token = get_valid_access_token(user_id) is not None
-    already_done = get_already_processed_ids(user_id)
-    poll = get_auto_poll_status()
-    last = _last_sync.get(user_id, 0)
-
-    import time
-    return {
-        "gmail_email":         tokens.get("gmail_email") if tokens else None,
-        "token_stored":        bool(tokens),
-        "has_valid_token":     has_valid_token,
-        "refresh_token_set":   bool(tokens.get("refresh_token")) if tokens else False,
-        "already_processed":   len(already_done),
-        "last_sync_ago_secs":  int(time.time() - last) if last else None,
-        "is_syncing":          poll["is_syncing"],
-        "sync_log_lines":      len(poll["log"]),
-        "latest":              poll["latest"],
-        "log_tail":            poll["log"][-10:],
-    }
