@@ -239,17 +239,17 @@ def run_ingestion(
     max_emails: int = 50,
     status_callback: Optional[Callable[[str], None]] = None,
 ) -> IngestionResult:
-    global _is_syncing, _sync_log, _latest_result
+    global _is_syncing, _latest_result
 
     result = IngestionResult()
     _is_syncing = True
-    _sync_log.clear()  # mutate in-place so references stay valid
+    _sync_log.clear()
 
     def _log(msg: str):
         result.log.append(msg)
         _sync_log.append(msg)
         if len(_sync_log) > 200:
-            _sync_log = _sync_log[-200:]
+            _sync_log[:] = _sync_log[-200:]
         if status_callback:
             status_callback(msg)
         logger.info("[Gmail] %s", msg)
