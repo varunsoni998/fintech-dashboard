@@ -7,6 +7,11 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_DRIVE_PARENT_FOLDER?: string;
 }
 
+declare module "*?url" {
+  const src: string;
+  export default src;
+}
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }

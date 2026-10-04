@@ -10,6 +10,7 @@ import { buildZip, ZipEntry } from "./zipWriter";
 export interface SaveItem {
   file: File;
   subfolder: string; // "" = client folder itself
+  name?: string;     // file name to save as (defaults to the original name)
 }
 
 export type ItemResult = "saved" | "skipped" | string; // string = renamed-to / error message
@@ -92,7 +93,7 @@ export async function saveFileToPC(base: any, clientFolder: string, item: SaveIt
   let dir = await base.getDirectoryHandle(clientFolder, { create: true });
   if (item.subfolder) dir = await dir.getDirectoryHandle(item.subfolder, { create: true });
 
-  const original = sanitizeName(item.file.name) || "file";
+  const original = sanitizeName(item.name || item.file.name) || "file";
   let name = original;
   for (let n = 2; ; n++) {
     const size = await existingFileSize(dir, name);
@@ -111,7 +112,7 @@ export async function saveFileToPC(base: any, clientFolder: string, item: SaveIt
 /** Fallback: download the whole client folder as one .zip. */
 export async function downloadAsZip(clientFolder: string, items: SaveItem[]): Promise<void> {
   const entries: ZipEntry[] = items.map(i => ({
-    path: [clientFolder, i.subfolder, sanitizeName(i.file.name)].filter(Boolean).join("/"),
+    path: [clientFolder, i.subfolder, sanitizeName(i.name || i.file.name)].filter(Boolean).join("/"),
     file: i.file,
   }));
   const blob = await buildZip(entries);
@@ -291,7 +292,7 @@ export async function prepareDriveFolder(
 export async function saveFileToDrive(target: DriveTarget, item: SaveItem): Promise<ItemResult> {
   const folderId = target.subfolderIds.get(item.subfolder)!;
   const existing = target.existing.get(folderId)!;
-  const original = sanitizeName(item.file.name) || "file";
+  const original = sanitizeName(item.name || item.file.name) || "file";
   let name = original;
   for (let n = 2; existing.has(name); n++) {
     if (existing.get(name) === item.file.size) return "skipped";

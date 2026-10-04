@@ -12,6 +12,7 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 import {
   Plane, Hotel, Bus, IdCard, FolderOpen, FolderTree, Upload, HardDrive, Cloud,
   CheckCircle2, Loader2, X, Settings2, AlertTriangle, SkipForward, Download, FolderPlus,
+  Pencil, Sparkles, Undo2,
 } from "lucide-react";
 import {
   CATEGORIES, CategoryId, buildFolderName, categorize, categoryById,
@@ -21,9 +22,23 @@ import {
   isDriveConfigured, loadGoogleSignIn, getDriveToken, hasDriveToken, prepareDriveFolder, saveFileToDrive,
   parseDriveFolderId, DEFAULT_DRIVE_PARENT, DEFAULT_DRIVE_ROOT_NAME, ItemResult, SaveItem,
 } from "@/lib/tripFolders";
+import { analyzeDocText, isPoorFileName } from "@/lib/tripDocAnalyze";
+import { isPdf, readPdfText } from "@/lib/pdfText";
 
 type Status = { state: "idle" | "working" | "done" | "skipped" | "error"; note?: string };
-interface Item { id: string; file: File; category: CategoryId; pc: Status; drive: Status }
+interface Item {
+  id: string;
+  file: File;
+  category: CategoryId;
+  catSource: "name" | "pdf" | "manual";      // how the folder was decided
+  name: string;                              // name it will be saved as
+  nameSource: "original" | "auto" | "edited";
+  suggested: string | null;                  // name read from the PDF (if any)
+  poor: boolean;                             // original name says nothing useful
+  reading: boolean;                          // PDF text being read
+  pc: Status;
+  drive: Status;
+}
 
 const ICONS: Record<CategoryId, React.ElementType> = {
   flights: Plane, hotels: Hotel, transfers: Bus, documents: IdCard, main: FolderOpen,
@@ -31,6 +46,8 @@ const ICONS: Record<CategoryId, React.ElementType> = {
 const JUNK = /^(desktop\.ini|thumbs\.db|\.ds_store)$/i;
 const IDLE: Status = { state: "idle" };
 const genId = () => Math.random().toString(36).slice(2, 10);
+const extOf = (name: string) => (name.match(/\.[A-Za-z0-9]{1,5}$/)?.[0] || "").toLowerCase();
+const stemOf = (name: string) => name.slice(0, name.length - extOf(name).length).replace(/\.pdf$/i, "");
 const fmtSize = (b: number) => b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
 
 const LS = {
@@ -100,6 +117,9 @@ export default function TripDocuments() {
   const [saving, setSaving]           = useState(false);
   const [message, setMessage]         = useState<{ kind: "ok" | "warn" | "error"; text: string } | null>(null);
   const [driveLink, setDriveLink]     = useState<string | null>(null);
+  const [editing, setEditing]         = useState<{ id: string; value: string } | null>(null);
+  const itemsRef = useRef<Item[]>([]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const direct     = canSaveDirect();
@@ -122,17 +142,45 @@ export default function TripDocuments() {
   }, [direct]);
 
   // ── File handling ────────────────────────────────────────────────────────
+  /** Reads a PDF's text, then sets the right folder and (for badly named files) a clear name. */
+  const analyze = async (item: Item) => {
+    let category: CategoryId | null = null;
+    let title: string | null = null;
+    try {
+      ({ category, title } = analyzeDocText(await readPdfText(item.file)));
+    } catch { /* unreadable / password-protected PDF → keep file-name guess */ }
+    const ext = extOf(item.file.name) || ".pdf";
+    setItems(prev => prev.map(i => {
+      if (i.id !== item.id) return i;
+      const next = { ...i, reading: false, suggested: title ? title + ext : null };
+      if (category && i.catSource === "name") { next.category = category; next.catSource = "pdf"; }
+      if (title && i.poor && i.nameSource === "original") { next.name = title + ext; next.nameSource = "auto"; }
+      return next;
+    }));
+  };
+
   const addFiles = (files: File[], forced?: CategoryId) => {
     setMessage(null);
-    setItems(prev => {
-      const next = [...prev];
-      for (const f of files) {
-        if (JUNK.test(f.name) || f.size === 0) continue;
-        if (next.some(i => i.file.name === f.name && i.file.size === f.size)) continue;
-        next.push({ id: genId(), file: f, category: forced ?? categorize(f.name), pc: IDLE, drive: IDLE });
-      }
-      return next;
-    });
+    const current = itemsRef.current;
+    const fresh: Item[] = [];
+    for (const f of files) {
+      if (JUNK.test(f.name) || f.size === 0) continue;
+      if ([...current, ...fresh].some(i => i.file.name === f.name && i.file.size === f.size)) continue;
+      fresh.push({
+        id: genId(), file: f,
+        category: forced ?? categorize(f.name), catSource: forced ? "manual" : "name",
+        name: f.name.replace(/\.pdf\.pdf$/i, ".pdf"), nameSource: "original", suggested: null,
+        poor: isPoorFileName(f.name), reading: isPdf(f),
+        pc: IDLE, drive: IDLE,
+      });
+    }
+    if (!fresh.length) return;
+    itemsRef.current = [...current, ...fresh];
+    setItems(prev => [...prev, ...fresh]);
+    // Read PDFs a few at a time
+    const queue = fresh.filter(i => i.reading);
+    const worker = async () => { for (let it = queue.shift(); it; it = queue.shift()) await analyze(it); };
+    Promise.all([worker(), worker(), worker()]);
   };
 
   const onDrop = async (e: React.DragEvent, forced?: CategoryId) => {
@@ -151,7 +199,17 @@ export default function TripDocuments() {
   });
 
   const move   = (id: string, category: CategoryId) =>
-    setItems(prev => prev.map(i => (i.id === id ? { ...i, category, pc: IDLE, drive: IDLE } : i)));
+    setItems(prev => prev.map(i => (i.id === id ? { ...i, category, catSource: "manual", pc: IDLE, drive: IDLE } : i)));
+  const rename = (id: string, name: string, source: Item["nameSource"]) =>
+    setItems(prev => prev.map(i => (i.id === id ? { ...i, name, nameSource: source, pc: IDLE, drive: IDLE } : i)));
+  const commitEdit = () => {
+    if (!editing) return;
+    const it = items.find(i => i.id === editing.id);
+    const stem = editing.value.trim().replace(/\.[A-Za-z0-9]{1,5}$/, "");
+    if (it && stem) rename(it.id, stem + (extOf(it.name) || extOf(it.file.name)), "edited");
+    setEditing(null);
+  };
+  const anyReading = items.some(i => i.reading);
   const remove = (id: string) => setItems(prev => prev.filter(i => i.id !== id));
   const setStatus = (id: string, key: "pc" | "drive", s: Status) =>
     setItems(prev => prev.map(i => (i.id === id ? { ...i, [key]: s } : i)));
@@ -194,7 +252,8 @@ export default function TripDocuments() {
     setSaving(true);
     setMessage(null);
     setDriveLink(null);
-    const list: SaveItem[] = items.map(i => ({ file: i.file, subfolder: categoryById(i.category).folder }));
+    if (anyReading) { setSaving(false); return setMessage({ kind: "warn", text: "Still reading the PDFs, try again in a moment." }); }
+    const list: SaveItem[] = items.map(i => ({ file: i.file, subfolder: categoryById(i.category).folder, name: i.name }));
     const problems: string[] = [];
 
     // 1) Get the permissions that need a click first (folder access, Google sign-in)
@@ -337,7 +396,7 @@ export default function TripDocuments() {
               })}
               {grouped.get("main")!.map((i, idx, arr) => (
                 <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 8, marginTop: 4, color: TEXT_MUTED, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                  <span>{idx === arr.length - 1 ? "└──" : "├──"}</span> {i.file.name}
+                  <span>{idx === arr.length - 1 ? "└──" : "├──"}</span> {i.name}
                 </div>
               ))}
             </div>
@@ -355,7 +414,7 @@ export default function TripDocuments() {
             }}>
             <Upload style={{ width: 28, height: 28, color: ACCENT, margin: "0 auto 8px" }} />
             <div style={{ fontSize: 15, fontWeight: 600, color: TEXT_MAIN }}>Drop all files or folders here</div>
-            <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 4 }}>Each file is sorted automatically by its name. You can also click to browse.</div>
+            <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 4 }}>PDFs are read and sorted by what's inside, and badly named ones get a clear name. You can also click to browse.</div>
             <input ref={fileInput} type="file" multiple hidden onChange={e => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
           </div>
 
@@ -383,11 +442,57 @@ export default function TripDocuments() {
                   {list.map(i => (
                     <div key={i.id} style={{ borderRadius: 10, boxShadow: SHADOW_IN, padding: "7px 8px", marginTop: 6 }}>
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                        <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: TEXT_MAIN, wordBreak: "break-word" }} title={i.file.name}>{i.file.name}</div>
+                        {editing?.id === i.id ? (
+                          <input autoFocus value={editing.value}
+                            onChange={e => setEditing({ id: i.id, value: e.target.value })}
+                            onBlur={commitEdit}
+                            onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditing(null); }}
+                            style={{ ...input, padding: "4px 6px", fontSize: 12, borderRadius: 7 }} />
+                        ) : (
+                          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: TEXT_MAIN, wordBreak: "break-word" }}
+                            title={i.name !== i.file.name ? `Original file: ${i.file.name}` : i.name}>{i.name}</div>
+                        )}
+                        {!saving && editing?.id !== i.id && (
+                          <button onClick={() => setEditing({ id: i.id, value: stemOf(i.name) })} title="Rename"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: TEXT_MUTED, padding: 0 }}>
+                            <Pencil style={{ width: 12, height: 12 }} />
+                          </button>
+                        )}
                         {!saving && (
                           <button onClick={() => remove(i.id)} title="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: TEXT_MUTED, padding: 0 }}>
                             <X style={{ width: 12, height: 12 }} />
                           </button>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4, fontSize: 10 }}>
+                        {i.reading && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: ACCENT }}>
+                            <Loader2 className="animate-spin" style={{ width: 10, height: 10 }} /> Reading PDF…
+                          </span>
+                        )}
+                        {i.nameSource === "auto" && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#2E9E6B" }} title={`Original file: ${i.file.name}`}>
+                            <Sparkles style={{ width: 10, height: 10 }} /> Named from PDF
+                            <button onClick={() => rename(i.id, i.file.name, "original")} title="Use the original name"
+                              style={{ background: "none", border: "none", cursor: "pointer", color: TEXT_MUTED, padding: 0, display: "inline-flex" }}>
+                              <Undo2 style={{ width: 10, height: 10 }} />
+                            </button>
+                          </span>
+                        )}
+                        {!i.reading && i.suggested && i.nameSource !== "auto" && i.suggested !== i.name && !saving && (
+                          <button onClick={() => rename(i.id, i.suggested!, "auto")} title={`Rename to: ${i.suggested}`}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: ACCENT, padding: 0, fontSize: 10, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            <Sparkles style={{ width: 10, height: 10 }} /> Use name from PDF
+                          </button>
+                        )}
+                        {!i.reading && i.catSource === "pdf" && (
+                          <span style={{ color: TEXT_MUTED }} title="Folder chosen from what's written inside the PDF">· sorted by contents</span>
+                        )}
+                        {!i.reading && i.poor && i.nameSource === "original" && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#D48A2E" }}
+                            title="This name doesn't say what the file is, and it couldn't be read (scan or photo). Click the pencil to rename.">
+                            <AlertTriangle style={{ width: 10, height: 10 }} /> Check name &amp; folder
+                          </span>
                         )}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
@@ -483,10 +588,10 @@ export default function TripDocuments() {
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-            <button onClick={handleSave} disabled={saving} style={{ ...btn(true), padding: "11px 20px", fontSize: 14, opacity: saving ? 0.7 : 1 }}>
+            <button onClick={handleSave} disabled={saving || anyReading} style={{ ...btn(true), padding: "11px 20px", fontSize: 14, opacity: saving || anyReading ? 0.7 : 1 }}>
               {saving ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />
                 : direct || !savePC ? <FolderPlus style={{ width: 16, height: 16 }} /> : <Download style={{ width: 16, height: 16 }} />}
-              {saving ? "Saving…" : "Create folder & save files"}
+              {saving ? "Saving…" : anyReading ? "Reading PDFs…" : "Create folder & save files"}
             </button>
             {(items.length > 0 || client || destination) && !saving && (
               <button onClick={() => {
