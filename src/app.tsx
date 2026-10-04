@@ -35,6 +35,7 @@ import Creatives        from "./pages/Creatives";
 import Automations      from "./pages/Automations";
 import Profile          from "./pages/Profile";
 import QuoteGenerator   from "./pages/QuoteGenerator";
+import TripDocuments    from "./pages/TripDocuments";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ function AppRoutes() {
           <Route path="/creatives"         element={<Creatives />} />
           <Route path="/profile"           element={<Profile />} />
           <Route path="/quotes"            element={<QuoteGenerator />} />
+          <Route path="/trip-documents"    element={<TripDocuments />} />
           <Route path="*"                  element={<NotFound />} />
         </Routes>
       </div>
