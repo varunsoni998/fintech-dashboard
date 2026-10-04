@@ -488,8 +488,11 @@ export default function TripDocuments() {
                 : direct || !savePC ? <FolderPlus style={{ width: 16, height: 16 }} /> : <Download style={{ width: 16, height: 16 }} />}
               {saving ? "Saving…" : "Create folder & save files"}
             </button>
-            {items.length > 0 && !saving && (
-              <button onClick={() => { setItems([]); setMessage(null); setDriveLink(null); }} style={btn()}>Clear all</button>
+            {(items.length > 0 || client || destination) && !saving && (
+              <button onClick={() => {
+                setItems([]); setMessage(null); setDriveLink(null);
+                setClient(""); setDestination(""); setYear(String(new Date().getFullYear()));
+              }} style={btn()}>Clear all</button>
             )}
             <span style={{ fontSize: 12, color: TEXT_MUTED }}>{items.length} file{items.length === 1 ? "" : "s"} · existing files are never overwritten</span>
           </div>
