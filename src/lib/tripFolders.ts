@@ -167,27 +167,79 @@ export function loadGoogleSignIn(): Promise<void> {
   return gisPromise;
 }
 
-let tokenCache: { token: string; exp: number; scope: string } | null = null;
+// ── Remembered Google login (per browser) ──────────────────────────────────
+// The access token Google gives a browser page lasts ~1 hour. We keep it in this
+// browser so a page reload doesn't ask again, and remember which Google account
+// was used so renewing it later is automatic (a Google window may flash briefly,
+// no clicks needed).
+const DRIVE_LS_KEY = "trip:driveLogin";
+
+interface DriveLogin { token: string; exp: number; scope: string; email?: string; connected: boolean }
+
+function loadLogin(): DriveLogin | null {
+  try { return JSON.parse(localStorage.getItem(DRIVE_LS_KEY) || "null"); } catch { return null; }
+}
+function storeLogin(l: DriveLogin | null) {
+  try { l ? localStorage.setItem(DRIVE_LS_KEY, JSON.stringify(l)) : localStorage.removeItem(DRIVE_LS_KEY); } catch { /* ignore */ }
+}
+
+let tokenCache: DriveLogin | null = loadLogin();
 
 export function hasDriveToken(fullAccess: boolean): boolean {
   const scope = fullAccess ? SCOPE_FULL : SCOPE_APP_FILES;
-  return !!tokenCache && tokenCache.scope === scope && tokenCache.exp > Date.now() + 60_000;
+  return !!tokenCache && !!tokenCache.token && tokenCache.scope === scope && tokenCache.exp > Date.now() + 60_000;
 }
 
-/** Opens the Google sign-in popup (only when needed) and returns an access token. */
+/** True once this browser has connected Drive before (even if the 1-hour token has since expired). */
+export function hasConnectedDrive(fullAccess: boolean): boolean {
+  const scope = fullAccess ? SCOPE_FULL : SCOPE_APP_FILES;
+  return !!tokenCache?.connected && tokenCache.scope === scope;
+}
+
+export const driveAccountEmail = () => tokenCache?.email || null;
+
+/** Forget the remembered Google account in this browser. */
+export function disconnectDrive() {
+  const google = (window as any).google;
+  try { if (tokenCache?.token) google?.accounts?.oauth2?.revoke?.(tokenCache.token, () => {}); } catch { /* ignore */ }
+  tokenCache = null;
+  storeLogin(null);
+}
+
+async function fetchAccountEmail(token: string): Promise<string | undefined> {
+  try {
+    const r = await fetch(`${DRIVE_API}/about?fields=user(emailAddress)`, { headers: { Authorization: `Bearer ${token}` } });
+    return r.ok ? (await r.json())?.user?.emailAddress : undefined;
+  } catch { return undefined; }
+}
+
+/**
+ * Returns a Drive access token. Uses the remembered one if still valid; otherwise
+ * asks Google. After the first connect, Google already knows the account and the
+ * permission, so the window closes by itself without any clicks.
+ */
 export async function getDriveToken(fullAccess: boolean): Promise<string> {
   if (!GOOGLE_CLIENT_ID) throw new Error("Google Drive isn't set up yet (VITE_GOOGLE_CLIENT_ID is missing).");
   const scope = fullAccess ? SCOPE_FULL : SCOPE_APP_FILES;
   if (hasDriveToken(fullAccess)) return tokenCache!.token;
+  const returning = hasConnectedDrive(fullAccess);
+  const hint = tokenCache?.email;
   await loadGoogleSignIn();
   const google = (window as any).google;
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope,
-      callback: (resp: any) => {
+      ...(hint ? { login_hint: hint, hint } : {}),
+      callback: async (resp: any) => {
         if (resp.error) return reject(new Error(resp.error_description || resp.error));
-        tokenCache = { token: resp.access_token, exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000, scope };
+        const email = hint || await fetchAccountEmail(resp.access_token);
+        tokenCache = {
+          token: resp.access_token,
+          exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000,
+          scope, email, connected: true,
+        };
+        storeLogin(tokenCache);
         resolve(resp.access_token);
       },
       error_callback: (err: any) =>
@@ -195,7 +247,9 @@ export async function getDriveToken(fullAccess: boolean): Promise<string> {
                          err?.type === "popup_failed_to_open" ? "Google sign-in popup was blocked — allow popups for this site." :
                          err?.message || "Google sign-in failed.")),
     });
-    client.requestAccessToken();
+    // First time: show the account chooser + permission screen.
+    // After that: no prompt, Google re-issues the token on its own.
+    client.requestAccessToken({ prompt: returning ? "" : "consent" });
   });
 }
 
@@ -204,7 +258,7 @@ async function driveFetch(token: string, url: string, init: RequestInit = {}): P
   if (!res.ok) {
     let msg = `Google Drive error ${res.status}`;
     try { msg = (await res.json())?.error?.message || msg; } catch { /* ignore */ }
-    if (res.status === 401) tokenCache = null;
+    if (res.status === 401 && tokenCache) { tokenCache = { ...tokenCache, token: "", exp: 0 }; storeLogin(tokenCache); }
     throw new Error(msg);
   }
   return res.status === 204 ? null : res.json();

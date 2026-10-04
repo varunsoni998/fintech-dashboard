@@ -19,7 +19,8 @@ import {
 } from "@/lib/tripCategorize";
 import {
   canSaveDirect, getSavedBaseDir, pickBaseDir, ensureWritePermission, saveFileToPC, downloadAsZip,
-  isDriveConfigured, loadGoogleSignIn, getDriveToken, hasDriveToken, prepareDriveFolder, saveFileToDrive,
+  isDriveConfigured, loadGoogleSignIn, getDriveToken, hasConnectedDrive, driveAccountEmail, disconnectDrive,
+  prepareDriveFolder, saveFileToDrive,
   parseDriveFolderId, DEFAULT_DRIVE_PARENT, DEFAULT_DRIVE_ROOT_NAME, ItemResult, SaveItem,
 } from "@/lib/tripFolders";
 import { analyzeDocText, isPoorFileName } from "@/lib/tripDocAnalyze";
@@ -129,7 +130,8 @@ export default function TripDocuments() {
   useEffect(() => { LS.set("trip:savePC", String(savePC)); }, [savePC]);
   useEffect(() => { LS.set("trip:saveDrive", String(saveDrive)); }, [saveDrive]);
   useEffect(() => { LS.set("trip:driveParent", driveParent); LS.set("trip:driveRoot", driveRoot); }, [driveParent, driveRoot]);
-  useEffect(() => { setDriveReady(hasDriveToken(fullDrive)); }, [fullDrive]);
+  const [driveEmail, setDriveEmail]   = useState<string | null>(driveAccountEmail());
+  useEffect(() => { setDriveReady(hasConnectedDrive(fullDrive)); }, [fullDrive]);
 
   useEffect(() => {
     if (direct) getSavedBaseDir().then(h => setBaseDirName(h?.name ?? null));
@@ -234,6 +236,7 @@ export default function TripDocuments() {
     try {
       await getDriveToken(fullDrive);
       setDriveReady(true);
+      setDriveEmail(driveAccountEmail());
       setMessage({ kind: "ok", text: "Google Drive connected." });
     } catch (e: any) {
       setMessage({ kind: "error", text: e?.message || "Google sign-in failed." });
@@ -270,7 +273,7 @@ export default function TripDocuments() {
       }
     }
     if (saveDrive) {
-      try { token = await getDriveToken(fullDrive); setDriveReady(true); }
+      try { token = await getDriveToken(fullDrive); setDriveReady(true); setDriveEmail(driveAccountEmail()); }
       catch (e: any) { problems.push(`Google Drive: ${e?.message || e} Click "Connect Google Drive", then Save again.`); }
     }
 
@@ -563,10 +566,21 @@ export default function TripDocuments() {
                 <Toggle on={saveDrive} set={setSaveDrive} disabled={!isDriveConfigured()} />
               </div>
               {isDriveConfigured() && saveDrive && (
-                <button onClick={connectDrive} style={{ ...btn(), marginTop: 10, fontSize: 12 }}>
-                  {driveReady ? <CheckCircle2 style={{ width: 13, height: 13, color: "#2E9E6B" }} /> : <Cloud style={{ width: 13, height: 13 }} />}
-                  {driveReady ? "Connected" : "Connect Google Drive"}
-                </button>
+                driveReady ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, fontSize: 12, color: TEXT_MUTED, flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#2E9E6B", fontWeight: 600 }}>
+                      <CheckCircle2 style={{ width: 13, height: 13 }} /> Connected{driveEmail ? ` as ${driveEmail}` : ""}
+                    </span>
+                    <button onClick={() => { disconnectDrive(); setDriveReady(false); setDriveEmail(null); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: TEXT_MUTED, fontSize: 11, textDecoration: "underline", padding: 0 }}>
+                      Switch account
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={connectDrive} style={{ ...btn(), marginTop: 10, fontSize: 12 }}>
+                    <Cloud style={{ width: 13, height: 13 }} /> Connect Google Drive (one time)
+                  </button>
+                )
               )}
             </div>
           </div>
