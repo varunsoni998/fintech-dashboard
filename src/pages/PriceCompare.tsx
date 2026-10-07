@@ -143,8 +143,9 @@ export default function PriceCompare() {
   useEffect(() => { fetchRoe(cc); }, [cc]);
 
   const fmtCc = (rupees: number) => (cc === "INR" || !roe ? "" : money(rupees / roe, cc));
-  // Online prices are fetched in the trip currency (as the sites quote it), shown in ₹ too.
-  const searchCcy = cc !== "INR" && roe ? cc : "INR";
+  // Online prices are fetched in ₹ — exactly what the sites show a customer browsing from India —
+  // and converted to the trip currency with the ROE (no double conversion via USD/EUR).
+  const searchCcy = "INR";
 
   const setCity = (cid: string, p: Partial<City>) => setTrip(t => ({ ...t, cities: t.cities.map(c => (c.id === cid ? { ...c, ...p } : c)) }));
   const setHotel = (cid: string, hid: string, p: Partial<Hotel>) =>
