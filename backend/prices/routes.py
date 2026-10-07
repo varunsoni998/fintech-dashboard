@@ -2,6 +2,7 @@
 Price Compare routes — /api/prices/...
 
   GET  /status    → is SerpApi configured?
+  GET  /roe       → today's exchange rate (₹ per 1 unit of a currency), fetched automatically
   POST /search    → prices for ONE hotel from every booking site Google Hotels knows (via SerpApi)
   POST /discover  → top hotels in a city (e.g. 5★ Ubud) with their lowest price
   POST /excel     → CustomHolidays costing sheet (team's standard layout) as .xlsx
@@ -157,6 +158,11 @@ def _similar(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 
+class Room(BaseModel):
+    adults: int = 2
+    children_ages: List[int] = []
+
+
 class SearchIn(BaseModel):
     hotel: str
     city: str = ""
@@ -166,6 +172,69 @@ class SearchIn(BaseModel):
     children: int = 0
     currency: str = "INR"
     property_token: Optional[str] = None
+    rooms: Optional[List[Room]] = None        # several rooms → priced per room and added up
+
+
+def _occupancy(adults: int, ages: List[int]) -> dict:
+    """SerpApi guests for ONE room (Google Hotels prices one room at a time)."""
+    ages = [max(1, min(17, int(a or 1))) for a in (ages or [])]
+    out = {"adults": max(1, int(adults or 1)), "children": len(ages)}
+    if ages: out["children_ages"] = ",".join(str(a) for a in ages)
+    return out
+
+
+def _room_groups(body) -> list:
+    """Identical rooms are searched once: [(occupancy_params, how_many_rooms)]."""
+    rooms = body.rooms or [Room(adults=body.adults, children_ages=[])]
+    groups: dict = {}
+    for r in rooms:
+        occ = _occupancy(r.adults, r.children_ages)
+        k = tuple(sorted(occ.items()))
+        groups[k] = (occ, groups.get(k, (occ, 0))[1] + 1)
+    return list(groups.values())
+
+
+# ── ROE (exchange rate) ────────────────────────────────────────────────────────
+# Free, keyless sources tried in order: European Central Bank reference rates (via Frankfurter),
+# then open.er-api.com (covers AED etc. that the ECB doesn't publish). Cached 1 hour.
+_roe_cache: dict = {}
+ROE_TTL = 3600
+
+
+def _fetch_roe(ccy: str) -> dict:
+    ccy = ccy.upper()
+    if ccy == "INR":
+        return {"ccy": "INR", "roe": 1.0, "source": "—", "date": date.today().isoformat()}
+    hit = _roe_cache.get(ccy)
+    if hit and time.time() - hit[0] < ROE_TTL:
+        return hit[1]
+    tries = [
+        ("ECB (European Central Bank)", f"https://api.frankfurter.dev/v1/latest?from={ccy}&to=INR",
+         lambda d: (d["rates"]["INR"], d.get("date"))),
+        ("ECB (European Central Bank)", f"https://api.frankfurter.app/latest?from={ccy}&to=INR",
+         lambda d: (d["rates"]["INR"], d.get("date"))),
+        ("ExchangeRate-API", f"https://open.er-api.com/v6/latest/{ccy}",
+         lambda d: (d["rates"]["INR"], (d.get("time_last_update_utc") or "")[5:16])),
+    ]
+    for name, url, pick in tries:
+        try:
+            r = requests.get(url, timeout=12)
+            r.raise_for_status()
+            rate, day = pick(r.json())
+            out = {"ccy": ccy, "roe": round(float(rate), 4), "source": name, "date": day or date.today().isoformat()}
+            _roe_cache[ccy] = (time.time(), out)
+            return out
+        except Exception as e:
+            logger.warning("ROE source %s failed for %s: %s", name, ccy, e)
+    if hit:                                     # every source down → last known rate
+        return {**hit[1], "stale": True}
+    raise HTTPException(status_code=502, detail=f"Couldn't fetch today's {ccy} rate. Try again in a minute.")
+
+
+@router.get("/roe")
+def roe(ccy: str = "USD", authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    return _fetch_roe(ccy)
 
 
 @router.get("/status")
@@ -177,14 +246,12 @@ def status(authorization: Optional[str] = Header(None)):
     return {"configured": bool(keys), "keys": len(keys), "searches_left": sum(lefts), "active_key": active}
 
 
-@router.post("/search")
-def search(body: SearchIn, authorization: Optional[str] = Header(None)):
-    _get_user_id(authorization)
-    nights = _nights(body.check_in, body.check_out)
-    base = {"check_in_date": body.check_in, "check_out_date": body.check_out, "adults": body.adults,
-            "children": body.children, "currency": body.currency.upper(), "gl": "in", "hl": "en"}
-    if body.property_token:                      # hotel picked from "Find hotels" → 1 search instead of 2
-        data = _serp({**base, "q": body.hotel, "property_token": body.property_token})
+def _search_one(body: SearchIn, occ: dict, nights: int, token: Optional[str]) -> dict:
+    """Prices for ONE room with the given guests."""
+    base = {"check_in_date": body.check_in, "check_out_date": body.check_out, **occ,
+            "currency": body.currency.upper(), "gl": "in", "hl": "en"}
+    if token:                      # hotel picked from "Find hotels" → 1 search instead of 2
+        data = _serp({**base, "q": body.hotel, "property_token": token})
     else:
         data = _serp({**base, "q": f"{body.hotel} {body.city}".strip()})
     searches = 1
@@ -210,6 +277,35 @@ def search(body: SearchIn, authorization: Optional[str] = Header(None)):
             "lowest": prices[0] if prices else None, "searches_used": searches}
 
 
+@router.post("/search")
+def search(body: SearchIn, authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    nights = _nights(body.check_in, body.check_out)
+    groups = _room_groups(body)
+    first = _search_one(body, groups[0][0], nights, body.property_token)
+    n_rooms = sum(n for _, n in groups)
+    if not first.get("found") or (len(groups) == 1 and groups[0][1] == 1):
+        return {**first, "rooms": n_rooms}
+    token = first.get("property_token") or body.property_token
+    parts = [(first["prices"], groups[0][1])]
+    used = first["searches_used"]
+    for occ, n in groups[1:]:
+        r = _search_one(body, occ, nights, token)
+        used += r.get("searches_used", 1)
+        parts.append((r.get("prices") or [], n))
+    # a site counts only if it has a price for every room type; total = sum of all rooms
+    combined = []
+    for p in parts[0][0]:
+        rows = [next((x for x in prices if x["source"] == p["source"]), None) for prices, _ in parts]
+        if any(x is None for x in rows): continue
+        total = sum(x["total"] * n for x, (_, n) in zip(rows, parts))
+        combined.append({"source": p["source"], "total": round(total), "per_night": round(total / nights),
+                         "link": p.get("link"), "free_cancellation": all(x["free_cancellation"] for x in rows)})
+    combined.sort(key=lambda x: x["total"])
+    return {**first, "prices": combined, "lowest": combined[0] if combined else None,
+            "searches_used": used, "rooms": n_rooms}
+
+
 class DiscoverIn(BaseModel):
     city: str
     check_in: str
@@ -218,14 +314,17 @@ class DiscoverIn(BaseModel):
     stars: Optional[int] = 5
     currency: str = "INR"
     limit: int = 12
+    rooms: Optional[List[Room]] = None
 
 
 @router.post("/discover")
 def discover(body: DiscoverIn, authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
     nights = _nights(body.check_in, body.check_out)
+    rooms = body.rooms or [Room(adults=body.adults)]
+    occ = _occupancy(rooms[0].adults, rooms[0].children_ages)
     params = {"q": f"hotels in {body.city}", "check_in_date": body.check_in, "check_out_date": body.check_out,
-              "adults": body.adults, "currency": body.currency.upper(), "gl": "in", "hl": "en"}
+              **occ, "currency": body.currency.upper(), "gl": "in", "hl": "en"}
     if body.stars: params["hotel_class"] = str(body.stars)
     data = _serp(params)
     out = []
@@ -234,7 +333,7 @@ def discover(body: DiscoverIn, authorization: Optional[str] = Header(None)):
         total = _num(p.get("total_rate")) or ((_num(p.get("rate_per_night")) or 0) * nights) or None
         imgs = p.get("images") or []
         out.append({"name": p.get("name"), "stars": p.get("extracted_hotel_class"), "rating": p.get("overall_rating"),
-                    "reviews": p.get("reviews"), "lowest_total": round(total) if total else None,
+                    "reviews": p.get("reviews"), "lowest_total": round(total * len(rooms)) if total else None,
                     "image": imgs[0].get("thumbnail") if imgs else None, "property_token": p.get("property_token")})
         if len(out) >= body.limit: break
     out.sort(key=lambda h: h["lowest_total"] or 9e12)
