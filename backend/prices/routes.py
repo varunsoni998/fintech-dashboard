@@ -9,7 +9,7 @@ Price Compare routes — /api/prices/...
 
 Needs env var SERPAPI_KEYS (comma-separated; SERPAPI_KEY also works). Keys are used in order and the
 next key is used when one runs out of monthly searches.
-Results are cached in memory for 6 hours so repeating a search doesn't use extra credits.
+Results are cached in memory for 1 hour so repeating a search doesn't use extra credits.
 """
 import difflib
 import logging
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 SERPAPI_URL = "https://serpapi.com/search.json"
-CACHE_SECONDS = 6 * 3600
+CACHE_SECONDS = 3600          # 1 hour; "Refresh" skips it and asks Google for live prices
 _cache: dict = {}
 
 
@@ -89,19 +89,20 @@ def _get_user_id(authorization: Optional[str]) -> str:
         raise HTTPException(status_code=401, detail=f"Auth failed: {e}")
 
 
-def _serp(params: dict) -> dict:
-    """One SerpApi call (cached). Moves to the next key when a key runs out."""
+def _serp(params: dict, fresh: bool = False) -> dict:
+    """One SerpApi call (cached). Moves to the next key when a key runs out. fresh=True → live prices."""
     if not _keys():
         raise HTTPException(status_code=503, detail="Price search isn't set up yet: add SERPAPI_KEYS on the server.")
     ck = tuple(sorted(params.items()))
     hit = _cache.get(ck)
-    if hit and time.time() - hit[0] < CACHE_SECONDS:
+    if hit and not fresh and time.time() - hit[0] < CACHE_SECONDS:
         return hit[1]
+    extra = {"no_cache": "true"} if fresh else {}
     last_err = "All SerpApi keys have used their searches for this month."
     for key in _keys():
         if _searches_left(key) <= 0: continue
         try:
-            r = requests.get(SERPAPI_URL, params={**params, "engine": "google_hotels", "api_key": key}, timeout=40)
+            r = requests.get(SERPAPI_URL, params={**params, **extra, "engine": "google_hotels", "api_key": key}, timeout=40)
             data = r.json()
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Price search failed: {e}")
@@ -147,7 +148,10 @@ def extract_prices(prop: dict, nights: int) -> List[dict]:
         if total is None and per is not None: total = per * nights
         if per is None and total is not None: per = total / nights
         if total is None: continue
+        tr = item.get("total_rate") if isinstance(item.get("total_rate"), dict) else {}
+        before = tr.get("extracted_before_taxes_fees")
         row = {"source": src, "total": round(total), "per_night": round(per), "link": item.get("link"),
+               "before_tax": round(before) if isinstance(before, (int, float)) and before < total else None,
                "free_cancellation": bool(item.get("free_cancellation")) or any(
                    bool(rm.get("free_cancellation")) for rm in (item.get("rooms") or []))}
         if src not in best or row["total"] < best[src]["total"]: best[src] = row
@@ -173,6 +177,7 @@ class SearchIn(BaseModel):
     currency: str = "INR"
     property_token: Optional[str] = None
     rooms: Optional[List[Room]] = None        # several rooms → priced per room and added up
+    fresh: bool = False                       # True → skip caches, live prices from Google
 
 
 def _occupancy(adults: int, ages: List[int]) -> dict:
@@ -251,9 +256,9 @@ def _search_one(body: SearchIn, occ: dict, nights: int, token: Optional[str]) ->
     base = {"check_in_date": body.check_in, "check_out_date": body.check_out, **occ,
             "currency": body.currency.upper(), "gl": "in", "hl": "en"}
     if token:                      # hotel picked from "Find hotels" → 1 search instead of 2
-        data = _serp({**base, "q": body.hotel, "property_token": token})
+        data = _serp({**base, "q": body.hotel, "property_token": token}, body.fresh)
     else:
-        data = _serp({**base, "q": f"{body.hotel} {body.city}".strip()})
+        data = _serp({**base, "q": f"{body.hotel} {body.city}".strip()}, body.fresh)
     searches = 1
     prop = data
     if not (data.get("prices") or data.get("featured_prices")):
@@ -265,7 +270,7 @@ def _search_one(body: SearchIn, occ: dict, nights: int, token: Optional[str]) ->
             return {"found": False, "hotel": body.hotel, "prices": [], "searches_used": searches,
                     "suggestions": [p.get("name") for p in props[:5]]}
         if prop.get("property_token"):
-            prop = {**prop, **_serp({**base, "q": body.hotel, "property_token": prop["property_token"]})}
+            prop = {**prop, **_serp({**base, "q": body.hotel, "property_token": prop["property_token"]}, body.fresh)}
             searches += 1
     prices = extract_prices(prop, nights)
     imgs = prop.get("images") or []
@@ -299,7 +304,10 @@ def search(body: SearchIn, authorization: Optional[str] = Header(None)):
         rows = [next((x for x in prices if x["source"] == p["source"]), None) for prices, _ in parts]
         if any(x is None for x in rows): continue
         total = sum(x["total"] * n for x, (_, n) in zip(rows, parts))
+        bt = [x.get("before_tax") or x["total"] for x in rows]
+        before = sum(b * n for b, (_, n) in zip(bt, parts))
         combined.append({"source": p["source"], "total": round(total), "per_night": round(total / nights),
+                         "before_tax": round(before) if before < total else None,
                          "link": p.get("link"), "free_cancellation": all(x["free_cancellation"] for x in rows)})
     combined.sort(key=lambda x: x["total"])
     return {**first, "prices": combined, "lowest": combined[0] if combined else None,
@@ -313,7 +321,7 @@ class DiscoverIn(BaseModel):
     adults: int = 2
     stars: Optional[int] = 5
     currency: str = "INR"
-    limit: int = 12
+    limit: int = 25
     rooms: Optional[List[Room]] = None
 
 
@@ -331,6 +339,7 @@ def discover(body: DiscoverIn, authorization: Optional[str] = Header(None)):
     for p in (data.get("properties") or []):
         if (p.get("type") or "hotel").lower() != "hotel": continue
         total = _num(p.get("total_rate")) or ((_num(p.get("rate_per_night")) or 0) * nights) or None
+        if not total: continue                 # Google has no price for these dates → don't show it
         imgs = p.get("images") or []
         out.append({"name": p.get("name"), "stars": p.get("extracted_hotel_class"), "rating": p.get("overall_rating"),
                     "reviews": p.get("reviews"), "lowest_total": round(total * len(rooms)) if total else None,

@@ -2,7 +2,9 @@
  * PriceCompare.tsx — Skyscanner-style hotel price comparison (dashboard colours).
  * Online prices from every booking site Google Hotels knows (backend /api/prices, SerpApi),
  * plus the team's own supplier rates (Ottila, TBO, DMC). Cheapest first, no markup.
- * Ottila-style rooms picker (adults / children / ages per room); ROE fetched automatically.
+ *  • "Your hotels" (added by name) are pinned first with every site's price.
+ *  • "Other hotels in <city>" lists the rest of the city (only hotels that have a price).
+ * Ottila-style rooms picker; ROE fetched automatically; prices searched in the trip currency.
  * "Download Excel" writes the standard CustomHolidays costing sheet.
  */
 import { useEffect, useState } from "react";
@@ -11,7 +13,7 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 import { supabase } from "@/lib/supabase";
 import {
   Scale, Plus, Minus, X, Search, Loader2, Download, AlertTriangle, CheckCircle2, RefreshCw, Trash2,
-  Star, ExternalLink, ChevronDown, ChevronUp, BedDouble, MapPin, KeyRound, Users,
+  Star, ExternalLink, ChevronDown, ChevronUp, BedDouble, KeyRound, Users, Pin,
 } from "lucide-react";
 
 const API = "https://fintech-dashboard-61vh.onrender.com/api/prices";
@@ -21,29 +23,31 @@ const LABELS = ["", "base", "upg 1", "upg 2", "upg 3"];
 const CCYS = ["USD", "EUR", "CHF", "GBP", "AED", "SGD", "THB", "AUD", "INR"];
 const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", CHF: "CHF ", AED: "AED ", SGD: "S$", THB: "฿", AUD: "A$", INR: "₹" };
 
-interface OnlinePrice { source: string; total: number; per_night: number; free_cancellation: boolean; link?: string }
-interface Online { found: boolean; name?: string; stars?: number; rating?: number; reviews?: number; image?: string; link?: string; prices: OnlinePrice[]; suggestions?: string[] }
+interface OnlinePrice { source: string; total: number; per_night: number; free_cancellation: boolean; link?: string; before_tax?: number | null }
+interface Online { found: boolean; name?: string; stars?: number; rating?: number; reviews?: number; image?: string; link?: string; prices: OnlinePrice[]; suggestions?: string[]; currency?: string; roeAt?: number }
 interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
-  token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number;
-  online?: Online; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean;
+  mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number;
+  online?: Online; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
-interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; newName?: string }
+interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
 interface Room { adults: number; ages: number[] }
-interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight: boolean; cities: City[] }
+interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight?: boolean; cities: City[] }
+interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newHotel = (p: Partial<Hotel> = {}): Hotel => ({ id: uid(), name: "", room: "", meal: "BB", label: "", inPkg: false, ottila: "", tbo: "", otherSource: "DMC", other: "", cancel: "", ...p });
 const newCity = (): City => ({ id: uid(), name: "", checkIn: "", checkOut: "", stars: 5, hotels: [], sort: "cheapest" });
-const EMPTY: Trip = { name: "", roomList: [{ adults: 2, ages: [] }], currency: "USD", roe: "", roeNote: "", gst: "5", tcs: "2", notes: "", perNight: false, cities: [newCity()] };
+const EMPTY: Trip = { name: "", roomList: [{ adults: 2, ages: [] }], currency: "USD", roe: "", roeNote: "", gst: "5", tcs: "2", notes: "", cities: [newCity()] };
+const isMine = (h: Hotel) => h.mine ?? !h.token;   // added by name = yours; from "other hotels" = not
 
 function loadTrip(): Trip {
   try { const t = JSON.parse(localStorage.getItem(STORE) || ""); if (t?.cities && t?.roomList) return t; } catch { /* */ }
   try { // older version of this page → keep its cities/hotels
     const o = JSON.parse(localStorage.getItem("pc:trip:v2") || "");
-    if (o?.cities) return { ...EMPTY, name: o.name || "", currency: o.currency || "USD", gst: o.gst ?? "5", tcs: o.tcs ?? "2", notes: o.notes || "", perNight: !!o.perNight, cities: o.cities, roomList: [{ adults: o.adults || 2, ages: [] }] };
+    if (o?.cities) return { ...EMPTY, name: o.name || "", currency: o.currency || "USD", gst: o.gst ?? "5", tcs: o.tcs ?? "2", notes: o.notes || "", cities: o.cities, roomList: [{ adults: o.adults || 2, ages: [] }] };
   } catch { /* */ }
   return EMPTY;
 }
@@ -53,8 +57,10 @@ const ord = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "s
 const nice = (iso: string) => { const d = new Date(iso + "T00:00:00"); return isNaN(+d) ? iso : `${ord(d.getDate())} ${d.toLocaleString("en", { month: "short" })}`; };
 const num = (s: string) => { const v = parseFloat(String(s).replace(/[^0-9.]/g, "")); return isNaN(v) ? 0 : v; };
 const inr = (v: number) => "₹" + Math.round(v).toLocaleString("en-IN");
+const money = (v: number, ccy: string) => ccy === "INR" ? inr(v) : `${SYMBOL[ccy] || ccy + " "}${Math.round(v).toLocaleString("en-IN")}`;
 const ratingWord = (r?: number) => !r ? "" : r >= 4.7 ? "Exceptional" : r >= 4.5 ? "Excellent" : r >= 4.2 ? "Very good" : r >= 3.8 ? "Good" : "Okay";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const clock = (t?: number) => t ? new Date(t).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "";
 
 // ── rooms text ("4 Adults, 1 Child in 2 Rooms") ────────────────────────────────
 const roomSummary = (rs: Room[]) => {
@@ -136,8 +142,9 @@ export default function PriceCompare() {
   };
   useEffect(() => { fetchRoe(cc); }, [cc]);
 
-  const conv = (rupees: number) => (cc === "INR" ? rupees : roe ? rupees / roe : NaN);
-  const fmtCc = (rupees: number) => { if (cc === "INR") return ""; const v = conv(rupees); return isNaN(v) ? "" : `${SYMBOL[cc] || cc + " "}${Math.round(v).toLocaleString("en-IN")}`; };
+  const fmtCc = (rupees: number) => (cc === "INR" || !roe ? "" : money(rupees / roe, cc));
+  // Online prices are fetched in the trip currency (as the sites quote it), shown in ₹ too.
+  const searchCcy = cc !== "INR" && roe ? cc : "INR";
 
   const setCity = (cid: string, p: Partial<City>) => setTrip(t => ({ ...t, cities: t.cities.map(c => (c.id === cid ? { ...c, ...p } : c)) }));
   const setHotel = (cid: string, hid: string, p: Partial<Hotel>) =>
@@ -153,57 +160,76 @@ export default function PriceCompare() {
   const apiRooms = rooms.map(r => ({ adults: r.adults, children_ages: r.ages }));
   const nRooms = rooms.length;
 
-  // all prices for a hotel (supplier rates + every site), cheapest first
-  const deals = (h: Hotel) => [
-    ...([["Ottila", h.ottila], ["TBO", h.tbo], [h.otherSource || "Other", h.other]] as [string, string][])
-      .filter(([, v]) => num(v) > 0).map(([s, v]) => ({ source: s, rupees: num(v), mine: true, free: !!h.cancel, link: undefined as string | undefined })),
-    ...(h.online?.prices || []).map(p => ({ source: p.source, rupees: p.total, mine: false, free: p.free_cancellation, link: p.link })),
-  ].sort((a, b) => a.rupees - b.rupees);
-  const bestOf = (h: Hotel) => deals(h)[0]?.rupees ?? h.fromPrice;
+  // all prices for a hotel (supplier rates + every site), cheapest first — no limit
+  const deals = (h: Hotel): Deal[] => {
+    const rate = h.online?.roeAt || 1, ccy = h.online?.currency || "INR";
+    return [
+      ...([["Ottila", h.ottila], ["TBO", h.tbo], [h.otherSource || "Other", h.other]] as [string, string][])
+        .filter(([, v]) => num(v) > 0).map(([s, v]) => ({ source: s, rupees: num(v), amt: num(v), ccy: "INR", mine: true, free: !!h.cancel })),
+      ...(h.online?.prices || []).map(p => ({ source: p.source, rupees: p.total * rate, amt: p.total, ccy, before: p.before_tax ? p.before_tax * rate : undefined, mine: false, free: p.free_cancellation, link: p.link })),
+    ].sort((a, b) => a.rupees - b.rupees);
+  };
+  const bestOf = (h: Hotel) => deals(h)[0]?.rupees ?? (h.online ? undefined : h.fromPrice);
+  const hasPrice = (h: Hotel) => !!bestOf(h);
 
   // ── Searching ──────────────────────────────────────────────────────────────
-  const key = (c: City, h: Hotel) => `${h.name}|${c.name}|${c.checkIn}|${c.checkOut}|${JSON.stringify(rooms)}`;
-  const compare = async (only?: City, force = false) => {
-    setMsg(null);
-    const cities = only ? [only] : trip.cities;
-    const bad = cities.find(c => c.hotels.length && !nightsOf(c));
-    if (bad) return setMsg({ kind: "err", text: `Check the dates for ${bad.name || "a city"}.` });
-    const jobs: { c: City; h: Hotel }[] = [];
-    for (const c of cities) for (const h of c.hotels) if (h.name.trim() && (force || h.searchedFor !== key(c, h))) jobs.push({ c, h });
-    if (!jobs.length) return setMsg({ kind: "ok", text: "All prices are up to date. Use Refresh to search again." });
-    setBusy(true);
+  const key = (c: City, h: Hotel) => `${h.name}|${c.name}|${c.checkIn}|${c.checkOut}|${JSON.stringify(rooms)}|${searchCcy}`;
+  const findKey = (c: City) => `${c.name}|${c.checkIn}|${c.checkOut}|${c.stars}|${JSON.stringify(rooms)}`;
+
+  const runSearches = async (jobs: { c: City; h: Hotel }[], fresh = false) => {
+    const rate = searchCcy === "INR" ? 1 : roe;
     const work = async () => {
       for (let j = jobs.shift(); j; j = jobs.shift()) {
         const { c, h } = j;
         setHotel(c.id, h.id, { loading: true, error: undefined });
         try {
-          const r: Online = await (await authFetch("/search", { hotel: h.name, city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, currency: "INR", property_token: h.token, rooms: apiRooms })).json();
-          setHotel(c.id, h.id, { loading: false, online: r, searchedFor: key(c, h), image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
+          const r: Online = await (await authFetch("/search", { hotel: h.name, city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, currency: searchCcy, property_token: h.token, rooms: apiRooms, fresh })).json();
+          setHotel(c.id, h.id, { loading: false, online: { ...r, currency: r.currency || searchCcy, roeAt: rate }, searchedFor: key(c, h), checkedAt: Date.now(), open: true,
+            token: h.token || (r as any).property_token, image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
         } catch (e: any) { setHotel(c.id, h.id, { loading: false, error: e.message }); }
       }
     };
     await Promise.all([work(), work(), work()]);
-    setBusy(false); loadStatus();
   };
 
   const findHotels = async (c: City) => {
-    setMsg(null);
-    if (!c.name || !nightsOf(c)) return setMsg({ kind: "err", text: "Enter the city and dates first." });
     setCity(c.id, { finding: true });
     try {
-      const r = await (await authFetch("/discover", { city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, stars: c.stars || null, currency: "INR", limit: 12, rooms: apiRooms })).json();
-      const have = new Set(c.hotels.map(h => h.name.toLowerCase()));
-      const add = (r.hotels || []).filter((x: any) => x.name && !have.has(x.name.toLowerCase())).map((x: any) =>
-        newHotel({ name: x.name, token: x.property_token, image: x.image, stars: x.stars, rating: x.rating, reviews: x.reviews, fromPrice: x.lowest_total }));
-      setCity(c.id, { finding: false, hotels: [...c.hotels, ...add] });
-      if (!add.length) setMsg({ kind: "err", text: "No new hotels found for that search." });
-      loadStatus();
+      const r = await (await authFetch("/discover", { city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, stars: c.stars || null, currency: "INR", limit: 25, rooms: apiRooms })).json();
+      setTrip(t => ({ ...t, cities: t.cities.map(x => {
+        if (x.id !== c.id) return x;
+        // keep your hotels + anything you labelled / put in the package; replace the rest with the new list
+        const keep = x.hotels.filter(h => isMine(h) || h.inPkg || h.label);
+        const have = new Set(keep.map(h => h.name.toLowerCase()));
+        const add = (r.hotels || []).filter((y: any) => y.name && y.lowest_total && !have.has(y.name.toLowerCase())).map((y: any) =>
+          newHotel({ name: y.name, mine: false, token: y.property_token, image: y.image, stars: y.stars, rating: y.rating, reviews: y.reviews, fromPrice: y.lowest_total }));
+        return { ...x, finding: false, foundFor: findKey(c), hotels: [...keep, ...add] };
+      }) }));
     } catch (e: any) { setCity(c.id, { finding: false }); setMsg({ kind: "err", text: e.message }); }
   };
 
+  // Search a city: your hotels get every site's price; the rest of the city is listed below.
+  const searchCity = async (c: City, fresh = false) => {
+    if (!c.name.trim() || !nightsOf(c)) { setMsg({ kind: "err", text: `Enter the city and dates${c.name ? ` for ${c.name}` : ""}.` }); return; }
+    const jobs = c.hotels.filter(h => h.name.trim() && (isMine(h) || (fresh && h.online)) && (fresh || h.searchedFor !== key(c, h))).map(h => ({ c, h }));
+    await Promise.all([runSearches(jobs, fresh), fresh || c.foundFor !== findKey(c) ? findHotels(c) : Promise.resolve()]);
+  };
+  const searchAll = async (only?: City, fresh = false) => {
+    setMsg(null); setBusy(true);
+    for (const c of only ? [only] : trip.cities) await searchCity(c, fresh);
+    setBusy(false); loadStatus();
+  };
+  const seeAll = async (c: City, h: Hotel) => {
+    if (h.online && h.searchedFor === key(c, h)) return setHotel(c.id, h.id, { open: !h.open });
+    await runSearches([{ c, h }]); loadStatus();
+  };
+  const addByName = (c: City) => {
+    const name = (c.newName || "").trim(); if (!name) return;
+    setCity(c.id, { hotels: [newHotel({ name, mine: true }), ...c.hotels], newName: "" });
+  };
+
   // ── Sorting like Skyscanner (Best / Cheapest / Top rated) ──────────────────
-  const sorted = (c: City, by: SortKey) => {
-    const hs = c.hotels.filter(h => h.name.trim());
+  const sortList = (hs: Hotel[], by: SortKey) => {
     const prices = hs.map(bestOf).filter((x): x is number => !!x);
     const min = prices.length ? Math.min(...prices) : 1;
     const score = (h: Hotel) => { const p = bestOf(h); if (!p) return -1; return ((h.rating || 4) / 5) * 0.6 + (min / p) * 0.4; };
@@ -217,20 +243,26 @@ export default function PriceCompare() {
   const downloadExcel = async () => {
     setMsg(null);
     if (cc !== "INR" && !roe) { fetchRoe(); return setMsg({ kind: "err", text: `Getting today's ${cc} rate — try again in a moment.` }); }
+    const asCost = (d: Deal) => (d.ccy === cc && cc !== "INR" ? { currency: cc, amount: d.amt } : { currency: "INR", amount: Math.round(d.rupees) });
     const sections = trip.cities.filter(c => c.hotels.some(h => h.name.trim())).map(c => {
       const rows: any[] = [];
-      for (const h of sorted(c, "cheapest")) {
-        const online = h.online?.prices || [];
-        const bcom = online.find(p => /booking\.com/i.test(p.source));
-        const cmpP = bcom || online[0];
-        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, currency: "INR", amount: cmpP.total, meal: h.meal, cancel: cmpP.free_cancellation ? "Free cxl" : undefined } : undefined;
-        const remark = online.length ? online.slice(0, 6).map(p => `${p.source} ${inr(p.total)}`).join(" · ") : undefined;
-        const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || "Room"}`;
+      const pick = c.hotels.filter(h => h.name.trim() && (isMine(h) || h.inPkg || h.label || h.online));
+      for (const h of sortList(pick, "cheapest")) {
         const ds = deals(h);
-        if (!ds.length) { rows.push({ bid: h.label || undefined, description: desc, source: "", meal: h.meal, notes: "No price" }); continue; }
+        const online = ds.filter(d => !d.mine);
+        const bcom = online.find(d => /booking\.com/i.test(d.source));
+        const cmpP = bcom || online[0];
+        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cmpP.free ? "Free cxl" : undefined } : undefined;
+        const remark = online.length ? online.slice(0, 8).map(d => `${d.source} ${money(d.amt, d.ccy)}`).join(" · ") : undefined;
+        const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || "Room"}`;
+        if (!ds.length) {
+          rows.push(h.fromPrice ? { bid: h.label || undefined, description: desc, source: "Google (from)", currency: "INR", amount: h.fromPrice, meal: h.meal, markup: 0, pkg: h.inPkg ? ["A"] : [] }
+            : { bid: h.label || undefined, description: desc, source: "", meal: h.meal, notes: "Not available online" });
+          continue;
+        }
         const mine = ds.filter(d => d.mine);
         const main = mine.length ? mine : [ds[0]];
-        main.forEach((d, i) => rows.push({ bid: h.label || undefined, description: desc, source: d.source, currency: "INR", amount: d.rupees, meal: h.meal,
+        main.forEach((d, i) => rows.push({ bid: h.label || undefined, description: desc, source: d.source, ...asCost(d), meal: h.meal,
           cancel: d.mine ? h.cancel || undefined : d.free ? "Free cxl" : undefined, markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
           compare: d.mine || (bcom && d.source !== bcom.source) ? compare : undefined, remark: i === 0 ? remark : undefined }));
       }
@@ -247,18 +279,21 @@ export default function PriceCompare() {
       const blob = await (await authFetch("/excel", body)).blob();
       const url = URL.createObjectURL(blob); const a = document.createElement("a");
       a.href = url; a.download = `${trip.name || "Trip"} costing.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
-      setMsg({ kind: "ok", text: "Excel downloaded in the standard costing layout." });
+      setMsg({ kind: "ok", text: "Excel downloaded in the standard costing layout (your hotels + any you labelled or put in the package)." });
     } catch (e: any) { setMsg({ kind: "err", text: e.message }); } finally { setBusy(false); }
   };
 
   // ── Render helpers ─────────────────────────────────────────────────────────
-  const price = (rupees: number | undefined, nights: number, big = false) => {
-    if (!rupees) return <span style={{ color: MUTED }}>—</span>;
-    const r = trip.perNight ? rupees / nights : rupees;
+  // total (₹ + the site's own currency) and per night, always both
+  const priceBlock = (rupees: number, n: number, opts: { amt?: number; ccy?: string; before?: number; big?: boolean } = {}) => {
+    const siteCcy = opts.ccy && opts.ccy !== "INR" && opts.amt ? money(opts.amt, opts.ccy) : fmtCc(rupees);
     return (
-      <div style={{ textAlign: "right", lineHeight: 1.15 }}>
-        <div style={{ fontSize: big ? 24 : 16, fontWeight: 800, color: TEXT }}>{inr(r)}</div>
-        {fmtCc(r) && <div style={{ fontSize: big ? 13 : 11.5, color: MUTED, fontWeight: 600 }}>{fmtCc(r)}</div>}
+      <div style={{ textAlign: "right", lineHeight: 1.2 }}>
+        <div style={{ fontSize: opts.big ? 24 : 16, fontWeight: 800, color: TEXT }}>{inr(rupees)}</div>
+        {siteCcy && <div style={{ fontSize: opts.big ? 13 : 11.5, color: MUTED, fontWeight: 700 }}>{siteCcy}</div>}
+        <div style={{ fontSize: opts.big ? 12.5 : 11.5, color: ACCENT, fontWeight: 700, whiteSpace: "nowrap" }}>{inr(rupees / n)} / night</div>
+        {nRooms > 1 && <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 600, whiteSpace: "nowrap" }}>{inr(rupees / n / nRooms)} / room / night</div>}
+        {opts.before ? <div style={{ fontSize: 10.5, color: MUTED }}>{inr(opts.before)} before taxes</div> : null}
       </div>
     );
   };
@@ -269,6 +304,126 @@ export default function PriceCompare() {
       <button style={{ ...round, opacity: value >= max ? 0.4 : 1 }} disabled={value >= max} onClick={() => onChange(value + 1)}><Plus style={{ width: 14, height: 14 }} /></button>
     </div>
   );
+  const sectionTitle = (text: string, sub?: string) => (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "4px 4px 0" }}>
+      <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{text}</span>
+      {sub && <span style={{ fontSize: 12.5, color: MUTED }}>{sub}</span>}
+    </div>
+  );
+
+  const hotelCard = (c: City, h: Hotel, n: number, badges: { cheapest: boolean; best: boolean; rated: boolean }) => {
+    const ds = deals(h); const best = ds[0]; const mineHotel = isMine(h);
+    const showDeals = mineHotel ? ds.length > 0 : !!(h.open && h.online && ds.length);
+    const link = (d: Deal) => d.link || `https://www.google.com/search?q=${encodeURIComponent(`${d.source} ${h.name} ${c.name}`)}`;
+    const notOnline = h.online && (!h.online.found || !h.online.prices.length);
+    return (
+      <div key={h.id} style={{ ...card, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 250px", minHeight: 150 }} className="max-md:!grid-cols-1">
+          {/* image */}
+          <div style={{ position: "relative", padding: 10 }}>
+            {h.image ? <img src={h.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", minHeight: 140, borderRadius: 14 }} />
+              : <div style={{ height: "100%", minHeight: 140, borderRadius: 14, boxShadow: SHADOW_IN, display: "flex", alignItems: "center", justifyContent: "center", color: MUTED }}><BedDouble style={{ width: 34, height: 34 }} /></div>}
+            <div style={{ position: "absolute", top: 18, left: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+              {mineHotel && <span style={pill(GRAD)}>Your hotel</span>}
+              {badges.cheapest && <span style={pill(GREEN)}>Cheapest</span>}
+              {badges.best && <span style={pill(ACCENT)}>Best</span>}
+              {badges.rated && <span style={pill(PURPLE)}>Top rated</span>}
+            </div>
+          </div>
+
+          {/* details */}
+          <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>{h.online?.name && mineHotel ? h.online.name : h.name}</span>
+              {h.stars ? <span style={{ display: "inline-flex" }}>{Array.from({ length: h.stars }).map((_, i) => <Star key={i} style={{ width: 13, height: 13, color: "#F5B400", fill: "#F5B400" }} />)}</span> : null}
+              <div style={{ flex: 1 }} />
+              <button title="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: MUTED }} onClick={() => setCity(c.id, { hotels: c.hotels.filter(x => x.id !== h.id) })}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            {h.rating ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                <span style={{ ...pill(GRAD), fontSize: 12 }}>{h.rating.toFixed(1)}</span>
+                <b style={{ color: TEXT }}>{ratingWord(h.rating)}</b>
+                {h.reviews ? <span style={{ color: MUTED }}>{h.reviews.toLocaleString("en-IN")} reviews</span> : null}
+              </div>
+            ) : null}
+            {h.loading && <div style={{ fontSize: 12.5, color: ACCENT, display: "flex", gap: 5, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Checking every booking site{nRooms > 1 ? ` for ${nRooms} rooms` : ""}…</div>}
+            {h.error && <div style={{ fontSize: 12.5, color: ERR }}>{h.error}</div>}
+            {notOnline && <div style={{ fontSize: 12.5, color: WARN, fontWeight: 600 }}>Not available online for these dates{h.online?.suggestions?.length ? ` — did you mean: ${h.online.suggestions.slice(0, 3).join(", ")}?` : ""}</div>}
+            {mineHotel && !h.online && !h.loading && <div style={{ fontSize: 12.5, color: MUTED }}>Click <b>Search</b> to get every site's price.</div>}
+            {h.checkedAt && !h.loading && <div style={{ fontSize: 11.5, color: MUTED }}>Prices checked at {clock(h.checkedAt)}{h.online?.currency && h.online.currency !== "INR" ? ` · quoted in ${h.online.currency}` : ""}</div>}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto", alignItems: "center", fontSize: 12.5 }}>
+              <input style={{ ...inp, width: 170, padding: "7px 9px", fontSize: 12.5 }} value={h.room} placeholder="Room type (for Excel)" onChange={e => setHotel(c.id, h.id, { room: e.target.value })} />
+              <select style={{ ...inp, width: 66, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>{MEALS.map(m => <option key={m}>{m}</option>)}</select>
+              <select style={{ ...inp, width: 86, padding: "7px 6px", fontSize: 12.5 }} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "label"}</option>)}</select>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: TEXT, cursor: "pointer" }}>
+                <input type="checkbox" checked={h.inPkg} onChange={e => setHotel(c.id, h.id, { inPkg: e.target.checked })} style={{ accentColor: ACCENT }} /> In package
+              </label>
+              <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { showRates: !h.showRates })}>
+                <Plus style={{ width: 12, height: 12 }} /> Ottila / TBO / DMC rate
+              </button>
+              {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { mine: true })} title="Move to Your hotels">
+                <Pin style={{ width: 12, height: 12 }} /> Add to my hotels
+              </button>}
+            </div>
+          </div>
+
+          {/* best price */}
+          <div style={{ margin: 10, borderRadius: 14, boxShadow: SHADOW_IN, padding: 14, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-end", gap: 6 }}>
+            {best ? (<>
+              <div style={{ fontSize: 12, color: MUTED }}>{plural(ds.length, "deal", "deals")} · cheapest on</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
+              {priceBlock(best.rupees, n, { amt: best.amt, ccy: best.ccy, big: true })}
+              <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}{best.free ? " · free cancellation" : ""}</div>
+              {!mineHotel && <button style={{ ...btn("primary"), padding: "8px 13px" }} disabled={h.loading} onClick={() => seeAll(c, h)}>
+                {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : h.open && h.online ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
+                {h.open && h.online ? "Hide prices" : "See all prices"}</button>}
+              {mineHotel && !best.mine && <a href={link(best)} target="_blank" rel="noreferrer" style={{ ...btn("primary"), textDecoration: "none" }}>View deal <ExternalLink style={{ width: 13, height: 13 }} /></a>}
+            </>) : h.fromPrice && !h.online ? (<>
+              <div style={{ fontSize: 12, color: MUTED }}>from</div>{priceBlock(h.fromPrice, n, { big: true })}
+              <button style={{ ...btn("primary"), padding: "8px 13px" }} disabled={h.loading} onClick={() => seeAll(c, h)}>
+                {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />} See all prices</button>
+            </>) : <div style={{ fontSize: 13, color: MUTED, textAlign: "right" }}>{notOnline ? "Not available online" : "No price yet"}</div>}
+          </div>
+        </div>
+
+        {/* supplier rates */}
+        {h.showRates && (
+          <div style={{ margin: "0 10px 10px", borderRadius: 14, boxShadow: SHADOW_IN, padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+            <label style={lbl}>Ottila ₹ (total){nRooms > 1 ? ` · ${nRooms} rooms` : ""}<input style={inp} value={h.ottila} onChange={e => setHotel(c.id, h.id, { ottila: e.target.value })} /></label>
+            <label style={lbl}>TBO ₹ (total)<input style={inp} value={h.tbo} onChange={e => setHotel(c.id, h.id, { tbo: e.target.value })} /></label>
+            <label style={lbl}>Other source<input style={inp} value={h.otherSource} onChange={e => setHotel(c.id, h.id, { otherSource: e.target.value })} /></label>
+            <label style={lbl}>Other ₹ (total)<input style={inp} value={h.other} onChange={e => setHotel(c.id, h.id, { other: e.target.value })} /></label>
+            <label style={lbl}>Free cxl until<input style={inp} type="date" value={h.cancel} onChange={e => setHotel(c.id, h.id, { cancel: e.target.value })} /></label>
+          </div>
+        )}
+
+        {/* every site — no limit */}
+        {showDeals && (
+          <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "34px 1fr auto 170px 120px", gap: 12, padding: "2px 12px", fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.3 }} className="max-md:!hidden">
+              <span /> <span>Website ({ds.length})</span> <span /> <span style={{ textAlign: "right" }}>Total · per night</span> <span />
+            </div>
+            {ds.map((d, i) => (
+              <div key={d.source + i} style={{ display: "grid", gridTemplateColumns: "34px 1fr auto 170px 120px", alignItems: "center", gap: 12, padding: "9px 12px", borderRadius: 12, background: i === 0 ? TINT : "transparent", boxShadow: i === 0 ? "none" : SHADOW_IN }}>
+                <div style={{ width: 30, height: 30, borderRadius: 9, background: d.mine ? GRAD : BG, boxShadow: d.mine ? "none" : SHADOW_SM, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: d.mine ? "#fff" : ACCENT }}>{d.source[0]?.toUpperCase()}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>
+                  {d.source}
+                  {d.mine && <span style={{ ...pill(ACCENT), marginLeft: 8 }}>your rate</span>}
+                  {i === 0 && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
+                  {i > 0 && best && Math.round(d.rupees - best.rupees) > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: WARN, fontWeight: 600 }}>+{inr(d.rupees - best.rupees)}</span>}
+                  {i > 0 && best && Math.round(d.rupees - best.rupees) === 0 && <span style={{ marginLeft: 8, fontSize: 12, color: MUTED, fontWeight: 600 }}>same price</span>}
+                </div>
+                <div style={{ fontSize: 12, color: d.free ? GREEN : MUTED, fontWeight: 600 }}>{d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>
+                {priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy, before: d.before })}
+                {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
+                  : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <DashboardLayout>
@@ -318,11 +473,11 @@ export default function PriceCompare() {
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ color: TEXT, fontSize: 13.5, fontWeight: 600 }}>Adults</span>
-                        <Stepper value={r.adults} min={1} max={6} onChange={n => setRoom(i, { adults: n })} />
+                        <Stepper value={r.adults} min={1} max={6} onChange={v => setRoom(i, { adults: v })} />
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ color: TEXT, fontSize: 13.5, fontWeight: 600 }}>Children</span>
-                        <Stepper value={r.ages.length} min={0} max={4} onChange={n => setChildren(i, n)} />
+                        <Stepper value={r.ages.length} min={0} max={4} onChange={v => setChildren(i, v)} />
                       </div>
                       {r.ages.length > 0 && (
                         <div>
@@ -370,10 +525,15 @@ export default function PriceCompare() {
 
         {trip.cities.map(c => {
           const n = nightsOf(c) || 1;
-          const list = sorted(c, c.sort);
+          const named = c.hotels.filter(h => h.name.trim());
+          const mineList = sortList(named.filter(isMine), c.sort);
+          // other hotels: only ones that actually have a price
+          const others = sortList(named.filter(h => !isMine(h) && hasPrice(h)), c.sort);
+          const visible = [...mineList.filter(hasPrice), ...others];
           const tabs: { k: SortKey; label: string }[] = [{ k: "best", label: "Best" }, { k: "cheapest", label: "Cheapest" }, { k: "rated", label: "Top rated" }];
-          const top = (k: SortKey) => sorted(c, k)[0];
-          const cheapestId = top("cheapest")?.id, bestId = top("best")?.id, ratedId = top("rated")?.id;
+          const top = (k: SortKey) => sortList(visible, k)[0];
+          const ids = { cheapest: top("cheapest")?.id, best: top("best")?.id, rated: top("rated")?.id };
+          const badges = (h: Hotel) => ({ cheapest: h.id === ids.cheapest && hasPrice(h), best: h.id === ids.best && hasPrice(h), rated: h.id === ids.rated && !!h.rating });
           const white: React.CSSProperties = { ...lbl, color: "rgba(255,255,255,0.9)" };
           const onGrad: React.CSSProperties = { ...inp, background: "rgba(255,255,255,0.96)", boxShadow: "none", color: "#3A3A5A" };
           return (
@@ -385,33 +545,24 @@ export default function PriceCompare() {
                 <label style={white}>Check-out<input style={onGrad} type="date" value={c.checkOut} onChange={e => setCity(c.id, { checkOut: e.target.value })} /></label>
                 <label style={white}>Stars<select style={onGrad} value={c.stars} onChange={e => setCity(c.id, { stars: +e.target.value })}>{[5, 4, 3, 0].map(s => <option key={s} value={s}>{s ? `${s}★` : "Any"}</option>)}</select></label>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button style={{ ...btn(), background: "rgba(255,255,255,0.96)", color: "#5B6FD0", boxShadow: "none", flex: 1, justifyContent: "center" }} disabled={c.finding} onClick={() => findHotels(c)} title="Uses 1 search">
-                    {c.finding ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <MapPin style={{ width: 15, height: 15 }} />} Find hotels
+                  <button style={{ ...btn(), background: "#3F4FA8", color: "#fff", boxShadow: "none", flex: 1, justifyContent: "center" }} disabled={busy || c.finding} onClick={() => searchAll(c)} title="Your hotels: every site's price. Plus other hotels in the city.">
+                    {busy || c.finding ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search
                   </button>
                   {trip.cities.length > 1 && <button title="Remove city" style={{ ...btn(), background: "transparent", color: "#fff", boxShadow: "none", border: "1px solid rgba(255,255,255,0.5)", padding: "10px 11px" }} onClick={() => setT({ cities: trip.cities.filter(x => x.id !== c.id) })}><X style={{ width: 15, height: 15 }} /></button>}
                 </div>
-                <button style={{ ...btn(), background: "#3F4FA8", color: "#fff", boxShadow: "none", justifyContent: "center" }} disabled={busy} onClick={() => compare(c)}><Search style={{ width: 15, height: 15 }} /> Compare prices</button>
               </div>
 
               {/* Add hotel by name */}
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <input style={{ ...inp, maxWidth: 420, flex: 1, minWidth: 200 }} value={c.newName || ""} placeholder="Add a hotel by name (press Enter)…"
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <input style={{ ...inp, maxWidth: 460, flex: 1, minWidth: 220 }} value={c.newName || ""} placeholder="Add a hotel by name (optional) — press Enter…"
                   onChange={e => setCity(c.id, { newName: e.target.value })}
-                  onKeyDown={e => { if (e.key === "Enter" && (c.newName || "").trim()) setCity(c.id, { hotels: [...c.hotels, newHotel({ name: c.newName!.trim() })], newName: "" }); }} />
-                <button style={btn()} onClick={() => (c.newName || "").trim() && setCity(c.id, { hotels: [...c.hotels, newHotel({ name: c.newName!.trim() })], newName: "" })}><Plus style={{ width: 14, height: 14 }} /> Add</button>
-                <div style={{ flex: 1 }} />
-                <div style={{ display: "inline-flex", borderRadius: 12, boxShadow: SHADOW_IN, padding: 4, gap: 4 }}>
-                  {[false, true].map(pn => (
-                    <button key={String(pn)} onClick={() => setT({ perNight: pn })}
-                      style={{ padding: "7px 12px", fontSize: 12.5, fontWeight: 700, border: "none", borderRadius: 9, cursor: "pointer", background: trip.perNight === pn ? GRAD : "transparent", color: trip.perNight === pn ? "#fff" : TEXT }}>
-                      {pn ? "Per night" : `Total stay (${n}N${nRooms > 1 ? `, ${nRooms} rooms` : ""})`}
-                    </button>
-                  ))}
-                </div>
+                  onKeyDown={e => { if (e.key === "Enter") addByName(c); }} />
+                <button style={btn()} onClick={() => addByName(c)}><Plus style={{ width: 14, height: 14 }} /> Add hotel</button>
+                <span style={{ fontSize: 12, color: MUTED }}>No hotel added? <b>Search</b> shows all hotels in the city.</span>
               </div>
 
               {/* Sort tabs */}
-              {list.length > 0 && (
+              {visible.length > 0 && (
                 <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", padding: 6, gap: 6 }}>
                   {tabs.map(t => {
                     const h = top(t.k); const active = c.sort === t.k; const p = h ? bestOf(h) : undefined;
@@ -419,123 +570,28 @@ export default function PriceCompare() {
                       <button key={t.k} onClick={() => setCity(c.id, { sort: t.k })}
                         style={{ padding: "10px 14px", textAlign: "left", border: "none", borderRadius: 13, background: active ? GRAD : "transparent", boxShadow: active ? SHADOW_SM : "none", cursor: "pointer" }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: active ? "#fff" : TEXT }}>{t.label}</div>
-                        <div style={{ fontSize: 13, color: active ? "rgba(255,255,255,0.85)" : MUTED }}>{p ? `${inr(trip.perNight ? p / n : p)}${fmtCc(p) ? " · " + fmtCc(trip.perNight ? p / n : p) : ""}` : "—"}</div>
+                        <div style={{ fontSize: 13, color: active ? "rgba(255,255,255,0.85)" : MUTED }}>{p ? `${inr(p)} · ${inr(p / n)}/night` : "—"}</div>
                       </button>
                     );
                   })}
                 </div>
               )}
 
-              {list.length === 0 && (
+              {named.length === 0 && !c.finding && (
                 <div style={{ ...card, padding: 26, textAlign: "center", color: MUTED, fontSize: 14 }}>
                   <BedDouble style={{ width: 28, height: 28, margin: "0 auto 6px", color: ACCENT }} />
-                  Enter the city and dates, then <b>Find hotels</b> or add hotels by name.
+                  Enter the city and dates, then <b>Search</b>. Add hotel names first if you want specific hotels at the top.
                 </div>
               )}
 
-              {/* Result cards */}
-              {list.map(h => {
-                const ds = deals(h); const best = ds[0]; const shown = h.open ? ds : ds.slice(0, 3);
-                const link = (d: { source: string; link?: string }) => d.link || `https://www.google.com/search?q=${encodeURIComponent(`${d.source} ${h.name} ${c.name}`)}`;
-                return (
-                  <div key={h.id} style={{ ...card, overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 240px", minHeight: 150 }} className="max-md:!grid-cols-1">
-                      {/* image */}
-                      <div style={{ position: "relative", padding: 10 }}>
-                        {h.image ? <img src={h.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", minHeight: 140, borderRadius: 14 }} />
-                          : <div style={{ height: "100%", minHeight: 140, borderRadius: 14, boxShadow: SHADOW_IN, display: "flex", alignItems: "center", justifyContent: "center", color: MUTED }}><BedDouble style={{ width: 34, height: 34 }} /></div>}
-                        <div style={{ position: "absolute", top: 18, left: 18, display: "flex", flexDirection: "column", gap: 4 }}>
-                          {h.id === cheapestId && bestOf(h) && <span style={pill(GREEN)}>Cheapest</span>}
-                          {h.id === bestId && bestOf(h) && <span style={pill(ACCENT)}>Best</span>}
-                          {h.id === ratedId && h.rating && <span style={pill(PURPLE)}>Top rated</span>}
-                        </div>
-                      </div>
+              {/* Your hotels — pinned first, every site */}
+              {mineList.length > 0 && sectionTitle(`Your hotels (${mineList.length})`, "every website's price, cheapest first")}
+              {mineList.map(h => hotelCard(c, h, n, badges(h)))}
 
-                      {/* details */}
-                      <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>{h.name}</span>
-                          {h.stars ? <span style={{ display: "inline-flex" }}>{Array.from({ length: h.stars }).map((_, i) => <Star key={i} style={{ width: 13, height: 13, color: "#F5B400", fill: "#F5B400" }} />)}</span> : null}
-                          <div style={{ flex: 1 }} />
-                          <button title="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: MUTED }} onClick={() => setCity(c.id, { hotels: c.hotels.filter(x => x.id !== h.id) })}><X style={{ width: 16, height: 16 }} /></button>
-                        </div>
-                        {h.rating ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                            <span style={{ ...pill(GRAD), fontSize: 12 }}>{h.rating.toFixed(1)}</span>
-                            <b style={{ color: TEXT }}>{ratingWord(h.rating)}</b>
-                            {h.reviews ? <span style={{ color: MUTED }}>{h.reviews.toLocaleString("en-IN")} reviews</span> : null}
-                          </div>
-                        ) : null}
-                        {h.loading && <div style={{ fontSize: 12.5, color: ACCENT, display: "flex", gap: 5, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Checking all booking sites{nRooms > 1 ? ` for ${nRooms} rooms` : ""}…</div>}
-                        {h.error && <div style={{ fontSize: 12.5, color: ERR }}>{h.error}</div>}
-                        {h.online && !h.online.found && <div style={{ fontSize: 12.5, color: WARN }}>Not found online{h.online.suggestions?.length ? ` — try: ${h.online.suggestions.slice(0, 3).join(", ")}` : ""}</div>}
-                        {!h.online && !h.loading && h.fromPrice && <div style={{ fontSize: 12.5, color: MUTED }}>From {inr(h.fromPrice)} · click <b>Compare prices</b> to see every site</div>}
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto", alignItems: "center", fontSize: 12.5 }}>
-                          <input style={{ ...inp, width: 180, padding: "7px 9px", fontSize: 12.5 }} value={h.room} placeholder="Room type (for Excel)" onChange={e => setHotel(c.id, h.id, { room: e.target.value })} />
-                          <select style={{ ...inp, width: 66, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>{MEALS.map(m => <option key={m}>{m}</option>)}</select>
-                          <select style={{ ...inp, width: 86, padding: "7px 6px", fontSize: 12.5 }} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "label"}</option>)}</select>
-                          <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: TEXT, cursor: "pointer" }}>
-                            <input type="checkbox" checked={h.inPkg} onChange={e => setHotel(c.id, h.id, { inPkg: e.target.checked })} style={{ accentColor: ACCENT }} /> In package
-                          </label>
-                          <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { showRates: !h.showRates })}>
-                            <Plus style={{ width: 12, height: 12 }} /> Ottila / TBO / DMC rate
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* best price */}
-                      <div style={{ margin: 10, borderRadius: 14, boxShadow: SHADOW_IN, padding: 14, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-end", gap: 6 }}>
-                        {best ? (<>
-                          <div style={{ fontSize: 12, color: MUTED }}>{ds.length} deal{ds.length > 1 ? "s" : ""} · cheapest on</div>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
-                          {price(best.rupees, n, true)}
-                          <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>{trip.perNight ? "per night" : `total for ${plural(n, "night", "nights")}`}{nRooms > 1 ? `, ${nRooms} rooms` : ""}{best.free ? " · free cancellation" : ""}</div>
-                          {!best.mine && <a href={link(best)} target="_blank" rel="noreferrer" style={{ ...btn("primary"), textDecoration: "none" }}>View deal <ExternalLink style={{ width: 13, height: 13 }} /></a>}
-                        </>) : h.fromPrice ? (<>
-                          <div style={{ fontSize: 12, color: MUTED }}>from</div>{price(h.fromPrice, n, true)}
-                        </>) : <div style={{ fontSize: 13, color: MUTED }}>No price yet</div>}
-                      </div>
-                    </div>
-
-                    {/* supplier rates */}
-                    {h.showRates && (
-                      <div style={{ margin: "0 10px 10px", borderRadius: 14, boxShadow: SHADOW_IN, padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-                        <label style={lbl}>Ottila ₹ (total){nRooms > 1 ? ` · ${nRooms} rooms` : ""}<input style={inp} value={h.ottila} onChange={e => setHotel(c.id, h.id, { ottila: e.target.value })} /></label>
-                        <label style={lbl}>TBO ₹ (total)<input style={inp} value={h.tbo} onChange={e => setHotel(c.id, h.id, { tbo: e.target.value })} /></label>
-                        <label style={lbl}>Other source<input style={inp} value={h.otherSource} onChange={e => setHotel(c.id, h.id, { otherSource: e.target.value })} /></label>
-                        <label style={lbl}>Other ₹ (total)<input style={inp} value={h.other} onChange={e => setHotel(c.id, h.id, { other: e.target.value })} /></label>
-                        <label style={lbl}>Free cxl until<input style={inp} type="date" value={h.cancel} onChange={e => setHotel(c.id, h.id, { cancel: e.target.value })} /></label>
-                      </div>
-                    )}
-
-                    {/* all deals */}
-                    {ds.length > 0 && (
-                      <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
-                        {shown.map((d, i) => (
-                          <div key={d.source + i} style={{ display: "grid", gridTemplateColumns: "34px 1fr auto auto 120px", alignItems: "center", gap: 12, padding: "9px 12px", borderRadius: 12, background: i === 0 ? TINT : "transparent", boxShadow: i === 0 ? "none" : SHADOW_IN }}>
-                            <div style={{ width: 30, height: 30, borderRadius: 9, background: d.mine ? GRAD : BG, boxShadow: d.mine ? "none" : SHADOW_SM, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: d.mine ? "#fff" : ACCENT }}>{d.source[0]?.toUpperCase()}</div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>
-                              {d.source}
-                              {d.mine && <span style={{ ...pill(ACCENT), marginLeft: 8 }}>your rate</span>}
-                              {i === 0 && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
-                              {i > 0 && best && <span style={{ marginLeft: 8, fontSize: 12, color: WARN, fontWeight: 600 }}>+{inr(trip.perNight ? (d.rupees - best.rupees) / n : d.rupees - best.rupees)}</span>}
-                            </div>
-                            <div style={{ fontSize: 12, color: d.free ? GREEN : MUTED, fontWeight: 600 }}>{d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>
-                            {price(d.rupees, n)}
-                            {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
-                              : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}
-                          </div>
-                        ))}
-                        {ds.length > 3 && (
-                          <button onClick={() => setHotel(c.id, h.id, { open: !h.open })} style={{ width: "100%", padding: 9, border: "none", background: "transparent", color: ACCENT, fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: 5 }}>
-                            {h.open ? <>Show fewer deals <ChevronUp style={{ width: 14, height: 14 }} /></> : <>Show all {ds.length} deals <ChevronDown style={{ width: 14, height: 14 }} /></>}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {/* The rest of the city */}
+              {c.finding && <div style={{ fontSize: 13, color: ACCENT, display: "flex", gap: 6, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 14, height: 14 }} /> Finding hotels in {c.name}…</div>}
+              {others.length > 0 && sectionTitle(`${mineList.length ? "Other" : "All"} ${c.stars ? `${c.stars}★ ` : ""}hotels in ${c.name} (${others.length})`, "lowest price shown · click See all prices for every website")}
+              {others.map(h => hotelCard(c, h, n, badges(h)))}
             </div>
           );
         })}
@@ -543,10 +599,10 @@ export default function PriceCompare() {
         {/* Bottom actions */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
-          <button style={btn("primary")} disabled={busy} onClick={() => compare()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Compare all cities</button>
-          <button style={btn()} disabled={busy} onClick={() => compare(undefined, true)} title="Search every hotel again (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh</button>
+          <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
+          <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
           <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
-          <span style={{ fontSize: 12, color: MUTED }}>Online prices are each site's cheapest room, added up for {roomSummary(rooms).toLowerCase()}. Repeating a search within 6 hours is free.</span>
+          <span style={{ fontSize: 12, color: MUTED }}>Prices incl. taxes, for {roomSummary(rooms).toLowerCase()}. A repeat search within 1 hour is free; Refresh gets live prices.</span>
         </div>
         {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
       </div>
