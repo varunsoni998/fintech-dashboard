@@ -3,7 +3,7 @@
  * (Google Hotels data via the backend /api/prices) plus the team's own supplier
  * rates (Ottila, TBO, DMC…), then download the costing sheet in the standard layout.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { supabase } from "@/lib/supabase";
@@ -135,13 +135,6 @@ export default function PriceCompare() {
     ["Ottila", h.ottila], ["TBO", h.tbo], [h.otherSource || "Other", h.other],
   ] as [string, string][]).filter(([, v]) => num(v) > 0).map(([s, v]) => ({ source: s, rupees: num(v) }));
 
-  const sourcesByCity = useMemo(() => trip.cities.map(c => {
-    const set = new Set<string>();
-    c.hotels.forEach(h => h.online?.prices?.forEach(p => set.add(p.source)));
-    const list = [...set];
-    list.sort((a, b) => (a === "Booking.com" ? -1 : b === "Booking.com" ? 1 : a.localeCompare(b)));
-    return list.slice(0, 8);
-  }), [trip.cities]);
 
   // ── Excel ──────────────────────────────────────────────────────────────────
   const downloadExcel = async () => {
@@ -231,11 +224,21 @@ export default function PriceCompare() {
         </div>
 
         {/* Cities */}
-        {trip.cities.map((c, ci) => {
-          const sources = sourcesByCity[ci];
+        {trip.cities.map(c => {
+          const named = c.hotels.filter(h => h.name.trim());
+          // one ranked list per hotel: your supplier rates + every online site, cheapest first
+          const ranked = (h: Hotel) => {
+            const rows = [
+              ...supplierPrices(h).map(s => ({ source: s.source, rupees: s.rupees, mine: true, free: !!h.cancel, link: undefined as string | undefined })),
+              ...(h.online?.prices || []).map(p => ({ source: p.source, rupees: p.total, mine: false, free: p.free_cancellation, link: p.link })),
+            ];
+            return rows.sort((a, b) => a.rupees - b.rupees);
+          };
+          const priceOf = (h: Hotel, re: RegExp) => (h.online?.prices || []).find(p => re.test(p.source))?.total;
+          const nightsN = nightsOf(c) || 1;
           return (
             <div key={c.id} style={card}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr auto auto auto", gap: 10, alignItems: "end", marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr auto auto auto", gap: 10, alignItems: "end", marginBottom: 14 }}>
                 <label style={label}>City<input style={inp} value={c.name} placeholder="Ubud" onChange={e => setCity(c.id, { name: e.target.value })} /></label>
                 <label style={label}>Check-in<input style={inp} type="date" value={c.checkIn} onChange={e => setCity(c.id, { checkIn: e.target.value })} /></label>
                 <label style={label}>Check-out<input style={inp} type="date" value={c.checkOut} onChange={e => setCity(c.id, { checkOut: e.target.value })} /></label>
@@ -245,7 +248,7 @@ export default function PriceCompare() {
               </div>
 
               {c.suggest && c.suggest.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
                   {c.suggest.map(s => (
                     <button key={s.name} style={{ ...btn(), padding: "5px 10px", fontSize: 12, fontWeight: 500 }}
                       onClick={() => setCity(c.id, { hotels: [...c.hotels.filter(h => h.name.trim()), newHotel(s.name)], suggest: c.suggest!.filter(x => x.name !== s.name) })}>
@@ -255,62 +258,123 @@ export default function PriceCompare() {
                 </div>
               )}
 
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 4px" }}>
-                  <thead>
-                    <tr>
-                      <th style={th}>Hotel</th><th style={th}>Room</th><th style={th}>Meal</th>
-                      <th style={th}>Ottila ₹</th><th style={th}>TBO ₹</th><th style={th}>Other ₹</th><th style={th}>Free cxl until</th>
-                      {sources.map(s => <th key={s} style={{ ...th, color: ACCENT }}>{s}</th>)}
-                      <th style={th}>Best</th><th style={th}>Label</th><th style={th}>Pkg</th><th style={th}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {c.hotels.map(h => {
-                      const sup = supplierPrices(h);
-                      const all = [...sup.map(s => ({ source: s.source, rupees: s.rupees })), ...(h.online?.prices || []).map(p => ({ source: p.source, rupees: p.total }))];
-                      const best = all.length ? all.reduce((a, b) => (b.rupees < a.rupees ? b : a)) : null;
-                      const cell = (rupees?: number, isBest?: boolean, free?: boolean) => rupees ? (
-                        <div style={{ background: isBest ? GOOD : "transparent", borderRadius: 8, padding: "3px 6px", whiteSpace: "nowrap" }}>
-                          <div style={{ fontWeight: isBest ? 700 : 500 }}>{fmtCost(toCost(rupees))}</div>
-                          <div style={{ fontSize: 10.5, color: MUTED }}>{inr(rupees)}{free ? " · free cxl" : ""}</div>
-                        </div>) : <span style={{ color: MUTED }}>—</span>;
-                      const priceInput = (field: "ottila" | "tbo" | "other") => (
-                        <input style={{ ...inp, width: 96, background: best && best.source === (field === "other" ? h.otherSource : field === "ottila" ? "Ottila" : "TBO") && num(h[field]) ? GOOD : BG }}
-                          value={h[field]} placeholder="₹" onChange={e => setHotel(c.id, h.id, { [field]: e.target.value } as any)} />);
-                      return (
-                        <tr key={h.id}>
-                          <td style={td}>
-                            <input style={{ ...inp, minWidth: 190 }} value={h.name} placeholder="Hotel name" onChange={e => setHotel(c.id, h.id, { name: e.target.value })} />
-                            {h.loading && <div style={{ fontSize: 11, color: ACCENT, marginTop: 3, display: "flex", gap: 4, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> searching…</div>}
-                            {h.error && <div style={{ fontSize: 11, color: "#E05B5B", marginTop: 3 }}>{h.error}</div>}
-                            {h.online && !h.online.found && <div style={{ fontSize: 11, color: "#D48A2E", marginTop: 3 }}>Not found online{h.online.suggestions?.length ? ` — did you mean: ${h.online.suggestions.slice(0, 3).join(", ")}?` : ""}</div>}
-                            {h.online?.found && h.online.name && h.online.name.toLowerCase() !== h.name.toLowerCase() && <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>Matched: {h.online.name}</div>}
-                          </td>
-                          <td style={td}><input style={{ ...inp, minWidth: 130 }} value={h.room} placeholder="Deluxe Room" onChange={e => setHotel(c.id, h.id, { room: e.target.value })} /></td>
-                          <td style={td}><select style={{ ...inp, width: 62 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>{MEALS.map(m => <option key={m}>{m}</option>)}</select></td>
-                          <td style={td}>{priceInput("ottila")}</td>
-                          <td style={td}>{priceInput("tbo")}</td>
-                          <td style={td}>
-                            <input style={{ ...inp, width: 96, marginBottom: 3 }} value={h.otherSource} placeholder="Source" onChange={e => setHotel(c.id, h.id, { otherSource: e.target.value })} />
-                            {priceInput("other")}
-                          </td>
-                          <td style={td}><input style={{ ...inp, width: 128 }} type="date" value={h.cancel} onChange={e => setHotel(c.id, h.id, { cancel: e.target.value })} /></td>
-                          {sources.map(s => {
-                            const p = h.online?.prices?.find(x => x.source === s);
-                            return <td key={s} style={td}>{cell(p?.total, !!p && best?.source === s && best.rupees === p.total, p?.free_cancellation)}</td>;
-                          })}
-                          <td style={td}>{best ? <div style={{ fontSize: 12 }}><b>{best.source}</b><div style={{ color: MUTED, fontSize: 11 }}>{fmtCost(toCost(best.rupees))}</div></div> : "—"}</td>
-                          <td style={td}><select style={{ ...inp, width: 76 }} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "—"}</option>)}</select></td>
-                          <td style={{ ...td, textAlign: "center" }}><input type="checkbox" checked={h.inPkg} title="Include in the 'Per couple' total" onChange={e => setHotel(c.id, h.id, { inPkg: e.target.checked })} /></td>
-                          <td style={td}><button style={{ background: "none", border: "none", cursor: "pointer", color: MUTED }} onClick={() => setCity(c.id, { hotels: c.hotels.filter(x => x.id !== h.id) })}><X style={{ width: 14, height: 14 }} /></button></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {/* ── City summary table ───────────────────────────────────── */}
+              {named.some(h => ranked(h).length) && (
+                <div style={{ borderRadius: 14, boxShadow: SHADOW_IN, padding: 12, marginBottom: 14, overflowX: "auto" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 6 }}>{c.name || "City"} at a glance · {nightsN} night{nightsN > 1 ? "s" : ""}, 1 room</div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                    <thead>
+                      <tr>{["Hotel", "Meal", "Cheapest", "Cheapest at", "Ottila", "TBO", "Booking.com", "Saving vs Booking.com", "Sites found"].map(h =>
+                        <th key={h} style={{ ...th, borderBottom: `1px solid ${MUTED}33` }}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {named.map(h => {
+                        const list = ranked(h); const best = list[0];
+                        const bcom = priceOf(h, /booking\.com/i);
+                        const ot = num(h.ottila) || undefined, tb = num(h.tbo) || undefined;
+                        const money = (r?: number, hi?: boolean) => r ? <span style={{ fontWeight: hi ? 700 : 500, color: hi ? "#2E9E6B" : TEXT }}>{fmtCost(toCost(r))} <span style={{ color: MUTED, fontWeight: 400, fontSize: 11 }}>{inr(r)}</span></span> : <span style={{ color: MUTED }}>—</span>;
+                        return (
+                          <tr key={h.id} style={{ borderBottom: `1px solid ${MUTED}22` }}>
+                            <td style={{ ...td, fontWeight: 600 }}>{h.name}{h.label ? <span style={{ marginLeft: 6, fontSize: 10, color: ACCENT }}>{h.label}</span> : null}</td>
+                            <td style={td}>{h.meal}</td>
+                            <td style={td}>{best ? money(best.rupees, true) : "—"}</td>
+                            <td style={td}>{best ? <b>{best.source}</b> : "—"}</td>
+                            <td style={td}>{money(ot, !!best && ot === best.rupees)}</td>
+                            <td style={td}>{money(tb, !!best && tb === best.rupees)}</td>
+                            <td style={td}>{money(bcom)}</td>
+                            <td style={td}>{bcom && best && bcom > best.rupees ? <span style={{ color: "#2E9E6B", fontWeight: 700 }}>{fmtCost(toCost(bcom - best.rupees))}</span> : <span style={{ color: MUTED }}>—</span>}</td>
+                            <td style={td}>{h.online?.prices?.length ?? 0}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── One card per hotel ───────────────────────────────────── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {c.hotels.map(h => {
+                  const list = ranked(h);
+                  const min = list[0]?.rupees || 0, max = list[list.length - 1]?.rupees || 1;
+                  const sup = (field: "ottila" | "tbo" | "other", title: string) => (
+                    <label style={label}>{title}
+                      <input style={inp} value={h[field]} placeholder="₹ total for the stay" onChange={e => setHotel(c.id, h.id, { [field]: e.target.value } as any)} />
+                    </label>);
+                  return (
+                    <div key={h.id} style={{ borderRadius: 16, boxShadow: SHADOW_OUT, padding: 14 }}>
+                      {/* header */}
+                      <div style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 0.6fr 0.8fr auto auto", gap: 10, alignItems: "end" }}>
+                        <label style={label}>Hotel<input style={{ ...inp, fontWeight: 600 }} value={h.name} placeholder="Hotel name" onChange={e => setHotel(c.id, h.id, { name: e.target.value })} /></label>
+                        <label style={label}>Room type (for Excel)<input style={inp} value={h.room} placeholder="Deluxe Room" onChange={e => setHotel(c.id, h.id, { room: e.target.value })} /></label>
+                        <label style={label}>Meal<select style={inp} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>{MEALS.map(m => <option key={m}>{m}</option>)}</select></label>
+                        <label style={label}>Label<select style={inp} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "—"}</option>)}</select></label>
+                        <label style={{ ...label, alignItems: "center" }} title="Include this hotel in the 'Per couple' total of the Excel">In package
+                          <input type="checkbox" style={{ width: 18, height: 18, marginTop: 6 }} checked={h.inPkg} onChange={e => setHotel(c.id, h.id, { inPkg: e.target.checked })} />
+                        </label>
+                        <button style={{ ...btn(), padding: 8 }} title="Remove hotel" onClick={() => setCity(c.id, { hotels: c.hotels.filter(x => x.id !== h.id) })}><X style={{ width: 14, height: 14 }} /></button>
+                      </div>
+                      {h.loading && <div style={{ fontSize: 12, color: ACCENT, marginTop: 8, display: "flex", gap: 5, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Searching all booking sites…</div>}
+                      {h.error && <div style={{ fontSize: 12, color: "#E05B5B", marginTop: 8 }}>{h.error}</div>}
+                      {h.online && !h.online.found && <div style={{ fontSize: 12, color: "#D48A2E", marginTop: 8 }}>Not found online{h.online.suggestions?.length ? ` — did you mean: ${h.online.suggestions.slice(0, 3).join(", ")}?` : ""}</div>}
+                      {h.online?.found && h.online.name && h.online.name.toLowerCase() !== h.name.toLowerCase() && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6 }}>Matched on Google as: <b>{h.online.name}</b>{h.online.stars ? ` · ${h.online.stars}★` : ""}</div>}
+
+                      <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 0.9fr) minmax(0, 2.4fr)", gap: 16, marginTop: 12 }} className="max-lg:!grid-cols-1">
+                        {/* supplier rates */}
+                        <div style={{ borderRadius: 12, boxShadow: SHADOW_IN, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>Your supplier rates</div>
+                          {sup("ottila", "Ottila ₹")}
+                          {sup("tbo", "TBO ₹")}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 6 }}>
+                            <label style={label}>Other source<input style={inp} value={h.otherSource} onChange={e => setHotel(c.id, h.id, { otherSource: e.target.value })} /></label>
+                            {sup("other", "₹")}
+                          </div>
+                          <label style={label}>Free cancellation until<input style={inp} type="date" value={h.cancel} onChange={e => setHotel(c.id, h.id, { cancel: e.target.value })} /></label>
+                        </div>
+
+                        {/* ranked price list */}
+                        <div style={{ overflowX: "auto" }}>
+                          {list.length === 0 ? (
+                            <div style={{ fontSize: 12.5, color: MUTED, padding: "18px 4px" }}>No prices yet. Enter supplier rates and click <b>Compare online prices</b>.</div>
+                          ) : (
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                              <thead>
+                                <tr>{["#", "Site", `Total (${cc})`, "Total ₹", "Per night", "vs cheapest", "", "Cancellation"].map((t, i) =>
+                                  <th key={i} style={{ ...th, borderBottom: `1px solid ${MUTED}33` }}>{t}</th>)}</tr>
+                              </thead>
+                              <tbody>
+                                {list.map((p, i) => {
+                                  const diff = p.rupees - min;
+                                  const w = max > min ? 15 + 85 * (p.rupees - min) / (max - min) : 100;
+                                  return (
+                                    <tr key={p.source + i} style={{ background: i === 0 ? GOOD : "transparent", borderBottom: `1px solid ${MUTED}22` }}>
+                                      <td style={{ ...td, color: MUTED, width: 24 }}>{i + 1}</td>
+                                      <td style={{ ...td, fontWeight: i === 0 ? 700 : 500, whiteSpace: "nowrap" }}>
+                                        {p.link ? <a href={p.link} target="_blank" rel="noreferrer" style={{ color: TEXT }}>{p.source}</a> : p.source}
+                                        {p.mine && <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 99, background: ACCENT, color: "#fff" }}>your rate</span>}
+                                        {i === 0 && <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 99, background: "#2E9E6B", color: "#fff" }}>cheapest</span>}
+                                      </td>
+                                      <td style={{ ...td, fontWeight: 700 }}>{fmtCost(toCost(p.rupees))}</td>
+                                      <td style={{ ...td, color: MUTED }}>{inr(p.rupees)}</td>
+                                      <td style={{ ...td, color: MUTED }}>{fmtCost(toCost(p.rupees / nightsN))}</td>
+                                      <td style={{ ...td, color: diff ? "#D48A2E" : "#2E9E6B", fontWeight: 600, whiteSpace: "nowrap" }}>{diff ? `+${fmtCost(toCost(diff))}` : "—"}</td>
+                                      <td style={{ ...td, width: "22%" }}>
+                                        <div style={{ height: 8, borderRadius: 99, width: `${w}%`, background: i === 0 ? "#2E9E6B" : p.mine ? ACCENT : `${MUTED}88` }} />
+                                      </td>
+                                      <td style={{ ...td, fontSize: 11.5, color: p.free ? "#2E9E6B" : MUTED }}>{p.mine ? (h.cancel ? `Free till ${nice(h.cancel)}` : "—") : p.free ? "Free cancellation" : "—"}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <button style={{ ...btn(), marginTop: 8, fontSize: 12 }} onClick={() => setCity(c.id, { hotels: [...c.hotels, newHotel()] })}><Plus style={{ width: 13, height: 13 }} /> Add hotel</button>
+              <button style={{ ...btn(), marginTop: 12, fontSize: 12 }} onClick={() => setCity(c.id, { hotels: [...c.hotels, newHotel()] })}><Plus style={{ width: 13, height: 13 }} /> Add hotel</button>
             </div>
           );
         })}
@@ -322,7 +386,7 @@ export default function PriceCompare() {
           </button>
           <button style={btn()} disabled={busy} onClick={() => runSearch(true)} title="Search every hotel again"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh</button>
           <button style={btn(true)} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
-          <span style={{ fontSize: 12, color: MUTED }}>{used ? `${used} search${used === 1 ? "" : "es"} used this session · ` : ""}Prices = whole stay, 1 room, incl. taxes where the site shows them. Green = cheapest.</span>
+          <span style={{ fontSize: 12, color: MUTED }}>{used ? `${used} search${used === 1 ? "" : "es"} used this session · ` : ""}Prices = whole stay, 1 room, incl. taxes where the site shows them. Online prices are each site's cheapest room. Green = cheapest.</span>
         </div>
         {msg && (
           <div style={{ fontSize: 13, color: msg.kind === "ok" ? "#2E9E6B" : "#E05B5B", display: "flex", gap: 6, alignItems: "center" }}>
