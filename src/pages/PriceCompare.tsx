@@ -379,7 +379,7 @@ export default function PriceCompare() {
                 {h.open && h.online ? "Hide prices" : "See all prices"}</button>}
               {mineHotel && !best.mine && <a href={link(best)} target="_blank" rel="noreferrer" style={{ ...btn("primary"), textDecoration: "none" }}>View deal <ExternalLink style={{ width: 13, height: 13 }} /></a>}
             </>) : h.fromPrice && !h.online ? (<>
-              <div style={{ fontSize: 12, color: MUTED }}>from</div>{priceBlock(h.fromPrice, n, { big: true })}
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>from (Google's lowest)</div>{priceBlock(h.fromPrice, n, { big: true })}
               <button style={{ ...btn("primary"), padding: "8px 13px" }} disabled={h.loading} onClick={() => seeAll(c, h)}>
                 {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />} See all prices</button>
             </>) : <div style={{ fontSize: 13, color: MUTED, textAlign: "right" }}>{notOnline ? "Not available online" : "No price yet"}</div>}
@@ -590,7 +590,7 @@ export default function PriceCompare() {
 
               {/* The rest of the city */}
               {c.finding && <div style={{ fontSize: 13, color: ACCENT, display: "flex", gap: 6, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 14, height: 14 }} /> Finding hotels in {c.name}…</div>}
-              {others.length > 0 && sectionTitle(`${mineList.length ? "Other" : "All"} ${c.stars ? `${c.stars}★ ` : ""}hotels in ${c.name} (${others.length})`, "lowest price shown · click See all prices for every website")}
+              {others.length > 0 && sectionTitle(`${mineList.length ? "Other" : "All"} ${c.stars ? `${c.stars}★ ` : ""}hotels in ${c.name} (${others.length})`, "click See all prices for Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip & hotel website")}
               {others.map(h => hotelCard(c, h, n, badges(h)))}
             </div>
           );

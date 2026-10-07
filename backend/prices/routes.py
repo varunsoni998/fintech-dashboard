@@ -137,11 +137,28 @@ def _nights(ci: str, co: str) -> int:
         raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD and check-out after check-in")
 
 
+# Only these websites are shown (plus the hotel's own website). Edit this list to add/remove sites.
+ALLOWED_SITES = {"bookingcom": "Booking.com", "agoda": "Agoda", "expedia": "Expedia",
+                 "hotelscom": "Hotels.com", "makemytrip": "MakeMyTrip"}
+
+
+def _site(item: dict, hotel_name: str = "") -> Optional[str]:
+    """Allowed site name for a price row, or None to hide it."""
+    src = (item.get("source") or "").strip()
+    key = "".join(ch for ch in src.lower() if ch.isalnum())
+    for k, name in ALLOWED_SITES.items():
+        if key.startswith(k):
+            return name
+    if item.get("official") or "official" in src.lower() or (hotel_name and _similar(src, hotel_name) >= 0.6):
+        return "Hotel website"
+    return None
+
+
 def extract_prices(prop: dict, nights: int) -> List[dict]:
     """All booking-site prices for one property → [{source, total, per_night, free_cancellation, link}] cheapest first."""
     best = {}
     for item in (prop.get("featured_prices") or []) + (prop.get("prices") or []):
-        src = (item.get("source") or "").strip()
+        src = _site(item, prop.get("name") or "")
         if not src: continue
         total = _num(item.get("total_rate"))
         per = _num(item.get("rate_per_night"))
