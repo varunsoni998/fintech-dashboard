@@ -36,6 +36,7 @@ import Automations      from "./pages/Automations";
 import Profile          from "./pages/Profile";
 import QuoteGenerator   from "./pages/QuoteGenerator";
 import TripDocuments    from "./pages/TripDocuments";
+import PriceCompare     from "./pages/PriceCompare";
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,7 @@ function AppRoutes() {
           <Route path="/profile"           element={<Profile />} />
           <Route path="/quotes"            element={<QuoteGenerator />} />
           <Route path="/trip-documents"    element={<TripDocuments />} />
+          <Route path="/price-compare"     element={<PriceCompare />} />
           <Route path="*"                  element={<NotFound />} />
         </Routes>
       </div>

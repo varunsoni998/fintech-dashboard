@@ -3,7 +3,7 @@ import {
   IndianRupee, TrendingUp, CalendarClock, Megaphone,
   UserCircle2, Globe, Truck, ChevronDown, ChevronRight,
   Bot, Handshake, UserCheck, Home, Sparkles, ImagePlus,
-  Zap, LogOut, Database, FileSpreadsheet, FolderTree,
+  Zap, LogOut, Database, FileSpreadsheet, FolderTree, Scale,
 } from "lucide-react";
 import { NavLink } from "../../components/Navlink";
 import {
@@ -189,6 +189,7 @@ export function DashboardSidebar() {
             { title: "Finance KPIs",     url: "/finance-kpis", icon: IndianRupee        },
             { title: "Quote Generator",  url: "/quotes",       icon: FileSpreadsheet    },
             { title: "Trip Documents",   url: "/trip-documents", icon: FolderTree       },
+            { title: "Price Compare",    url: "/price-compare",  icon: Scale            },
             { title: "Team Chat",        url: "/chat",         icon: MessageSquare      },
             { title: "Creatives",        url: "/creatives",    icon: ImagePlus          },
             { title: "Automations",      url: "/automations",  icon: Zap                },
