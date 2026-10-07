@@ -6,7 +6,8 @@ Price Compare routes — /api/prices/...
   POST /discover  → top hotels in a city (e.g. 5★ Ubud) with their lowest price
   POST /excel     → CustomHolidays costing sheet (team's standard layout) as .xlsx
 
-Needs env var SERPAPI_KEY (free plan: 250 searches / month at serpapi.com).
+Needs env var SERPAPI_KEYS (comma-separated; SERPAPI_KEY also works). Keys are used in order and the
+next key is used when one runs out of monthly searches.
 Results are cached in memory for 6 hours so repeating a search doesn't use extra credits.
 """
 import difflib
@@ -34,8 +35,42 @@ CACHE_SECONDS = 6 * 3600
 _cache: dict = {}
 
 
+# ── API key pool ───────────────────────────────────────────────────────────────
+# SERPAPI_KEYS = "key1,key2,key3" (or a single SERPAPI_KEY). Keys are used in order:
+# when one has no searches left this month we move to the next one. SerpApi resets each
+# key's allowance monthly, so the pool starts again from key 1 automatically.
+ACCOUNT_URL = "https://serpapi.com/account.json"
+_left: dict = {}          # key -> (checked_at, searches_left)
+LEFT_TTL = 15 * 60
+
+
+def _keys() -> list:
+    raw = os.getenv("SERPAPI_KEYS", "") + "," + os.getenv("SERPAPI_KEY", "")
+    out = []
+    for k in raw.replace("\n", ",").replace(";", ",").split(","):
+        k = k.strip()
+        if k and k not in out: out.append(k)
+    return out
+
+
+def _searches_left(key: str, fresh: bool = False) -> int:
+    """Searches left on a key this month (SerpApi account API — free, doesn't use a search)."""
+    hit = _left.get(key)
+    if hit and not fresh and time.time() - hit[0] < LEFT_TTL:
+        return hit[1]
+    try:
+        d = requests.get(ACCOUNT_URL, params={"api_key": key}, timeout=15).json()
+        left = int(d.get("total_searches_left", d.get("plan_searches_left", 0)) or 0)
+    except Exception:
+        left = hit[1] if hit else 1          # unknown → try it
+    _left[key] = (time.time(), left)
+    return left
+
+
 def _key() -> str:
-    return os.getenv("SERPAPI_KEY", "").strip()
+    for k in _keys():
+        if _searches_left(k) > 0: return k
+    return ""
 
 
 def _get_user_id(authorization: Optional[str]) -> str:
@@ -54,25 +89,35 @@ def _get_user_id(authorization: Optional[str]) -> str:
 
 
 def _serp(params: dict) -> dict:
-    """One SerpApi call (cached)."""
-    if not _key():
-        raise HTTPException(status_code=503, detail="Price search isn't set up yet: add SERPAPI_KEY on the server.")
+    """One SerpApi call (cached). Moves to the next key when a key runs out."""
+    if not _keys():
+        raise HTTPException(status_code=503, detail="Price search isn't set up yet: add SERPAPI_KEYS on the server.")
     ck = tuple(sorted(params.items()))
     hit = _cache.get(ck)
     if hit and time.time() - hit[0] < CACHE_SECONDS:
         return hit[1]
-    try:
-        r = requests.get(SERPAPI_URL, params={**params, "engine": "google_hotels", "api_key": _key()}, timeout=40)
-        data = r.json()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Price search failed: {e}")
-    if data.get("error"):
-        msg = data["error"]
-        if "run out of searches" in msg.lower():
-            msg = "SerpApi monthly searches used up. Upgrade the plan or wait for next month."
-        raise HTTPException(status_code=502, detail=msg)
-    _cache[ck] = (time.time(), data)
-    return data
+    last_err = "All SerpApi keys have used their searches for this month."
+    for key in _keys():
+        if _searches_left(key) <= 0: continue
+        try:
+            r = requests.get(SERPAPI_URL, params={**params, "engine": "google_hotels", "api_key": key}, timeout=40)
+            data = r.json()
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Price search failed: {e}")
+        err = data.get("error")
+        if err and ("run out" in err.lower() or "searches" in err.lower() and "limit" in err.lower() or "invalid api key" in err.lower()):
+            _left[key] = (time.time(), 0)          # skip this key, try the next one
+            last_err = err
+            continue
+        if err and "hasn't returned any results" in err.lower():
+            data = {"properties": []}
+        elif err:
+            raise HTTPException(status_code=502, detail=err)
+        n, left = _left.get(key, (time.time(), 1))
+        _left[key] = (n, max(0, left - 1))
+        _cache[ck] = (time.time(), data)
+        return data
+    raise HTTPException(status_code=429, detail=last_err)
 
 
 def _num(v) -> Optional[float]:
@@ -120,12 +165,16 @@ class SearchIn(BaseModel):
     adults: int = 2
     children: int = 0
     currency: str = "INR"
+    property_token: Optional[str] = None
 
 
 @router.get("/status")
 def status(authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
-    return {"configured": bool(_key())}
+    keys = _keys()
+    lefts = [_searches_left(k, fresh=True) for k in keys]
+    active = next((i + 1 for i, l in enumerate(lefts) if l > 0), None)
+    return {"configured": bool(keys), "keys": len(keys), "searches_left": sum(lefts), "active_key": active}
 
 
 @router.post("/search")
@@ -134,7 +183,10 @@ def search(body: SearchIn, authorization: Optional[str] = Header(None)):
     nights = _nights(body.check_in, body.check_out)
     base = {"check_in_date": body.check_in, "check_out_date": body.check_out, "adults": body.adults,
             "children": body.children, "currency": body.currency.upper(), "gl": "in", "hl": "en"}
-    data = _serp({**base, "q": f"{body.hotel} {body.city}".strip()})
+    if body.property_token:                      # hotel picked from "Find hotels" → 1 search instead of 2
+        data = _serp({**base, "q": body.hotel, "property_token": body.property_token})
+    else:
+        data = _serp({**base, "q": f"{body.hotel} {body.city}".strip()})
     searches = 1
     prop = data
     if not (data.get("prices") or data.get("featured_prices")):
@@ -149,8 +201,11 @@ def search(body: SearchIn, authorization: Optional[str] = Header(None)):
             prop = {**prop, **_serp({**base, "q": body.hotel, "property_token": prop["property_token"]})}
             searches += 1
     prices = extract_prices(prop, nights)
+    imgs = prop.get("images") or []
     return {"found": True, "hotel": body.hotel, "name": prop.get("name") or body.hotel,
             "stars": prop.get("extracted_hotel_class"), "rating": prop.get("overall_rating"),
+            "reviews": prop.get("reviews"), "image": (imgs[0].get("thumbnail") if imgs else None),
+            "link": prop.get("link"), "property_token": prop.get("property_token"),
             "nights": nights, "currency": body.currency.upper(), "prices": prices,
             "lowest": prices[0] if prices else None, "searches_used": searches}
 
@@ -162,7 +217,7 @@ class DiscoverIn(BaseModel):
     adults: int = 2
     stars: Optional[int] = 5
     currency: str = "INR"
-    limit: int = 8
+    limit: int = 12
 
 
 @router.post("/discover")
@@ -177,9 +232,12 @@ def discover(body: DiscoverIn, authorization: Optional[str] = Header(None)):
     for p in (data.get("properties") or []):
         if (p.get("type") or "hotel").lower() != "hotel": continue
         total = _num(p.get("total_rate")) or ((_num(p.get("rate_per_night")) or 0) * nights) or None
+        imgs = p.get("images") or []
         out.append({"name": p.get("name"), "stars": p.get("extracted_hotel_class"), "rating": p.get("overall_rating"),
-                    "reviews": p.get("reviews"), "lowest_total": round(total) if total else None})
+                    "reviews": p.get("reviews"), "lowest_total": round(total) if total else None,
+                    "image": imgs[0].get("thumbnail") if imgs else None, "property_token": p.get("property_token")})
         if len(out) >= body.limit: break
+    out.sort(key=lambda h: h["lowest_total"] or 9e12)
     return {"city": body.city, "hotels": out, "searches_used": 1}
 
 
