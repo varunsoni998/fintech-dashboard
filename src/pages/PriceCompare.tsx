@@ -28,7 +28,7 @@ interface Online { found: boolean; name?: string; stars?: number; rating?: numbe
 interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
-  mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number;
+  mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
   online?: Online; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
@@ -44,7 +44,15 @@ const EMPTY: Trip = { name: "", roomList: [{ adults: 2, ages: [] }], currency: "
 const isMine = (h: Hotel) => h.mine ?? !h.token;   // added by name = yours; from "other hotels" = not
 
 function loadTrip(): Trip {
-  try { const t = JSON.parse(localStorage.getItem(STORE) || ""); if (t?.cities && t?.roomList) return t; } catch { /* */ }
+  try {
+    const t = JSON.parse(localStorage.getItem(STORE) || "");
+    if (t?.cities && t?.roomList) {
+      // prices saved by older versions in USD/EUR are dropped, so everything shown is in ₹ as the sites show it
+      t.cities = t.cities.map((c: City) => ({ ...c, finding: false, hotels: c.hotels.map((h: Hotel) =>
+        h.online?.currency && h.online.currency !== "INR" ? { ...h, online: undefined, searchedFor: undefined, checkedAt: undefined, open: false, loading: false } : { ...h, loading: false }) }));
+      return t;
+    }
+  } catch { /* */ }
   try { // older version of this page → keep its cities/hotels
     const o = JSON.parse(localStorage.getItem("pc:trip:v2") || "");
     if (o?.cities) return { ...EMPTY, name: o.name || "", currency: o.currency || "USD", gst: o.gst ?? "5", tcs: o.tcs ?? "2", notes: o.notes || "", cities: o.cities, roomList: [{ adults: o.adults || 2, ages: [] }] };
@@ -177,19 +185,20 @@ export default function PriceCompare() {
   const key = (c: City, h: Hotel) => `${h.name}|${c.name}|${c.checkIn}|${c.checkOut}|${JSON.stringify(rooms)}|${searchCcy}`;
   const findKey = (c: City) => `${c.name}|${c.checkIn}|${c.checkOut}|${c.stars}|${JSON.stringify(rooms)}`;
 
-  const runSearches = async (jobs: { c: City; h: Hotel }[], fresh = false) => {
+  // one hotel → every site's price (1 search)
+  const fetchOne = async (c: City, h: Hotel, fresh = false, open = true): Promise<Online | null> => {
     const rate = searchCcy === "INR" ? 1 : roe;
-    const work = async () => {
-      for (let j = jobs.shift(); j; j = jobs.shift()) {
-        const { c, h } = j;
-        setHotel(c.id, h.id, { loading: true, error: undefined });
-        try {
-          const r: Online = await (await authFetch("/search", { hotel: h.name, city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, currency: searchCcy, property_token: h.token, rooms: apiRooms, fresh })).json();
-          setHotel(c.id, h.id, { loading: false, online: { ...r, currency: r.currency || searchCcy, roeAt: rate }, searchedFor: key(c, h), checkedAt: Date.now(), open: true,
-            token: h.token || (r as any).property_token, image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
-        } catch (e: any) { setHotel(c.id, h.id, { loading: false, error: e.message }); }
-      }
-    };
+    setHotel(c.id, h.id, { loading: true, error: undefined });
+    try {
+      const r: Online = await (await authFetch("/search", { hotel: h.name, city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, currency: searchCcy, property_token: h.token, rooms: apiRooms, fresh })).json();
+      const online = { ...r, currency: r.currency || searchCcy, roeAt: rate };
+      setHotel(c.id, h.id, { loading: false, online, searchedFor: key(c, h), checkedAt: Date.now(), open,
+        token: h.token || (r as any).property_token, image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
+      return online;
+    } catch (e: any) { setHotel(c.id, h.id, { loading: false, error: e.message }); return null; }
+  };
+  const runSearches = async (jobs: { c: City; h: Hotel }[], fresh = false) => {
+    const work = async () => { for (let j = jobs.shift(); j; j = jobs.shift()) await fetchOne(j.c, j.h, fresh); };
     await Promise.all([work(), work(), work()]);
   };
 
@@ -203,7 +212,7 @@ export default function PriceCompare() {
         const keep = x.hotels.filter(h => isMine(h) || h.inPkg || h.label);
         const have = new Set(keep.map(h => h.name.toLowerCase()));
         const add = (r.hotels || []).filter((y: any) => y.name && y.lowest_total && !have.has(y.name.toLowerCase())).map((y: any) =>
-          newHotel({ name: y.name, mine: false, token: y.property_token, image: y.image, stars: y.stars, rating: y.rating, reviews: y.reviews, fromPrice: y.lowest_total }));
+          newHotel({ name: y.name, mine: false, token: y.property_token, image: y.image, stars: y.stars, rating: y.rating, reviews: y.reviews, fromPrice: y.lowest_total, fromSource: y.lowest_source || undefined, fromLink: y.lowest_link || undefined }));
         return { ...x, finding: false, foundFor: findKey(c), hotels: [...keep, ...add] };
       }) }));
     } catch (e: any) { setCity(c.id, { finding: false }); setMsg({ kind: "err", text: e.message }); }
@@ -222,7 +231,19 @@ export default function PriceCompare() {
   };
   const seeAll = async (c: City, h: Hotel) => {
     if (h.online && h.searchedFor === key(c, h)) return setHotel(c.id, h.id, { open: !h.open });
-    await runSearches([{ c, h }]); loadStatus();
+    await fetchOne(c, h); loadStatus();
+  };
+  // "View deal" before "See all prices": open the tab straight away, get the exact deal link (1 search), then go there
+  const viewDeal = async (c: City, h: Hotel) => {
+    if (h.fromLink) { window.open(h.fromLink, "_blank", "noopener"); return; }
+    const w = window.open("about:blank", "_blank");
+    if (w) w.document.write(`<p style="font:16px sans-serif;padding:24px">Opening ${h.fromSource || "the best deal"} for ${h.name}…</p>`);
+    const r = await fetchOne(c, h, false, false); loadStatus();
+    const list = (r?.prices || []).slice().sort((a, b) => a.total - b.total);
+    const pick = list.find(p => p.source === h.fromSource) || list[0];
+    const url = pick?.link || (pick ? `https://www.google.com/search?q=${encodeURIComponent(`${pick.source} ${h.name} ${c.name}`)}` : "");
+    if (w && url) { w.opener = null; w.location.href = url; }
+    else { w?.close(); setMsg({ kind: "err", text: `${h.name}: none of your sites have a price for these dates.` }); }
   };
   const addByName = (c: City) => {
     const name = (c.newName || "").trim(); if (!name) return;
@@ -230,7 +251,10 @@ export default function PriceCompare() {
   };
 
   // ── Sorting like Skyscanner (Best / Cheapest / Top rated) ──────────────────
+  // discovered hotels sort by their list price, so a card doesn't jump when you open its prices
+  const sortPrice = (h: Hotel) => (!isMine(h) && h.fromPrice ? h.fromPrice : bestOf(h));
   const sortList = (hs: Hotel[], by: SortKey) => {
+    const bestOf = sortPrice;
     const prices = hs.map(bestOf).filter((x): x is number => !!x);
     const min = prices.length ? Math.min(...prices) : 1;
     const score = (h: Hotel) => { const p = bestOf(h); if (!p) return -1; return ((h.rating || 4) / 5) * 0.6 + (min / p) * 0.4; };
@@ -294,7 +318,6 @@ export default function PriceCompare() {
         {siteCcy && <div style={{ fontSize: opts.big ? 13 : 11.5, color: MUTED, fontWeight: 700 }}>{siteCcy}</div>}
         <div style={{ fontSize: opts.big ? 12.5 : 11.5, color: ACCENT, fontWeight: 700, whiteSpace: "nowrap" }}>{inr(rupees / n)} / night</div>
         {nRooms > 1 && <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 600, whiteSpace: "nowrap" }}>{inr(rupees / n / nRooms)} / room / night</div>}
-        {opts.before ? <div style={{ fontSize: 10.5, color: MUTED }}>{inr(opts.before)} before taxes</div> : null}
       </div>
     );
   };
@@ -375,15 +398,24 @@ export default function PriceCompare() {
               <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
               {priceBlock(best.rupees, n, { amt: best.amt, ccy: best.ccy, big: true })}
               <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}{best.free ? " · free cancellation" : ""}</div>
-              {!mineHotel && <button style={{ ...btn("primary"), padding: "8px 13px" }} disabled={h.loading} onClick={() => seeAll(c, h)}>
-                {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : h.open && h.online ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
-                {h.open && h.online ? "Hide prices" : "See all prices"}</button>}
-              {mineHotel && !best.mine && <a href={link(best)} target="_blank" rel="noreferrer" style={{ ...btn("primary"), textDecoration: "none" }}>View deal <ExternalLink style={{ width: 13, height: 13 }} /></a>}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {!best.mine && <a href={link(best)} target="_blank" rel="noreferrer" style={{ ...btn("primary"), padding: "8px 13px", textDecoration: "none" }}>View deal <ExternalLink style={{ width: 13, height: 13 }} /></a>}
+                {!mineHotel && <button style={{ ...btn(), padding: "8px 12px", color: ACCENT }} disabled={h.loading} onClick={() => seeAll(c, h)}>
+                  {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : h.open ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
+                  {h.open ? "Hide prices" : "See all prices"}</button>}
+              </div>
             </>) : h.fromPrice && !h.online ? (<>
-              <div style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>from (Google's lowest)</div>{priceBlock(h.fromPrice, n, { big: true })}
-              <button style={{ ...btn("primary"), padding: "8px 13px" }} disabled={h.loading} onClick={() => seeAll(c, h)}>
-                {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />} See all prices</button>
-            </>) : <div style={{ fontSize: 13, color: MUTED, textAlign: "right" }}>{notOnline ? "Not available online" : "No price yet"}</div>}
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>{h.fromSource ? "cheapest on" : "from (Google's lowest)"}</div>
+              {h.fromSource && <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{h.fromSource}</div>}
+              {priceBlock(h.fromPrice, n, { big: true })}
+              <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <button style={{ ...btn("primary"), padding: "8px 13px" }} disabled={h.loading} onClick={() => viewDeal(c, h)} title={h.fromLink ? "" : "Gets the exact deal link (1 search)"}>
+                  View deal <ExternalLink style={{ width: 13, height: 13 }} /></button>
+                <button style={{ ...btn(), padding: "8px 12px", color: ACCENT }} disabled={h.loading} onClick={() => seeAll(c, h)}>
+                  {h.loading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />} See all prices</button>
+              </div>
+            </>) : <div style={{ fontSize: 13, color: MUTED, textAlign: "right" }}>{notOnline ? "Not available online" : h.online ? "None of your 6 sites have it" : "No price yet"}</div>}
           </div>
         </div>
 
@@ -529,7 +561,7 @@ export default function PriceCompare() {
           const named = c.hotels.filter(h => h.name.trim());
           const mineList = sortList(named.filter(isMine), c.sort);
           // other hotels: only ones that actually have a price
-          const others = sortList(named.filter(h => !isMine(h) && hasPrice(h)), c.sort);
+          const others = sortList(named.filter(h => !isMine(h) && (hasPrice(h) || h.fromPrice)), c.sort);
           const visible = [...mineList.filter(hasPrice), ...others];
           const tabs: { k: SortKey; label: string }[] = [{ k: "best", label: "Best" }, { k: "cheapest", label: "Cheapest" }, { k: "rated", label: "Top rated" }];
           const top = (k: SortKey) => sortList(visible, k)[0];

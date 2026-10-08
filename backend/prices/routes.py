@@ -358,8 +358,18 @@ def discover(body: DiscoverIn, authorization: Optional[str] = Header(None)):
         total = _num(p.get("total_rate")) or ((_num(p.get("rate_per_night")) or 0) * nights) or None
         if not total: continue                 # Google has no price for these dates → don't show it
         imgs = p.get("images") or []
+        # cheapest of YOUR sites (Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip, hotel website), if Google lists it
+        src, src_total, src_link = None, None, None
+        for item in (p.get("prices") or []):
+            name = _site(item, p.get("name") or "")
+            if not name: continue
+            t = _num(item.get("total_rate")) or ((_num(item.get("rate_per_night")) or 0) * nights) or None
+            if t and (src_total is None or t < src_total):
+                src, src_total, src_link = name, t, item.get("link")
+        best = src_total or total
         out.append({"name": p.get("name"), "stars": p.get("extracted_hotel_class"), "rating": p.get("overall_rating"),
-                    "reviews": p.get("reviews"), "lowest_total": round(total * len(rooms)) if total else None,
+                    "reviews": p.get("reviews"), "lowest_total": round(best * len(rooms)),
+                    "lowest_source": src, "lowest_link": src_link,
                     "image": imgs[0].get("thumbnail") if imgs else None, "property_token": p.get("property_token")})
         if len(out) >= body.limit: break
     out.sort(key=lambda h: h["lowest_total"] or 9e12)
