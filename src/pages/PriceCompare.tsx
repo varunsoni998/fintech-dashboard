@@ -19,6 +19,8 @@ import {
 const API = "https://fintech-dashboard-61vh.onrender.com/api/prices";
 const STORE = "pc:trip:v3";
 const CORR = "pc:corr:v1";   // learned "website price ÷ Google price" per site (+ per city), from confirmed prices
+const words = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !["hotel", "the", "and", "resort", "by"].includes(w));
+const nameMatch = (a: string, b: string) => { const A = new Set(words(a)), B = words(b); if (!A.size || !B.length) return 0; return B.filter(w => A.has(w)).length / Math.max(A.size, B.length); };
 const median = (a: number[]) => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
 const MEALS = ["RO", "BB", "HB", "FB", "AI"];
 const LABELS = ["", "base", "upg 1", "upg 2", "upg 3"];
@@ -160,6 +162,22 @@ export default function PriceCompare() {
   const loadStatus = () => authFetch("/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ configured: false }));
   useEffect(() => { loadStatus(); }, []);
 
+  // ── Grab-price Chrome extension: receives the exact checkout price from a booking page ──
+  type Grab = { id: number; site: string; hotel: string; total: number; url: string; checkIn?: string; checkOut?: string };
+  const [extReady, setExtReady] = useState(false);
+  const [grab, setGrab] = useState<Grab | null>(null);
+  const [grabSel, setGrabSel] = useState<{ hid: string; site: string }>({ hid: "", site: "" });
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.source !== window || !e.data || e.data.source !== "pc-grab-ext") return;
+      if (e.data.type === "PC_EXT_READY") setExtReady(true);
+      if (e.data.type === "PC_GRAB_PRICE" && e.data.grab?.total > 0) { setExtReady(true); setGrab(e.data.grab); }
+    };
+    window.addEventListener("message", onMsg);
+    window.postMessage({ source: "pc-page", type: "PC_PING" }, location.origin);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
   const setT = (p: Partial<Trip>) => setTrip(t => ({ ...t, ...p }));
   const cc = trip.currency, roe = num(trip.roe);
 
@@ -211,6 +229,9 @@ export default function PriceCompare() {
                 : { source: p.source, room: p.room || undefined, rupees: g, amt: p.total, ccy, mine: false, free: p.free_cancellation, link: p.link, google: g, fx: fx || undefined };
             })();
       }),
+      // prices confirmed (e.g. grabbed from a site) that Google doesn't list for this hotel
+      ...Object.entries(h.confirmed || {}).filter(([src]) => !(h.online?.prices || []).some(p => p.source === src))
+        .map(([src, v]) => ({ source: src, rupees: v, amt: v, ccy: "INR", mine: false, free: false, confirmed: true } as Deal)),
     ].sort((a, b) => a.rupees - b.rupees);
   };
   const bestOf = (h: Hotel) => deals(h)[0]?.rupees ?? (h.online ? undefined : h.fromPrice);
@@ -269,21 +290,39 @@ export default function PriceCompare() {
     await fetchOne(c, h, true); loadStatus();
   };
   // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
+  const applyConfirm = (c: City, h: Hotel, source: string, v: number) => {
+    if (!(v > 0)) return;
+    setHotel(c.id, h.id, { confirmed: { ...(h.confirmed || {}), [source]: v } });
+    // learn how far Google was off for this site (and this city), to correct other hotels' prices
+    const g = (h.online?.prices || []).find(p => p.source === source);
+    const ratio = g ? v / (g.total * (h.online?.roeAt || 1)) : 0;
+    if (ratio > 0.5 && ratio < 2) {
+      const city = c.name.trim().toLowerCase(), k1 = `${source}|${city}`, k2 = source;
+      setCorr(o => ({ ...o, [k1]: [...(o[k1] || []), ratio].slice(-25), [k2]: [...(o[k2] || []), ratio].slice(-50) }));
+    }
+  };
   const saveConfirm = (c: City, h: Hotel) => {
     if (!editing) return;
-    const v = num(editing.value);
-    if (v > 0) {
-      setHotel(c.id, h.id, { confirmed: { ...(h.confirmed || {}), [editing.source]: v } });
-      // learn how far Google was off for this site (and this city), to correct other hotels' prices
-      const g = (h.online?.prices || []).find(p => p.source === editing.source);
-      const ratio = g ? v / (g.total * (h.online?.roeAt || 1)) : 0;
-      if (ratio > 0.5 && ratio < 2) {
-        const city = c.name.trim().toLowerCase(), k1 = `${editing.source}|${city}`, k2 = editing.source;
-        setCorr(o => ({ ...o, [k1]: [...(o[k1] || []), ratio].slice(-25), [k2]: [...(o[k2] || []), ratio].slice(-50) }));
-      }
-    }
+    applyConfirm(c, h, editing.source, num(editing.value));
     setEditing(null);
   };
+  // all hotels on the trip, for matching a grabbed price
+  const allHotels = trip.cities.flatMap(c => c.hotels.filter(h => h.name.trim()).map(h => ({ c, h })));
+  useEffect(() => {
+    if (!grab) return;
+    const scored = allHotels.map(({ h }) => ({ h, s: nameMatch(h.online?.name || h.name, grab.hotel) + ((h.online?.prices || []).some(p => p.source === grab.site) ? 0.15 : 0) + (h.checkedAt ? h.checkedAt / 1e14 : 0) }))
+      .sort((a, b) => b.s - a.s);
+    setGrabSel({ hid: scored[0]?.h.id || "", site: grab.site });
+  }, [grab?.id]);
+  const applyGrab = () => {
+    const hit = allHotels.find(x => x.h.id === grabSel.hid);
+    if (!grab || !hit) return;
+    applyConfirm(hit.c, hit.h, grabSel.site || grab.site, grab.total);
+    window.postMessage({ source: "pc-page", type: "PC_GRAB_DONE", id: grab.id }, location.origin);
+    setMsg({ kind: "ok", text: `✓ ${grabSel.site} ${inr(grab.total)} confirmed for ${hit.h.name}.` });
+    setGrab(null);
+  };
+  const dismissGrab = () => { if (grab) window.postMessage({ source: "pc-page", type: "PC_GRAB_DONE", id: grab.id }, location.origin); setGrab(null); };
   const clearConfirm = (c: City, h: Hotel, source: string) => {
     const next = { ...(h.confirmed || {}) }; delete next[source];
     setHotel(c.id, h.id, { confirmed: next });
@@ -573,6 +612,7 @@ export default function PriceCompare() {
             <h1 style={{ fontSize: 22, fontWeight: 800, color: TEXT, margin: 0 }}>Price Compare</h1>
             <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>Every booking site plus your Ottila / TBO / DMC rates. Cheapest first, prices as quoted (no markup).</p>
           </div>
+          {extReady && <span title="Grab-price Chrome extension is installed" style={{ ...pill(BG, GREEN), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px" }}>✓ Grab-price extension</span>}
           {status?.configured && (
             <span style={{ ...pill(BG, MUTED), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <KeyRound style={{ width: 13, height: 13, color: ACCENT }} /> {status.searches_left ?? "?"} searches left{status.keys && status.keys > 1 ? ` · key ${status.active_key ?? "-"} of ${status.keys}` : ""}
@@ -580,6 +620,33 @@ export default function PriceCompare() {
           )}
           <button style={btn()} onClick={() => { if (confirm("Start a new trip? This clears the current one.")) setTrip({ ...EMPTY, currency: trip.currency, roe: trip.roe, roeNote: trip.roeNote, cities: [newCity()] }); }}><Trash2 style={{ width: 14, height: 14 }} /> New trip</button>
         </div>
+
+        {grab && (
+          <div style={{ ...card, padding: 14, display: "flex", flexDirection: "column", gap: 10, border: `2px solid ${GREEN}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ ...pill(GREEN), fontSize: 12 }}>Price grabbed</span>
+              <b style={{ color: TEXT, fontSize: 15 }}>{inr(grab.total)}</b>
+              <span style={{ color: MUTED, fontSize: 13 }}>from <b style={{ color: TEXT }}>{grab.site}</b>{grab.hotel ? <> · page says “{grab.hotel}”</> : null}{grab.checkIn ? ` · ${grab.checkIn}${grab.checkOut ? ` → ${grab.checkOut}` : ""}` : ""}</span>
+            </div>
+            {allHotels.length ? (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+                <label style={{ ...lbl, flex: 2, minWidth: 220 }}>For hotel
+                  <select style={inp} value={grabSel.hid} onChange={e => setGrabSel({ ...grabSel, hid: e.target.value })}>
+                    {trip.cities.map(c => <optgroup key={c.id} label={c.name || "City"}>{c.hotels.filter(h => h.name.trim()).map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</optgroup>)}
+                  </select>
+                </label>
+                <label style={{ ...lbl, flex: 1, minWidth: 150 }}>Website
+                  <select style={inp} value={grabSel.site} onChange={e => setGrabSel({ ...grabSel, site: e.target.value })}>
+                    {["Booking.com", "Agoda", "Expedia", "Hotels.com", "MakeMyTrip", "Hotel website"].map(x => <option key={x}>{x}</option>)}
+                  </select>
+                </label>
+                <button style={btn("primary")} onClick={applyGrab}><CheckCircle2 style={{ width: 15, height: 15 }} /> Apply as confirmed</button>
+                <button style={btn()} onClick={dismissGrab}>Dismiss</button>
+              </div>
+            ) : <div style={{ fontSize: 13, color: WARN }}>Search a city first, then grab the price again.</div>}
+            <div style={{ fontSize: 11.5, color: MUTED }}>Check the dates, rooms and guests on the site match this trip before applying.</div>
+          </div>
+        )}
 
         {status && !status.configured && (
           <div style={{ ...card, padding: 12, display: "flex", gap: 8, alignItems: "center", color: WARN, fontSize: 13 }}>
