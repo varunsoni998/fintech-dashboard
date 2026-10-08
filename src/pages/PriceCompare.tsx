@@ -29,13 +29,13 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
 interface Room { adults: number; ages: number[] }
 interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight?: boolean; cities: City[] }
-interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string }
+interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newHotel = (p: Partial<Hotel> = {}): Hotel => ({ id: uid(), name: "", room: "", meal: "BB", label: "", inPkg: false, ottila: "", tbo: "", otherSource: "DMC", other: "", cancel: "", ...p });
@@ -130,6 +130,7 @@ export default function PriceCompare() {
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [roeBusy, setRoeBusy] = useState(false);
   const [roeErr, setRoeErr] = useState("");
+  const [editing, setEditing] = useState<{ hid: string; source: string; value: string } | null>(null);
 
   useEffect(() => { try { localStorage.setItem(STORE, JSON.stringify(trip)); } catch { /* */ } }, [trip]);
   const loadStatus = () => authFetch("/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ configured: false }));
@@ -175,7 +176,12 @@ export default function PriceCompare() {
     return [
       ...([["Ottila", h.ottila], ["TBO", h.tbo], [h.otherSource || "Other", h.other]] as [string, string][])
         .filter(([, v]) => num(v) > 0).map(([s, v]) => ({ source: s, rupees: num(v), amt: num(v), ccy: "INR", mine: true, free: !!h.cancel })),
-      ...(h.online?.prices || []).map(p => ({ source: p.source, rupees: p.total * rate, amt: p.total, ccy, before: p.before_tax ? p.before_tax * rate : undefined, mine: false, free: p.free_cancellation, link: p.link })),
+      ...(h.online?.prices || []).map(p => {
+        const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
+        return cf
+          ? { source: p.source, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          : { source: p.source, rupees: p.total * rate, amt: p.total, ccy, mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate };
+      }),
     ].sort((a, b) => a.rupees - b.rupees);
   };
   const bestOf = (h: Hotel) => deals(h)[0]?.rupees ?? (h.online ? undefined : h.fromPrice);
@@ -192,7 +198,7 @@ export default function PriceCompare() {
     try {
       const r: Online = await (await authFetch("/search", { hotel: h.name, city: c.name, check_in: c.checkIn, check_out: c.checkOut, adults: rooms[0].adults, currency: searchCcy, property_token: h.token, rooms: apiRooms, fresh })).json();
       const online = { ...r, currency: r.currency || searchCcy, roeAt: rate };
-      setHotel(c.id, h.id, { loading: false, online, searchedFor: key(c, h), checkedAt: Date.now(), open,
+      setHotel(c.id, h.id, { loading: false, online, searchedFor: key(c, h), checkedAt: Date.now(), open, confirmed: h.searchedFor === key(c, h) ? h.confirmed : undefined,
         token: h.token || (r as any).property_token, image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
       return online;
     } catch (e: any) { setHotel(c.id, h.id, { loading: false, error: e.message }); return null; }
@@ -232,6 +238,17 @@ export default function PriceCompare() {
   const seeAll = async (c: City, h: Hotel) => {
     if (h.online && h.searchedFor === key(c, h)) return setHotel(c.id, h.id, { open: !h.open });
     await fetchOne(c, h); loadStatus();
+  };
+  // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
+  const saveConfirm = (c: City, h: Hotel) => {
+    if (!editing) return;
+    const v = num(editing.value);
+    if (v > 0) setHotel(c.id, h.id, { confirmed: { ...(h.confirmed || {}), [editing.source]: v } });
+    setEditing(null);
+  };
+  const clearConfirm = (c: City, h: Hotel, source: string) => {
+    const next = { ...(h.confirmed || {}) }; delete next[source];
+    setHotel(c.id, h.id, { confirmed: next });
   };
   // "View deal" before "See all prices": open the tab straight away, get the exact deal link (1 search), then go there
   const viewDeal = async (c: City, h: Hotel) => {
@@ -278,7 +295,7 @@ export default function PriceCompare() {
         const bcom = online.find(d => /booking\.com/i.test(d.source));
         const cmpP = bcom || online[0];
         const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cmpP.free ? "Free cxl" : undefined } : undefined;
-        const remark = online.length ? online.slice(0, 8).map(d => `${d.source} ${money(d.amt, d.ccy)}`).join(" · ") : undefined;
+        const remark = online.length ? online.slice(0, 8).map(d => `${d.source} ${money(d.amt, d.ccy)}${d.confirmed ? " (confirmed)" : " (Google)"}`).join(" · ") : undefined;
         const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || "Room"}`;
         if (!ds.length) {
           rows.push(h.fromPrice ? { bid: h.label || undefined, description: desc, source: "Google (from)", currency: "INR", amount: h.fromPrice, meal: h.meal, markup: 0, pkg: h.inPkg ? ["A"] : [] }
@@ -396,6 +413,7 @@ export default function PriceCompare() {
             {best ? (<>
               <div style={{ fontSize: 12, color: MUTED }}>{plural(ds.length, "deal", "deals")} · cheapest on</div>
               <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
+              {!best.mine && <span style={best.confirmed ? { ...pill(GREEN), fontSize: 10.5 } : { ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{best.confirmed ? "✓ Confirmed on site" : "≈ Google price"}</span>}
               {priceBlock(best.rupees, n, { amt: best.amt, ccy: best.ccy, big: true })}
               <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}{best.free ? " · free cancellation" : ""}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -405,7 +423,7 @@ export default function PriceCompare() {
                   {h.open ? "Hide prices" : "See all prices"}</button>}
               </div>
             </>) : h.fromPrice && !h.online ? (<>
-              <div style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>{h.fromSource ? "cheapest on" : "from (Google's lowest)"}</div>
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>{h.fromSource ? "≈ cheapest on" : "≈ from (Google's lowest)"}</div>
               {h.fromSource && <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{h.fromSource}</div>}
               {priceBlock(h.fromPrice, n, { big: true })}
               <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}</div>
@@ -445,9 +463,29 @@ export default function PriceCompare() {
                   {i === 0 && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
                   {i > 0 && best && Math.round(d.rupees - best.rupees) > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: WARN, fontWeight: 600 }}>+{inr(d.rupees - best.rupees)}</span>}
                   {i > 0 && best && Math.round(d.rupees - best.rupees) === 0 && <span style={{ marginLeft: 8, fontSize: 12, color: MUTED, fontWeight: 600 }}>same price</span>}
+                  {!d.mine && (
+                    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 600 }}>
+                      {editing && editing.hid === h.id && editing.source === d.source ? (<>
+                        <span style={{ color: MUTED }}>Total on {d.source} ₹</span>
+                        <input autoFocus value={editing.value} style={{ ...inp, width: 110, padding: "4px 8px", fontSize: 12.5 }}
+                          onChange={e => setEditing({ ...editing, value: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter") saveConfirm(c, h); if (e.key === "Escape") setEditing(null); }} />
+                        <button style={{ ...btn("primary"), padding: "4px 10px", fontSize: 11.5 }} onClick={() => saveConfirm(c, h)}>Save</button>
+                        <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5 }} onClick={() => setEditing(null)}>Cancel</button>
+                      </>) : d.confirmed ? (<>
+                        <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Confirmed on site</span>
+                        <span style={{ color: MUTED }}>Google said {inr(d.google || 0)}</span>
+                        <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
+                        <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5, padding: 0 }} onClick={() => clearConfirm(c, h, d.source)}>Undo</button>
+                      </>) : (<>
+                        <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ Google price</span>
+                        <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: "" })}>Confirm price</button>
+                      </>)}
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, color: d.free ? GREEN : MUTED, fontWeight: 600 }}>{d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>
-                {priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy, before: d.before })}
+                {priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
                 {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
                   : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}
               </div>
@@ -635,7 +673,7 @@ export default function PriceCompare() {
           <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
           <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
           <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
-          <span style={{ fontSize: 12, color: MUTED }}>Prices incl. taxes, for {roomSummary(rooms).toLowerCase()}. A repeat search within 1 hour is free; Refresh gets live prices.</span>
+          <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
         </div>
         {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
       </div>
