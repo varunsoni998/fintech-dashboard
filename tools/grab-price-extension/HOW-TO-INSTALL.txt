@@ -2,11 +2,19 @@ CustomHolidays – Grab Price (Chrome extension)
 ==============================================
 
 WHAT IT DOES
-On a hotel BOOKING / CHECKOUT page (Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip or the hotel's own
+1) AUTOMATIC (main use): in Price Compare click "⚡ Get exact prices" (on a hotel card, or at the bottom for all
+   your hotels). The extension opens each Booking.com / Expedia / Hotels.com / MakeMyTrip deal link in a
+   background tab of your Chrome, reads the final total for the stay, closes the tab and fills it in as
+   "✓ Confirmed on site (auto)". You don't open anything. Takes ~10–30 seconds. Keep Chrome open.
+   (Agoda's total only appears at checkout, so Agoda keeps Google's price – it has matched exactly in tests.)
+   If a site can't be read, that row says "Couldn't … — use View deal".
+
+2) MANUAL (any site): on a hotel BOOKING / CHECKOUT page (Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip or the hotel's own
 website), click the extension → it reads the final total → "Send to Price Compare" → in BusinessOS click
 "Apply as confirmed". The price becomes ✓ Confirmed (used for ranking and the Excel). No typing.
 
-It only reads the page you are looking at, only when you click it. It never logs in, books or browses by itself.
+It only opens the deal links Price Compare gives it, and only when you click "Get exact prices" (or reads the page
+you're on when you click the ₹ icon). It never logs in, types anything into a site, or books anything.
 
 INSTALL (once per computer, ~2 minutes)
 1. Unzip "grab-price-extension.zip" into a folder you will keep (e.g. Documents\grab-price-extension).

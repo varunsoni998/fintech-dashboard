@@ -7,13 +7,13 @@
  * Ottila-style rooms picker; ROE fetched automatically; prices searched in the trip currency.
  * "Download Excel" writes the standard CustomHolidays costing sheet.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { supabase } from "@/lib/supabase";
 import {
   Scale, Plus, Minus, X, Search, Loader2, Download, AlertTriangle, CheckCircle2, RefreshCw, Trash2,
-  Star, ExternalLink, ChevronDown, ChevronUp, BedDouble, KeyRound, Users, Pin,
+  Star, ExternalLink, ChevronDown, ChevronUp, BedDouble, KeyRound, Users, Pin, Zap,
 } from "lucide-react";
 
 const API = "https://fintech-dashboard-61vh.onrender.com/api/prices";
@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
@@ -165,12 +165,16 @@ export default function PriceCompare() {
   // ── Grab-price Chrome extension: receives the exact checkout price from a booking page ──
   type Grab = { id: number; site: string; hotel: string; total: number; url: string; checkIn?: string; checkOut?: string };
   const [extReady, setExtReady] = useState(false);
+  const [extAuto, setExtAuto] = useState(false);
+  const [checks, setChecks] = useState<Record<string, string>>({});   // "hid|site" → "checking" | "ok" | error text
+  const onCheckMsg = useRef<(m: any) => void>(() => {});
   const [grab, setGrab] = useState<Grab | null>(null);
   const [grabSel, setGrabSel] = useState<{ hid: string; site: string }>({ hid: "", site: "" });
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       if (e.source !== window || !e.data || e.data.source !== "pc-grab-ext") return;
-      if (e.data.type === "PC_EXT_READY") setExtReady(true);
+      if (e.data.type === "PC_EXT_READY") { setExtReady(true); if (e.data.auto) setExtAuto(true); }
+      if (/^PC_CHECK_/.test(e.data.type)) onCheckMsg.current(e.data);
       if (e.data.type === "PC_GRAB_PRICE" && e.data.grab?.total > 0) { setExtReady(true); setGrab(e.data.grab); }
     };
     window.addEventListener("message", onMsg);
@@ -290,9 +294,13 @@ export default function PriceCompare() {
     await fetchOne(c, h, true); loadStatus();
   };
   // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
-  const applyConfirm = (c: City, h: Hotel, source: string, v: number) => {
+  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false) => {
     if (!(v > 0)) return;
-    setHotel(c.id, h.id, { confirmed: { ...(h.confirmed || {}), [source]: v } });
+    setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== c.id ? x : { ...x, hotels: x.hotels.map(y => {
+      if (y.id !== h.id) return y;
+      const ca = { ...(y.confirmedAuto || {}) }; if (auto) ca[source] = Date.now(); else delete ca[source];
+      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca };
+    }) }) }));
     // learn how far Google was off for this site (and this city), to correct other hotels' prices
     const g = (h.online?.prices || []).find(p => p.source === source);
     const ratio = g ? v / (g.total * (h.online?.roeAt || 1)) : 0;
@@ -321,6 +329,31 @@ export default function PriceCompare() {
     window.postMessage({ source: "pc-page", type: "PC_GRAB_DONE", id: grab.id }, location.origin);
     setMsg({ kind: "ok", text: `✓ ${grabSel.site} ${inr(grab.total)} confirmed for ${hit.h.name}.` });
     setGrab(null);
+  };
+  // ── ⚡ automatic exact prices: the extension opens each deal link in a background tab and reads the total ──
+  const AUTO_SITES = ["Booking.com", "Expedia", "Hotels.com", "MakeMyTrip"];
+  const sameRooms = rooms.every(r => r.adults === rooms[0].adults && r.ages.join() === rooms[0].ages.join());
+  const autoJobs = (list: { c: City; h: Hotel }[]) => list.flatMap(({ c, h }) =>
+    (h.online?.prices || []).filter(p => AUTO_SITES.includes(p.source) && p.link)
+      .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, mult: sameRooms ? nRooms : 1 })));
+  const autoCheck = (list: { c: City; h: Hotel }[]) => {
+    if (!extAuto) { setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
+    if (!sameRooms) { setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
+    const jobs = autoJobs(list);
+    if (!jobs.length) { setMsg({ kind: "err", text: "Nothing to check — open the hotel's prices first (Search / See all prices)." }); return; }
+    setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [`${j.hid}|${j.source}`, "queued"])) }));
+    window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
+    setMsg({ kind: "ok", text: `⚡ Checking ${plural(jobs.length, "price", "prices")} on the websites in background tabs — keep Chrome open…` });
+  };
+  onCheckMsg.current = (m: any) => {
+    const j = m.job; const k = j ? `${j.hid}|${j.source}` : "";
+    if (m.type === "PC_CHECK_STARTED") setChecks(o => ({ ...o, [k]: "checking" }));
+    if (m.type === "PC_CHECK_RESULT") {
+      const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
+      if (m.result?.total > 0 && city && hotel) { applyConfirm(city, hotel, j.source, m.result.total * (j.mult || 1), true); setChecks(o => ({ ...o, [k]: "ok" })); }
+      else setChecks(o => ({ ...o, [k]: m.result?.error || "Couldn't read the price" }));
+    }
+    if (m.type === "PC_CHECK_DONE") setMsg({ kind: "ok", text: "⚡ Exact-price check finished." });
   };
   const dismissGrab = () => { if (grab) window.postMessage({ source: "pc-page", type: "PC_GRAB_DONE", id: grab.id }, location.origin); setGrab(null); };
   const clearConfirm = (c: City, h: Hotel, source: string) => {
@@ -479,6 +512,9 @@ export default function PriceCompare() {
               <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { showRates: !h.showRates })}>
                 <Plus style={{ width: 12, height: 12 }} /> Ottila / TBO / DMC rate
               </button>
+              {h.online && autoJobs([{ c, h }]).length > 0 && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: GREEN }} onClick={() => autoCheck([{ c, h }])} title="Opens each site in a background tab and reads the exact total">
+                <Zap style={{ width: 12, height: 12 }} /> Get exact prices
+              </button>}
               {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { mine: true })} title="Move to Your hotels">
                 <Pin style={{ width: 12, height: 12 }} /> Add to my hotels
               </button>}
@@ -557,6 +593,9 @@ export default function PriceCompare() {
                       {d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
+                  {!d.mine && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok"].includes(checks[`${h.id}|${d.source}`]) && (
+                    <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {checks[`${h.id}|${d.source}`]} — use View deal</div>
+                  )}
                   {!d.mine && (
                     <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 600 }}>
                       {editing && editing.hid === h.id && editing.source === d.source ? (<>
@@ -566,8 +605,11 @@ export default function PriceCompare() {
                           onKeyDown={e => { if (e.key === "Enter") saveConfirm(c, h); if (e.key === "Escape") setEditing(null); }} />
                         <button style={{ ...btn("primary"), padding: "4px 10px", fontSize: 11.5 }} onClick={() => saveConfirm(c, h)}>Save</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5 }} onClick={() => setEditing(null)}>Cancel</button>
+                      </>) : checks[`${h.id}|${d.source}`] === "checking" || checks[`${h.id}|${d.source}`] === "queued" ? (<>
+                        <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {checks[`${h.id}|${d.source}`] === "queued" ? "waiting…" : `checking on ${d.source}…`}</span>
                       </>) : d.confirmed ? (<>
-                        <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Confirmed on site</span>
+                        <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Confirmed on site{h.confirmedAuto?.[d.source] ? " (auto)" : ""}</span>
+                        {h.confirmedAuto?.[d.source] && <span style={{ color: MUTED }}>checked {clock(h.confirmedAuto[d.source])} ·</span>}
                         <span style={{ color: MUTED }}>Google said {inr(d.google || 0)}</span>
                         <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5, padding: 0 }} onClick={() => clearConfirm(c, h, d.source)}>Undo</button>
@@ -806,6 +848,9 @@ export default function PriceCompare() {
           <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
           <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
           <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
+          <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
+            onClick={() => autoCheck(trip.cities.flatMap(c => c.hotels.filter(h => h.online && (isMine(h) || h.open)).map(h => ({ c, h }))))}>
+            <Zap style={{ width: 15, height: 15 }} /> Get exact prices</button>
           <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
           <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
         </div>
