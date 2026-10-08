@@ -25,7 +25,7 @@ const LABELS = ["", "base", "upg 1", "upg 2", "upg 3"];
 const CCYS = ["USD", "EUR", "CHF", "GBP", "AED", "SGD", "THB", "AUD", "INR"];
 const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", CHF: "CHF ", AED: "AED ", SGD: "S$", THB: "฿", AUD: "A$", INR: "₹" };
 
-interface OnlinePrice { source: string; total: number; per_night: number; free_cancellation: boolean; link?: string; before_tax?: number | null }
+interface OnlinePrice { source: string; total: number; per_night: number; free_cancellation: boolean; link?: string; before_tax?: number | null; room?: string | null }
 interface Online { found: boolean; name?: string; stars?: number; rating?: number; reviews?: number; image?: string; link?: string; prices: OnlinePrice[]; suggestions?: string[]; currency?: string; roeAt?: number }
 interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
@@ -37,7 +37,7 @@ type SortKey = "cheapest" | "best" | "rated";
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
 interface Room { adults: number; ages: number[] }
 interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight?: boolean; cities: City[] }
-interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean; est?: number }
+interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean; est?: number; room?: string }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newHotel = (p: Partial<Hotel> = {}): Hotel => ({ id: uid(), name: "", room: "", meal: "BB", label: "", inPkg: false, ottila: "", tbo: "", otherSource: "DMC", other: "", cancel: "", ...p });
@@ -192,12 +192,12 @@ export default function PriceCompare() {
       ...(h.online?.prices || []).map(p => {
         const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
         return cf
-          ? { source: p.source, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          ? { source: p.source, room: p.room || undefined, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
               return fx
-                ? { source: p.source, rupees: g * fx.f, amt: g * fx.f, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: g, est: fx.n }
-                : { source: p.source, rupees: g, amt: p.total, ccy, mine: false, free: p.free_cancellation, link: p.link, google: g };
+                ? { source: p.source, room: p.room || undefined, rupees: g * fx.f, amt: g * fx.f, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: g, est: fx.n }
+                : { source: p.source, room: p.room || undefined, rupees: g, amt: p.total, ccy, mine: false, free: p.free_cancellation, link: p.link, google: g };
             })();
       }),
     ].sort((a, b) => a.rupees - b.rupees);
@@ -323,7 +323,7 @@ export default function PriceCompare() {
         const cmpP = bcom || online[0];
         const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cmpP.free ? "Free cxl" : undefined } : undefined;
         const remark = online.length ? online.slice(0, 8).map(d => `${d.source} ${money(d.amt, d.ccy)}${d.confirmed ? " (confirmed)" : d.est ? " (est.)" : " (Google)"}`).join(" · ") : undefined;
-        const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || "Room"}`;
+        const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || deals(h).find(d => !d.mine && d.room)?.room || "Room"}`;
         if (!ds.length) {
           rows.push(h.fromPrice ? { bid: h.label || undefined, description: desc, source: "Google (from)", currency: "INR", amount: h.fromPrice, meal: h.meal, markup: 0, pkg: h.inPkg ? ["A"] : [] }
             : { bid: h.label || undefined, description: desc, source: "", meal: h.meal, notes: "Not available online" });
@@ -440,6 +440,7 @@ export default function PriceCompare() {
             {best ? (<>
               <div style={{ fontSize: 12, color: MUTED }}>{plural(ds.length, "deal", "deals")} · cheapest on</div>
               <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
+              {!best.mine && best.room && <div style={{ fontSize: 12, fontWeight: 600, color: MUTED, textAlign: "right", maxWidth: 220, display: "flex", gap: 4, alignItems: "center", justifyContent: "flex-end" }}><BedDouble style={{ width: 12, height: 12, color: ACCENT }} />{best.room}</div>}
               {!best.mine && <span style={best.confirmed ? { ...pill(GREEN), fontSize: 10.5 } : { ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{best.confirmed ? "✓ Confirmed on site" : best.est ? "≈ est. on site" : "≈ Google price"}</span>}
               {priceBlock(best.rupees, n, { amt: best.amt, ccy: best.ccy, big: true })}
               <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}{best.free ? " · free cancellation" : ""}</div>
@@ -490,6 +491,12 @@ export default function PriceCompare() {
                   {i === 0 && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
                   {i > 0 && best && Math.round(d.rupees - best.rupees) > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: WARN, fontWeight: 600 }}>+{inr(d.rupees - best.rupees)}</span>}
                   {i > 0 && best && Math.round(d.rupees - best.rupees) === 0 && <span style={{ marginLeft: 8, fontSize: 12, color: MUTED, fontWeight: 600 }}>same price</span>}
+                  {!d.mine && (
+                    <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
+                      <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
+                      {d.room || "Room not shown by Google — check on the site"}
+                    </div>
+                  )}
                   {!d.mine && (
                     <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 600 }}>
                       {editing && editing.hid === h.id && editing.source === d.source ? (<>

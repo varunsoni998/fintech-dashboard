@@ -154,24 +154,45 @@ def _site(item: dict, hotel_name: str = "") -> Optional[str]:
     return None
 
 
+def _totals(obj: dict, nights: int):
+    total = _num(obj.get("total_rate"))
+    per = _num(obj.get("rate_per_night"))
+    if total is None and per is not None: total = per * nights
+    if per is None and total is not None: per = total / nights
+    return total, per
+
+
 def extract_prices(prop: dict, nights: int) -> List[dict]:
-    """All booking-site prices for one property → [{source, total, per_night, free_cancellation, link}] cheapest first."""
+    """All booking-site prices for one property → [{source, total, per_night, room, free_cancellation, link}] cheapest first.
+    Google lists the individual rooms (name + price) for its featured sites; for those we keep the cheapest room's name."""
     best = {}
     for item in (prop.get("featured_prices") or []) + (prop.get("prices") or []):
         src = _site(item, prop.get("name") or "")
         if not src: continue
-        total = _num(item.get("total_rate"))
-        per = _num(item.get("rate_per_night"))
-        if total is None and per is not None: total = per * nights
-        if per is None and total is not None: per = total / nights
-        if total is None: continue
+        free = bool(item.get("free_cancellation")) or any(bool(rm.get("free_cancellation")) for rm in (item.get("rooms") or []))
+        cands = []
+        total, per = _totals(item, nights)
+        if total is not None:
+            cands.append((total, per, None, item.get("link")))
+        for rm in (item.get("rooms") or []):
+            rt, rp = _totals(rm, nights)
+            if rt is not None and rm.get("name"):
+                cands.append((rt, rp, str(rm.get("name")).strip(), rm.get("link") or item.get("link")))
+        if not cands: continue
+        # cheapest; if the item price and a named room cost the same, keep the room name
+        cands.sort(key=lambda c: (round(c[0]), c[2] is None))
+        t, pn, room, link = cands[0]
+        if room is None:
+            same = [c for c in cands if c[2] and abs(c[0] - t) <= max(1.0, t * 0.005)]
+            if same: room = same[0][2]
         tr = item.get("total_rate") if isinstance(item.get("total_rate"), dict) else {}
         before = tr.get("extracted_before_taxes_fees")
-        row = {"source": src, "total": round(total), "per_night": round(per), "link": item.get("link"),
-               "before_tax": round(before) if isinstance(before, (int, float)) and before < total else None,
-               "free_cancellation": bool(item.get("free_cancellation")) or any(
-                   bool(rm.get("free_cancellation")) for rm in (item.get("rooms") or []))}
-        if src not in best or row["total"] < best[src]["total"]: best[src] = row
+        row = {"source": src, "total": round(t), "per_night": round(pn), "link": link, "room": room,
+               "before_tax": round(before) if isinstance(before, (int, float)) and before < t else None,
+               "free_cancellation": free}
+        old = best.get(src)
+        if not old or row["total"] < old["total"] or (row["total"] == old["total"] and room and not old.get("room")):
+            best[src] = row
     return sorted(best.values(), key=lambda x: x["total"])
 
 
@@ -325,7 +346,8 @@ def search(body: SearchIn, authorization: Optional[str] = Header(None)):
         before = sum(b * n for b, (_, n) in zip(bt, parts))
         combined.append({"source": p["source"], "total": round(total), "per_night": round(total / nights),
                          "before_tax": round(before) if before < total else None,
-                         "link": p.get("link"), "free_cancellation": all(x["free_cancellation"] for x in rows)})
+                         "link": p.get("link"), "room": p.get("room"),
+                         "free_cancellation": all(x["free_cancellation"] for x in rows)})
     combined.sort(key=lambda x: x["total"])
     return {**first, "prices": combined, "lowest": combined[0] if combined else None,
             "searches_used": used, "rooms": n_rooms}
