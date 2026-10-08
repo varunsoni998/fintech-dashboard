@@ -37,7 +37,7 @@ type SortKey = "cheapest" | "best" | "rated";
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
 interface Room { adults: number; ages: number[] }
 interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight?: boolean; cities: City[] }
-interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean; est?: number; room?: string }
+interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean; est?: number; room?: string; fx?: { kind: string; f: number; n: number; lo: number; hi: number } }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newHotel = (p: Partial<Hotel> = {}): Hotel => ({ id: uid(), name: "", room: "", meal: "BB", label: "", inPkg: false, ottila: "", tbo: "", otherSource: "DMC", other: "", cancel: "", ...p });
@@ -136,13 +136,24 @@ export default function PriceCompare() {
   useEffect(() => { try { localStorage.setItem(CORR, JSON.stringify(corr)); } catch { /* */ } }, [corr]);
   const cityOf = (h: Hotel) => (trip.cities.find(c => c.hotels.some(x => x.id === h.id))?.name || "").trim().toLowerCase();
   // learned correction for a site: same city first (1+ check), else that site anywhere (3+ checks)
-  const factor = (site: string, city: string): { f: number; n: number } | null => {
+  // How reliable is Google for this site? Uses checks from the same city first, else the site everywhere (3+ checks).
+  //  exact  → all checks within ±2%: no change, shown as "usually exact"
+  //  adjust → 2+ checks, all off the same way by a similar amount (spread ≤ 6%): price corrected by the median
+  //  varies → checks go both ways / spread out: NO correction, flagged "confirm before quoting"
+  //  hint   → only 1 check: no correction, just shows what that check found
+  type Fx = { kind: "exact" | "adjust" | "varies" | "hint"; f: number; n: number; lo: number; hi: number };
+  const factor = (site: string, city: string): Fx | null => {
     const local = corr[`${site}|${city}`] || [], all = corr[site] || [];
     const use = local.length ? local : all.length >= 3 ? all : [];
     if (!use.length) return null;
-    const f = median(use);
-    return Math.abs(f - 1) < 0.01 ? null : { f, n: use.length };
+    const d = use.map(r => r - 1), lo = Math.min(...d), hi = Math.max(...d), n = use.length, f = median(use);
+    if (d.every(x => Math.abs(x) <= 0.02)) return { kind: "exact", f: 1, n, lo, hi };
+    if (n === 1) return { kind: "hint", f: 1, n, lo, hi };
+    const sameWay = (lo > 0.02 && hi > 0) || (hi < -0.02 && lo < 0);
+    if (sameWay && hi - lo <= 0.06) return { kind: "adjust", f, n, lo, hi };
+    return { kind: "varies", f: 1, n, lo, hi };
   };
+  const pct = (x: number) => `${x > 0 ? "+" : ""}${Math.round(x * 100)}%`;
   const [editing, setEditing] = useState<{ hid: string; source: string; value: string } | null>(null);
 
   useEffect(() => { try { localStorage.setItem(STORE, JSON.stringify(trip)); } catch { /* */ } }, [trip]);
@@ -195,9 +206,9 @@ export default function PriceCompare() {
           ? { source: p.source, room: p.room || undefined, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
-              return fx
-                ? { source: p.source, room: p.room || undefined, rupees: g * fx.f, amt: g * fx.f, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: g, est: fx.n }
-                : { source: p.source, room: p.room || undefined, rupees: g, amt: p.total, ccy, mine: false, free: p.free_cancellation, link: p.link, google: g };
+              return fx?.kind === "adjust"
+                ? { source: p.source, room: p.room || undefined, rupees: g * fx.f, amt: g * fx.f, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: g, est: fx.n, fx }
+                : { source: p.source, room: p.room || undefined, rupees: g, amt: p.total, ccy, mine: false, free: p.free_cancellation, link: p.link, google: g, fx: fx || undefined };
             })();
       }),
     ].sort((a, b) => a.rupees - b.rupees);
@@ -441,7 +452,17 @@ export default function PriceCompare() {
               <div style={{ fontSize: 12, color: MUTED }}>{plural(ds.length, "deal", "deals")} · cheapest on</div>
               <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
               {!best.mine && best.room && <div style={{ fontSize: 12, fontWeight: 600, color: MUTED, textAlign: "right", maxWidth: 220, display: "flex", gap: 4, alignItems: "center", justifyContent: "flex-end" }}><BedDouble style={{ width: 12, height: 12, color: ACCENT }} />{best.room}</div>}
-              {!best.mine && <span style={best.confirmed ? { ...pill(GREEN), fontSize: 10.5 } : { ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{best.confirmed ? "✓ Confirmed on site" : best.est ? "≈ est. on site" : "≈ Google price"}</span>}
+              {!best.mine && (() => {
+                const k = best.confirmed ? "confirmed" : best.fx?.kind;
+                const look: Record<string, [React.CSSProperties, string]> = {
+                  confirmed: [{ ...pill(GREEN) }, "✓ Confirmed on site"],
+                  adjust: [{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN }, "≈ est. on site"],
+                  exact: [{ ...pill(BG, GREEN), boxShadow: SHADOW_IN }, "✓ usually exact"],
+                  varies: [{ ...pill(WARN) }, "⚠ varies — confirm"],
+                };
+                const [st, txt] = look[k || ""] || [{ ...pill(BG, WARN), boxShadow: SHADOW_IN }, "≈ Google price"];
+                return <span style={{ ...st, fontSize: 10.5 }}>{txt}</span>;
+              })()}
               {priceBlock(best.rupees, n, { amt: best.amt, ccy: best.ccy, big: true })}
               <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}{best.free ? " · free cancellation" : ""}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -512,9 +533,18 @@ export default function PriceCompare() {
                         <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5, padding: 0 }} onClick={() => clearConfirm(c, h, d.source)}>Undo</button>
                       </>) : (<>
-                        {d.est ? <>
+                        {d.fx?.kind === "adjust" ? <>
                           <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ est. on site</span>
-                          <span style={{ color: MUTED }}>Google {inr(d.google || 0)} · corrected from {plural(d.est, "check", "checks")}</span>
+                          <span style={{ color: MUTED }}>Google {inr(d.google || 0)} · {d.source} is usually {pct(d.fx.f - 1)} here ({plural(d.fx.n, "check", "checks")})</span>
+                        </> : d.fx?.kind === "exact" ? <>
+                          <span style={{ ...pill(BG, GREEN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>✓ usually exact</span>
+                          <span style={{ color: MUTED }}>Google matched the site in {plural(d.fx.n, "check", "checks")}</span>
+                        </> : d.fx?.kind === "varies" ? <>
+                          <span style={{ ...pill(WARN), fontSize: 10.5 }}>⚠ varies {pct(d.fx.lo)} to {pct(d.fx.hi)}</span>
+                          <span style={{ color: WARN }}>Google is unreliable for {d.source} here — confirm before quoting</span>
+                        </> : d.fx?.kind === "hint" ? <>
+                          <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ Google price</span>
+                          <span style={{ color: MUTED }}>1 check so far: site was {pct(d.fx.lo)} vs Google</span>
                         </> : <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ Google price</span>}
                         <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: "" })}>Confirm price</button>
                       </>)}
