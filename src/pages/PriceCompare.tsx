@@ -168,6 +168,10 @@ export default function PriceCompare() {
   const [extAuto, setExtAuto] = useState(false);
   const [checks, setChecks] = useState<Record<string, string>>({});   // "hid|site" → "checking" | "ok" | error text
   const onCheckMsg = useRef<(m: any) => void>(() => {});
+  const afterFetch = useRef<(c: City, h: Hotel) => void>(() => {});
+  // automatic exact prices: ON by default (switch at the top)
+  const [autoOn, setAutoOn] = useState<boolean>(() => { try { return localStorage.getItem("pc:auto") !== "off"; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem("pc:auto", autoOn ? "on" : "off"); } catch { /* */ } }, [autoOn]);
   const [grab, setGrab] = useState<Grab | null>(null);
   const [grabSel, setGrabSel] = useState<{ hid: string; site: string }>({ hid: "", site: "" });
   useEffect(() => {
@@ -254,6 +258,7 @@ export default function PriceCompare() {
       const online = { ...r, currency: r.currency || searchCcy, roeAt: rate };
       setHotel(c.id, h.id, { loading: false, online, searchedFor: key(c, h), checkedAt: Date.now(), open, confirmed: h.searchedFor === key(c, h) ? h.confirmed : undefined,
         token: h.token || (r as any).property_token, image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
+      afterFetch.current(c, { ...h, online });     // → exact prices from the sites, automatically
       return online;
     } catch (e: any) { setHotel(c.id, h.id, { loading: false, error: e.message }); return null; }
   };
@@ -336,15 +341,16 @@ export default function PriceCompare() {
   const autoJobs = (list: { c: City; h: Hotel }[]) => list.flatMap(({ c, h }) =>
     (h.online?.prices || []).filter(p => AUTO_SITES.includes(p.source) && p.link)
       .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, mult: sameRooms ? nRooms : 1 })));
-  const autoCheck = (list: { c: City; h: Hotel }[]) => {
-    if (!extAuto) { setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
-    if (!sameRooms) { setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
+  const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
+    if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
+    if (!sameRooms) { if (!silent) setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
     const jobs = autoJobs(list);
-    if (!jobs.length) { setMsg({ kind: "err", text: "Nothing to check — open the hotel's prices first (Search / See all prices)." }); return; }
+    if (!jobs.length) { if (!silent) setMsg({ kind: "err", text: "Nothing to check — open the hotel's prices first (Search / See all prices)." }); return; }
     setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [`${j.hid}|${j.source}`, "queued"])) }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
-    setMsg({ kind: "ok", text: `⚡ Checking ${plural(jobs.length, "price", "prices")} on the websites in background tabs — keep Chrome open…` });
+    if (!silent) setMsg({ kind: "ok", text: `⚡ Checking ${plural(jobs.length, "price", "prices")} on the websites in background tabs — keep Chrome open…` });
   };
+  afterFetch.current = (c, h) => { if (autoOn && extAuto && sameRooms) autoCheck([{ c, h }], true); };
   onCheckMsg.current = (m: any) => {
     const j = m.job; const k = j ? `${j.hid}|${j.source}` : "";
     if (m.type === "PC_CHECK_STARTED") setChecks(o => ({ ...o, [k]: "checking" }));
@@ -353,7 +359,7 @@ export default function PriceCompare() {
       if (m.result?.total > 0 && city && hotel) { applyConfirm(city, hotel, j.source, m.result.total * (j.mult || 1), true); setChecks(o => ({ ...o, [k]: "ok" })); }
       else setChecks(o => ({ ...o, [k]: m.result?.error || "Couldn't read the price" }));
     }
-    if (m.type === "PC_CHECK_DONE") setMsg({ kind: "ok", text: "⚡ Exact-price check finished." });
+    if (m.type === "PC_CHECK_DONE") setMsg(o => (o?.text.startsWith("⚡") ? { kind: "ok", text: "⚡ Exact prices updated from the websites." } : o));
   };
   const dismissGrab = () => { if (grab) window.postMessage({ source: "pc-page", type: "PC_GRAB_DONE", id: grab.id }, location.origin); setGrab(null); };
   const clearConfirm = (c: City, h: Hotel, source: string) => {
@@ -513,7 +519,7 @@ export default function PriceCompare() {
                 <Plus style={{ width: 12, height: 12 }} /> Ottila / TBO / DMC rate
               </button>
               {h.online && autoJobs([{ c, h }]).length > 0 && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: GREEN }} onClick={() => autoCheck([{ c, h }])} title="Opens each site in a background tab and reads the exact total">
-                <Zap style={{ width: 12, height: 12 }} /> Get exact prices
+                <Zap style={{ width: 12, height: 12 }} /> Re-check exact prices
               </button>}
               {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { mine: true })} title="Move to Your hotels">
                 <Pin style={{ width: 12, height: 12 }} /> Add to my hotels
@@ -654,7 +660,13 @@ export default function PriceCompare() {
             <h1 style={{ fontSize: 22, fontWeight: 800, color: TEXT, margin: 0 }}>Price Compare</h1>
             <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>Every booking site plus your Ottila / TBO / DMC rates. Cheapest first, prices as quoted (no markup).</p>
           </div>
-          {extReady && <span title="Grab-price Chrome extension is installed" style={{ ...pill(BG, GREEN), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px" }}>✓ Grab-price extension</span>}
+          {extAuto ? (
+            <button onClick={() => setAutoOn(v => !v)} title="When ON, every hotel whose prices are fetched is also checked on Booking.com / Expedia / Hotels.com / MakeMyTrip in background tabs"
+              style={{ ...pill(BG, autoOn ? GREEN : MUTED), boxShadow: autoOn ? SHADOW_IN : SHADOW_SM, fontSize: 12, padding: "7px 12px", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Zap style={{ width: 13, height: 13 }} /> Auto exact prices: {autoOn ? "ON" : "OFF"}
+            </button>
+          ) : extReady ? <span title="Update the Grab-price extension to v1.1 for automatic exact prices" style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px" }}>Update Grab-price extension</span>
+            : <span title="Install the Grab-price Chrome extension (tools/grab-price-extension.zip) for exact prices" style={{ ...pill(BG, MUTED), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px" }}>Exact prices: install extension</span>}
           {status?.configured && (
             <span style={{ ...pill(BG, MUTED), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <KeyRound style={{ width: 13, height: 13, color: ACCENT }} /> {status.searches_left ?? "?"} searches left{status.keys && status.keys > 1 ? ` · key ${status.active_key ?? "-"} of ${status.keys}` : ""}
@@ -850,7 +862,7 @@ export default function PriceCompare() {
           <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
           <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
             onClick={() => autoCheck(trip.cities.flatMap(c => c.hotels.filter(h => h.online && (isMine(h) || h.open)).map(h => ({ c, h }))))}>
-            <Zap style={{ width: 15, height: 15 }} /> Get exact prices</button>
+            <Zap style={{ width: 15, height: 15 }} /> Re-check exact prices</button>
           <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
           <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
         </div>
