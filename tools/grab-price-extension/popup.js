@@ -118,3 +118,20 @@ $("send").addEventListener("click", async () => {
 });
 
 main();
+
+// recent automatic checks (newest first) – a failed one shows what the page said, to fix the reader
+chrome.storage.local.get("pcLog", ({ pcLog = [] }) => {
+  const box = document.getElementById("log");
+  if (!pcLog.length) { box.innerHTML = '<div class="tip">No automatic checks yet.</div>'; return; }
+  for (const r of pcLog.slice(0, 12)) {
+    const d = document.createElement("div");
+    d.style.cssText = "border-radius:9px;box-shadow:var(--in);padding:6px 8px;font-size:11.5px";
+    const when = new Date(r.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+    d.innerHTML = `<b></b> <span style="color:var(--muted)">${when}</span><div class="res"></div><div class="dbg" style="color:var(--muted);margin-top:3px;word-break:break-word"></div>`;
+    d.querySelector("b").textContent = r.site;
+    d.querySelector(".res").textContent = r.total ? `✓ ₹${Number(r.total).toLocaleString("en-IN")}` : `✗ ${r.error || "failed"}`;
+    d.querySelector(".res").style.color = r.total ? "#2FA37A" : "#D1435B";
+    if (!r.total && r.debug) d.querySelector(".dbg").textContent = "Page showed: " + r.debug;
+    box.appendChild(d);
+  }
+});
