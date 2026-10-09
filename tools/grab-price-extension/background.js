@@ -8,46 +8,96 @@ const WINDOWS = 2;                 // checker windows side by side (each reads o
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Runs inside the hotel's page on the booking site. Must be self-contained.
-async function readSitePrice(site, nights) {
+// Built from the real page layouts (Oct 2026):
+//  • Booking.com hotel page: room table #hprt-table, each row "₹ 27,000 … +₹ 4,860 taxes and charges … Guests: 2 adults"
+//    (the same table also lists cheaper 1-adult prices → only rows for our number of adults count)
+//  • Booking.com checkout (secure.booking.com/book.html): "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
+//  • Expedia / Hotels.com hotel page: "Choose your room" section, each room "View all photos for <room> … ₹146,910 total"
+//    (further down the page shows OTHER hotels' totals → only the "Choose your room" section counts)
+//  • Expedia search page (Google sometimes links here): find THIS hotel's card and open its page
+async function readSitePrice(site, nights, adults, hotelName) {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const num = (s) => parseFloat(String(s).replace(/,/g, ""));
   const R = "(?:₹|Rs\\.?|INR)\\s?";
   const AMT = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)";
   const rx = (s) => new RegExp(s, "gi");
-  const all = (txt, s, f) => [...txt.matchAll(rx(s))].map(f);
-  // try to bring the rooms / prices section into view
-  const jump = () => {
-    const el = [...document.querySelectorAll("h2,h3,[id],[data-stid]")].find(e => /choose your room|select your room|^rooms$|room options|availability|room-and-rates|offers/i.test(e.id + " " + (e.getAttribute("data-stid") || "") + " " + (e.textContent || "").slice(0, 40)));
-    if (el) el.scrollIntoView({ block: "start" }); else window.scrollBy(0, 900);
-  };
+  const clean = (s) => (s || "").replace(/[   ]/g, " ");
+  const words = (s) => clean(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !["hotel", "the", "and", "resort", "by", "mumbai", "dubai"].includes(w));
+  const overlap = (a, b) => { const A = words(a), B = new Set(words(b)); return A.length ? A.filter(w => B.has(w)).length / A.length : 0; };
+  adults = adults || 2;
+  const cheapest = (list) => list.filter(x => x.total > 100).sort((a, b) => a.total - b.total)[0];
   let snippet = "";
-  for (let t = 0; t < 35; t++) {
-    const txt = (document.body?.innerText || "").replace(/[   ]/g, " ");
+
+  for (let t = 0; t < 30; t++) {
+    const txt = clean(document.body?.innerText || "");
     if (/captcha|are you a robot|verify you are human|access denied|press (and|&) hold/i.test(txt) && txt.length < 4000)
       return { error: "The site asked for a security check — open it once in Chrome, then re-check", debug: txt.slice(0, 300) };
-    let totals = [];
+
     if (site === "Expedia" || site === "Hotels.com") {
-      // "₹22,648 total" · "₹22,648 total includes taxes & fees" · "Total ₹22,648" · "₹22,648 for 3 nights"
-      totals = all(txt, R + AMT + "\\s*total\\b", m => num(m[1]));
-      if (!totals.length) totals = all(txt, "\\btotal(?: price)?:?\\s*" + R + AMT, m => num(m[1]));
-      if (!totals.length) totals = all(txt, R + AMT + "[^₹]{0,25}?includes taxes", m => num(m[1]));
-      if (!totals.length) totals = all(txt, R + AMT + "\\s*for\\s*" + (nights || 1) + "\\s*nights?", m => num(m[1]));
+      if (/Hotel-Search/i.test(location.pathname)) {
+        // list of hotels → open THIS hotel's own page
+        let best = null, bs = 0;
+        for (const a of document.querySelectorAll('a[href*="Hotel-Information"]')) {
+          const card = a.closest("[data-stid*='lodging-card'], li, article, [data-stid='property-listing']") || a;
+          const label = (a.getAttribute("aria-label") || "") + " " + (card.innerText || "").slice(0, 160);
+          const s2 = overlap(hotelName, label);
+          if (s2 > bs) { bs = s2; best = a; }
+        }
+        if (best && bs >= 0.5) return { go: best.href };
+        if (t > 10) return { error: "The site showed a list of hotels and this hotel wasn't in it", debug: txt.slice(0, 300) };
+      } else {
+        const start = txt.search(/Choose your room|Select a room|Room options/i);
+        if (start >= 0) {
+          const rest = txt.slice(start + 15);
+          const stop = rest.search(/\n(Similar properties|Explore similar|Compare similar|You may also like|Popular properties|Properties nearby|Nearby properties|About this property|About the property|Policies|Important information|Guest reviews|Reviews\n|Explore the area|Accessibility)/i);
+          const sec = txt.slice(start, start + 15 + (stop >= 0 ? stop : rest.length));
+          const found = [];
+          for (const b of sec.split(/View all photos for /i).slice(1)) {
+            const room = b.split("\n")[0].trim();
+            const mm = [...b.matchAll(rx(R + AMT + "\\s*total\\b"))];
+            if (mm.length) found.push({ total: num(mm[0][1]), room, free: /Fully refundable|Free cancellation/i.test(b) });
+          }
+          if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
+          const c = cheapest(found);
+          if (c) return { total: Math.round(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
+        }
+      }
     } else if (site === "Booking.com") {
-      // "₹ 40,473  +₹ 11,214 taxes and charges"   or   "₹ 51,687  Includes taxes and charges"
-      totals = all(txt, R + AMT + "[^₹]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)", m => num(m[1]) + num(m[2]));
-      if (!totals.length) totals = all(txt, R + AMT + "[^₹]{0,40}?includes taxes and (?:charges|fees)", m => num(m[1]));
+      const rows = [...document.querySelectorAll("#hprt-table tbody tr, table.hprt-table tbody tr")];
+      if (rows.length) {
+        let room = ""; const found = [];
+        for (const r of rows) {
+          const rn = r.querySelector(".hprt-roomtype-link, .hprt-roomtype-icon-link, [data-room-name]");
+          if (rn) room = clean(rn.getAttribute("data-room-name") || rn.innerText).trim().split("\n")[0];
+          const rt = clean(r.innerText);
+          const p = [...rt.matchAll(rx(R + AMT + "[^₹]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
+          const inc = !p && [...rt.matchAll(rx(R + AMT + "[^₹]{0,40}?includes taxes and (?:charges|fees)"))][0];
+          const total = p ? num(p[1]) + num(p[2]) : inc ? num(inc[1]) : 0;
+          if (!total) continue;
+          const g = rt.match(/Guests?:\s*(\d+)\s*adult/i) || rt.match(/Max(?:imum)? (?:people|persons|guests):?\s*(\d+)/i);
+          const cap = g ? +g[1] : (r.querySelectorAll(".bicon-occupancy, .c-occupancy-icons__adults i, [class*='occupancy'] svg").length || null);
+          if (cap !== null && cap < adults) continue;          // e.g. a 1-adult price when we need 2
+          found.push({ total, room, free: /Free cancellation/i.test(rt) });
+        }
+        const c = cheapest(found);
+        if (c) return { total: Math.round(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
+      }
+      // checkout page: "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
+      const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
+      if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: Math.round(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href }; }
     } else if (site === "MakeMyTrip") {
       // "₹ 4,999  + ₹ 600 taxes & fees  Per Night"
-      totals = all(txt, R + AMT + "\\s*\\+\\s*" + R + AMT + "\\s*taxes\\s*(?:&|and)\\s*fees", m => (num(m[1]) + num(m[2])) * (nights || 1));
+      const per = [...txt.matchAll(rx(R + AMT + "\\s*\\+\\s*" + R + AMT + "\\s*taxes\\s*(?:&|and)\\s*fees"))].map(m => (num(m[1]) + num(m[2])) * (nights || 1));
+      if (per.length) return { total: Math.round(Math.min(...per)), url: location.href };
     } else {
       return { error: "Not read automatically for this site" };
     }
-    totals = totals.filter(x => x > 100);
-    if (totals.length) return { total: Math.round(Math.min(...totals)), found: totals.length, url: location.href };
-    // keep a small sample of what the page shows, for fixing the reader later
-    const i = txt.search(/₹|Rs\.?\s?\d/);
-    snippet = i >= 0 ? txt.slice(Math.max(0, i - 120), i + 380) : txt.slice(0, 400);
-    jump();
+
+    const k = txt.search(/₹|Rs\.?\s?\d/);
+    snippet = k >= 0 ? txt.slice(Math.max(0, k - 120), k + 380) : txt.slice(0, 400);
+    // bring the rooms into view (not to the bottom of the page)
+    const el = [...document.querySelectorAll("#hprt-table, #availability_target, [data-stid='section-room-list'], h2, h3")].find(e => e.id === "hprt-table" || e.id === "availability_target" || /choose your room|select a room|availability/i.test(e.textContent || ""));
+    if (el) el.scrollIntoView({ block: "start" }); else if (t < 6) window.scrollBy(0, 700);
     await sleep(1000);
   }
   return { error: "Couldn't find the price on the page", debug: snippet.replace(/\s+/g, " ").slice(0, 500) };
@@ -69,10 +119,15 @@ async function waitForSite(tabId, ms) {
 async function checkOne(job, windowId) {
   const tab = await chrome.tabs.create({ url: job.url, active: true, windowId });
   try {
-    await waitForSite(tab.id, 45000);
-    await sleep(2000);
-    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSitePrice, args: [job.source, job.nights] });
-    return res?.result || { error: "Couldn't read the page" };
+    for (let hop = 0; hop < 3; hop++) {
+      await waitForSite(tab.id, 45000);
+      await sleep(2000);
+      const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || ""] });
+      const r = res?.result;
+      if (r?.go) { await chrome.tabs.update(tab.id, { url: r.go }); await sleep(1500); continue; }   // list page → this hotel's page
+      return r || { error: "Couldn't read the page" };
+    }
+    return { error: "The site kept redirecting" };
   } finally {
     chrome.tabs.remove(tab.id).catch(() => {});
   }

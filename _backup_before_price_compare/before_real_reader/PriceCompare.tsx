@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
@@ -229,7 +229,7 @@ export default function PriceCompare() {
       ...(h.online?.prices || []).map(p => {
         const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
         return cf
-          ? { source: p.source, room: h.confirmedRoom?.[p.source] || p.room || undefined, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          ? { source: p.source, room: p.room || undefined, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
               return fx?.kind === "adjust"
@@ -299,13 +299,12 @@ export default function PriceCompare() {
     await fetchOne(c, h, true); loadStatus();
   };
   // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
-  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false, room = "") => {
+  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false) => {
     if (!(v > 0)) return;
     setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== c.id ? x : { ...x, hotels: x.hotels.map(y => {
       if (y.id !== h.id) return y;
       const ca = { ...(y.confirmedAuto || {}) }; if (auto) ca[source] = Date.now(); else delete ca[source];
-      const cr = { ...(y.confirmedRoom || {}) }; if (room) cr[source] = room; else delete cr[source];
-      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca, confirmedRoom: cr };
+      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca };
     }) }) }));
     // learn how far Google was off for this site (and this city), to correct other hotels' prices
     const g = (h.online?.prices || []).find(p => p.source === source);
@@ -341,7 +340,7 @@ export default function PriceCompare() {
   const sameRooms = rooms.every(r => r.adults === rooms[0].adults && r.ages.join() === rooms[0].ages.join());
   const autoJobs = (list: { c: City; h: Hotel }[]) => list.flatMap(({ c, h }) =>
     (h.online?.prices || []).filter(p => AUTO_SITES.includes(p.source) && p.link)
-      .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name })));
+      .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, mult: sameRooms ? nRooms : 1 })));
   const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
     if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
     if (!sameRooms) { if (!silent) setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
@@ -357,7 +356,7 @@ export default function PriceCompare() {
     if (m.type === "PC_CHECK_STARTED") setChecks(o => ({ ...o, [k]: "checking" }));
     if (m.type === "PC_CHECK_RESULT") {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
-      if (m.result?.total > 0 && city && hotel) { applyConfirm(city, hotel, j.source, m.result.total * (j.mult || 1), true, m.result.room || ""); setChecks(o => ({ ...o, [k]: "ok" })); }
+      if (m.result?.total > 0 && city && hotel) { applyConfirm(city, hotel, j.source, m.result.total * (j.mult || 1), true); setChecks(o => ({ ...o, [k]: "ok" })); }
       else setChecks(o => ({ ...o, [k]: m.result?.error || "Couldn't read the price" }));
     }
     if (m.type === "PC_CHECK_DONE") setMsg(o => (o?.text.startsWith("⚡") ? { kind: "ok", text: "⚡ Exact prices updated from the websites." } : o));
@@ -597,7 +596,7 @@ export default function PriceCompare() {
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                      {d.confirmed && h.confirmedRoom?.[d.source] ? <>{h.confirmedRoom[d.source]} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
+                      {d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
                   {!d.mine && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok"].includes(checks[`${h.id}|${d.source}`]) && (
