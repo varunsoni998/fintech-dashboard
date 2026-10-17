@@ -4,7 +4,9 @@
 // read the final total for the stay, close the tab and send the price back. The window closes by itself.
 
 const ALLOWED = /(^|\.)(booking\.com|expedia\.co\.in|expedia\.com|hotels\.com|makemytrip\.com|agoda\.com)$/i;
-const WINDOWS = 2;                 // checker windows side by side (each reads one site at a time)
+const WINDOWS = 1;                 // one checker window, one site at a time (looks less like a robot to the sites)
+// Hotels.com shows a "Bot or Not?" robot test to automatic visits → not checked automatically (same rooms as Expedia).
+const SKIP = { "Hotels.com": "Hotels.com blocks automatic checks (robot test) — use View deal; it is usually the same as Expedia" };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Runs inside the hotel's page on the booking site. Must be self-contained.
@@ -30,7 +32,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
 
   for (let t = 0; t < 30; t++) {
     const txt = clean(document.body?.innerText || "");
-    if (/captcha|are you a robot|verify you are human|access denied|press (and|&) hold/i.test(txt) && txt.length < 4000)
+    if (/captcha|are you a robot|bot or not|robot or human|are you human|verify you are human|unusual traffic|access denied|press (and|&) hold/i.test(txt) && txt.length < 6000)
       return { error: "The site asked for a security check — open it once in Chrome, then re-check", debug: txt.slice(0, 300) };
 
     if (site === "Expedia" || site === "Hotels.com") {
@@ -104,19 +106,25 @@ async function readSitePrice(site, nights, adults, hotelName) {
 }
 
 async function waitForSite(tabId, ms) {
+  // Ready when the tab is on the booking site AND (finished loading OR has been there 6 s).
+  // Some sites (Expedia) never report "finished" because adverts keep loading.
   const end = Date.now() + ms;
+  let onSiteSince = 0, host = "";
   while (Date.now() < end) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
     if (!t) throw new Error("Tab closed");
-    let host = "";
-    try { host = new URL(t.url || t.pendingUrl || "").hostname; } catch { /* still redirecting */ }
-    if (t.status === "complete" && ALLOWED.test(host)) return;
+    try { host = new URL(t.url || t.pendingUrl || "").hostname; } catch { host = ""; }
+    if (ALLOWED.test(host)) {
+      if (!onSiteSince) onSiteSince = Date.now();
+      if (t.status === "complete" || Date.now() - onSiteSince > 6000) return;
+    } else onSiteSince = 0;
     await sleep(500);
   }
-  throw new Error("The site took too long to open");
+  throw new Error(host ? `The site took too long to open (${host})` : "The link didn't open a booking site");
 }
 
 async function checkOne(job, windowId) {
+  if (SKIP[job.source]) return { error: SKIP[job.source] };
   const tab = await chrome.tabs.create({ url: job.url, active: true, windowId });
   try {
     for (let hop = 0; hop < 3; hop++) {
