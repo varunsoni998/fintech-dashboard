@@ -6,7 +6,12 @@
 const ALLOWED = /(^|\.)(booking\.com|expedia\.co\.in|expedia\.com|hotels\.com|makemytrip\.com|agoda\.com)$/i;
 const WINDOWS = 1;                 // one checker window, one site at a time (looks less like a robot to the sites)
 // Hotels.com shows a "Bot or Not?" robot test to automatic visits → not checked automatically (same rooms as Expedia).
-const SKIP = { "Hotels.com": "Hotels.com blocks automatic checks (robot test) — use View deal; it is usually the same as Expedia" };
+// Expedia does the same ("Bot or Not?"), so neither is opened automatically – repeated tries could get your
+// office internet flagged. Check them by hand: View deal → booking step → ₹ icon.
+const SKIP = {
+  "Hotels.com": "Hotels.com blocks automatic checks (robot test)",
+  "Expedia": "Expedia blocks automatic checks (robot test)",
+};
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Runs inside the hotel's page on the booking site. Must be self-contained.
@@ -155,9 +160,14 @@ async function run(jobs, replyTabId) {
   const k = (j) => `${j.hid}|${j.source}|${j.url}`;
   const queued = new Set(pending.map(x => k(x.j)));
   pending.push(...jobs.filter(j => !queued.has(k(j)) && queued.add(k(j))).map(j => ({ j, replyTabId })));
+  const send = (tabId, msg) => chrome.tabs.sendMessage(tabId, msg).catch(() => {});
+  for (let i = pending.length - 1; i >= 0; i--) {
+    const { j, replyTabId: rt } = pending[i];
+    if (SKIP[j.source]) { pending.splice(i, 1); send(rt, { type: "PC_CHECK_RESULT", job: j, result: { error: SKIP[j.source] } }); }
+  }
+  if (!pending.length) { if (!running) send(replyTabId, { type: "PC_CHECK_DONE" }); return; }
   if (running) return;
   running = true;
-  const send = (tabId, msg) => chrome.tabs.sendMessage(tabId, msg).catch(() => {});
   const replyTabs = new Set();
   // small checker windows, side by side at the top-left of the screen
   const wins = [];

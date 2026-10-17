@@ -3,12 +3,13 @@ CustomHolidays – Grab Price (Chrome extension)
 
 WHAT IT DOES
 1) AUTOMATIC (main use): just click Search (or "See all prices") in Price Compare. With "⚡ Auto exact prices: ON"
-   the extension opens each Booking.com / Expedia / MakeMyTrip deal link in a SMALL WINDOW at the
+   the extension opens each Booking.com / MakeMyTrip deal link in a SMALL WINDOW at the
    top-left of your screen (sites only show prices when the page is on screen), reads the final total for the
    stay, and fills it in as "✓ Confirmed on site (auto)". The window closes by itself. ~5–10 seconds per site.
    Don't close that small window while it works. Keep Chrome open.
    (Agoda's total only appears at checkout, so Agoda keeps Google's price – it has matched exactly in tests.
-    Hotels.com shows a robot test to automatic visits, so it keeps Google's price too – usually same as Expedia.)
+    Expedia and Hotels.com show a robot test ("Bot or Not?") to automatic visits, so they are NOT opened
+    automatically. For those: View deal → go to the booking step → click the ₹ icon → Send → Apply.)
    If a site can't be read, that row says "Couldn't … — use View deal". Click the ₹ icon → "Recent auto-checks"
    shows what the page said – send a screenshot of that so the reader can be fixed.
 
