@@ -8,10 +8,12 @@ const WINDOWS = 1;                 // one checker window, one site at a time (lo
 // Hotels.com shows a "Bot or Not?" robot test to automatic visits → not checked automatically (same rooms as Expedia).
 // Expedia does the same ("Bot or Not?"), so neither is opened automatically – repeated tries could get your
 // office internet flagged. Check them by hand: View deal → booking step → ₹ icon.
-const SKIP = {
-  "Hotels.com": "Hotels.com blocks automatic checks (robot test)",
-  "Expedia": "Expedia blocks automatic checks (robot test)",
-};
+// When a robot test appears, the checker window comes to the front and waits for YOU to complete it
+// (the extension never answers it itself), then reads the price.
+const SKIP = {};
+const ROBOT_WAIT = 3 * 60 * 1000;
+const isRobotPage = () => /captcha|are you a robot|bot or not|robot or human|are you human|verify you are human|unusual traffic|press (and|&) hold/i
+  .test(document.title + " " + (document.body?.innerText || "").slice(0, 6000)) && (document.body?.innerText || "").length < 6000;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Runs inside the hotel's page on the booking site. Must be self-contained.
@@ -37,8 +39,8 @@ async function readSitePrice(site, nights, adults, hotelName) {
 
   for (let t = 0; t < 30; t++) {
     const txt = clean(document.body?.innerText || "");
-    if (/captcha|are you a robot|bot or not|robot or human|are you human|verify you are human|unusual traffic|access denied|press (and|&) hold/i.test(txt) && txt.length < 6000)
-      return { error: "The site asked for a security check — open it once in Chrome, then re-check", debug: txt.slice(0, 300) };
+    if (/captcha|are you a robot|bot or not|robot or human|are you human|verify you are human|unusual traffic|access denied|press (and|&) hold/i.test(document.title + " " + txt) && txt.length < 6000)
+      return { robot: true, debug: txt.slice(0, 300) };
 
     if (site === "Expedia" || site === "Hotels.com") {
       if (/Hotel-Search/i.test(location.pathname)) {
@@ -128,16 +130,50 @@ async function waitForSite(tabId, ms) {
   throw new Error(host ? `The site took too long to open (${host})` : "The link didn't open a booking site");
 }
 
+// Robot test on screen: bring the window to the front, notify, and wait until the person has completed it.
+async function waitForPerson(tabId, windowId, job) {
+  await chrome.windows.update(windowId, { focused: true, width: 1000, height: 820, state: "normal" }).catch(() => {});
+  await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+  chrome.notifications?.create("pc-robot-" + Date.now(), {
+    type: "basic", iconUrl: "icon128.png", priority: 2, requireInteraction: false,
+    title: `${job.source} needs you`,
+    message: `Please complete the "${job.source}" robot check in the price-checker window. The price will be read automatically after that.`,
+  });
+  const end = Date.now() + ROBOT_WAIT;
+  while (Date.now() < end) {
+    await sleep(2000);
+    const t = await chrome.tabs.get(tabId).catch(() => null);
+    if (!t) return false;                                         // window/tab closed by the person
+    if (t.status !== "complete") continue;
+    try {
+      const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: isRobotPage });
+      if (res && res.result === false) { await sleep(2500); return true; }
+    } catch { /* page is changing after the test */ }
+  }
+  return false;
+}
+
 async function checkOne(job, windowId) {
   if (SKIP[job.source]) return { error: SKIP[job.source] };
   const tab = await chrome.tabs.create({ url: job.url, active: true, windowId });
   try {
-    for (let hop = 0; hop < 3; hop++) {
+    let robotDone = false;
+    for (let hop = 0; hop < 5; hop++) {
       await waitForSite(tab.id, 45000);
       await sleep(2000);
-      const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || ""] });
-      const r = res?.result;
+      let r;
+      try {
+        const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || ""] });
+        r = res?.result;
+      } catch (e) { await sleep(2000); continue; }             // the page changed while reading → try again
       if (r?.go) { await chrome.tabs.update(tab.id, { url: r.go }); await sleep(1500); continue; }   // list page → this hotel's page
+      if (r?.robot) {
+        if (robotDone) return { error: "The robot test came back — use View deal", debug: r.debug };
+        const ok = await waitForPerson(tab.id, windowId, job);
+        if (!ok) return { error: "Robot test not completed — use View deal", debug: r.debug };
+        robotDone = true;
+        continue;                                                // test gone → read the price
+      }
       return r || { error: "Couldn't read the page" };
     }
     return { error: "The site kept redirecting" };

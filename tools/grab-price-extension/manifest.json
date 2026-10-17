@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CustomHolidays – Grab Price",
-  "version": "1.5.0",
-  "description": "Checks exact hotel prices on Booking.com and MakeMyTrip automatically, and grabs any booking page's price in one click, for BusinessOS Price Compare.",
+  "version": "1.6.0",
+  "description": "Checks exact hotel prices on Booking.com, Expedia, Hotels.com and MakeMyTrip for BusinessOS Price Compare (you complete any robot check yourself).",
   "action": {
     "default_popup": "popup.html",
     "default_title": "Grab this price for Price Compare",
@@ -23,7 +23,8 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "notifications"
   ],
   "host_permissions": [
     "https://businessos-roan-iota.vercel.app/*",
