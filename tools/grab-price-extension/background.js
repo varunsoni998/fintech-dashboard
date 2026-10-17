@@ -31,8 +31,13 @@ async function readSitePrice(site, nights, adults, hotelName) {
   const AMT = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)";
   const rx = (s) => new RegExp(s, "gi");
   const clean = (s) => (s || "").replace(/[   ]/g, " ");
-  const words = (s) => clean(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !["hotel", "the", "and", "resort", "by", "mumbai", "dubai"].includes(w));
-  const overlap = (a, b) => { const A = words(a), B = new Set(words(b)); return A.length ? A.filter(w => B.has(w)).length / A.length : 0; };
+  const STOP = ["hotel", "hotels", "the", "and", "resort", "by", "a", "an", "of", "at", "in"];
+  const words = (s) => clean(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !STOP.includes(w));
+  const overlap = (a, b) => {
+    const A = words(a), B = new Set(words(b));
+    if (!A.length) return clean(b).toLowerCase().includes(clean(a).toLowerCase().trim()) ? 1 : 0;
+    return A.filter(w => B.has(w)).length / A.length;
+  };
   adults = adults || 2;
   const cheapest = (list) => list.filter(x => x.total > 100).sort((a, b) => a.total - b.total)[0];
   let snippet = "";
@@ -44,9 +49,16 @@ async function readSitePrice(site, nights, adults, hotelName) {
 
     if (site === "Expedia" || site === "Hotels.com") {
       if (/Hotel-Search/i.test(location.pathname)) {
-        // list of hotels → open THIS hotel's own page
+        // list of hotels → open THIS hotel's own page.
+        // The hotel Google linked to is pinned at the top under "Continue with your booking".
+        const links = [...document.querySelectorAll('a[href*="Hotel-Information"]')];
+        const pin = [...document.querySelectorAll("h2,h3,div,span")].find(e => /^continue with your booking/i.test((e.innerText || "").trim()) && (e.innerText || "").length < 60);
+        if (pin) {
+          const after = links.find(a => pin.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+          if (after) return { go: after.href };
+        }
         let best = null, bs = 0;
-        for (const a of document.querySelectorAll('a[href*="Hotel-Information"]')) {
+        for (const a of links) {
           const card = a.closest("[data-stid*='lodging-card'], li, article, [data-stid='property-listing']") || a;
           const label = (a.getAttribute("aria-label") || "") + " " + (card.innerText || "").slice(0, 160);
           const s2 = overlap(hotelName, label);
@@ -104,9 +116,18 @@ async function readSitePrice(site, nights, adults, hotelName) {
 
     const k = txt.search(/₹|Rs\.?\s?\d/);
     snippet = k >= 0 ? txt.slice(Math.max(0, k - 120), k + 380) : txt.slice(0, 400);
-    // bring the rooms into view (not to the bottom of the page)
-    const el = [...document.querySelectorAll("#hprt-table, #availability_target, [data-stid='section-room-list'], h2, h3")].find(e => e.id === "hprt-table" || e.id === "availability_target" || /choose your room|select a room|availability/i.test(e.textContent || ""));
-    if (el) el.scrollIntoView({ block: "start" }); else if (t < 6) window.scrollBy(0, 700);
+    // bring the rooms into view: the room list often loads only when you scroll to it or click the "Rooms" tab
+    const el = [...document.querySelectorAll("#hprt-table, #availability_target, #Offers, [data-stid='section-room-list'], h2, h3")]
+      .find(e => ["hprt-table", "availability_target", "Offers"].includes(e.id) || /choose your room|select a room|availability/i.test((e.textContent || "").slice(0, 60)));
+    if (el) el.scrollIntoView({ block: "start" });
+    else {
+      if (t === 1 || t === 8) {                                    // the page's own "Rooms" tab (just moves down the page)
+        const tab = [...document.querySelectorAll("a,button,[role='tab']")].find(e => /^rooms$/i.test((e.innerText || "").trim()));
+        if (tab) tab.click();
+      }
+      const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 50;
+      if (atBottom) window.scrollTo(0, 0); else window.scrollBy(0, 900);
+    }
     await sleep(1000);
   }
   return { error: "Couldn't find the price on the page", debug: snippet.replace(/\s+/g, " ").slice(0, 500) };
@@ -188,7 +209,7 @@ async function logResult(job, result) {
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }
 
-let running = false;
+let running = false, runStartedAt = 0;
 const pending = [];
 
 async function run(jobs, replyTabId) {
@@ -202,14 +223,14 @@ async function run(jobs, replyTabId) {
     if (SKIP[j.source]) { pending.splice(i, 1); send(rt, { type: "PC_CHECK_RESULT", job: j, result: { error: SKIP[j.source] } }); }
   }
   if (!pending.length) { if (!running) send(replyTabId, { type: "PC_CHECK_DONE" }); return; }
-  if (running) return;
-  running = true;
+  if (running && Date.now() - runStartedAt < 10 * 60 * 1000) return;   // a check is already going (reset if stuck >10 min)
+  running = true; runStartedAt = Date.now();
   const replyTabs = new Set();
   // small checker windows, side by side at the top-left of the screen
   const wins = [];
   const withTimeout = (p, ms) => Promise.race([p, sleep(ms).then(() => null)]);
   for (let i = 0; i < Math.min(WINDOWS, pending.length); i++) {
-    const w = await withTimeout(chrome.windows.create({ url: "about:blank", focused: i === 0, type: "normal", width: 520, height: 720, left: 20 + i * 530, top: 20 }).catch(() => null), 5000);
+    const w = await withTimeout(chrome.windows.create({ url: "about:blank", focused: i === 0, type: "normal", width: 1100, height: 800, left: 20 + i * 40, top: 20 }).catch(() => null), 5000);
     if (w) wins.push(w); else break;
   }
   if (!wins.length) {                     // couldn't open a window → use a tab in the current window
@@ -221,7 +242,8 @@ async function run(jobs, replyTabId) {
       const { j, replyTabId: rt } = item; replyTabs.add(rt);
       send(rt, { type: "PC_CHECK_STARTED", job: j });
       let result;
-      try { result = await checkOne(j, w.id); } catch (e) { result = { error: String(e.message || e) }; }
+      try { result = (await withTimeout(checkOne(j, w.id), 5 * 60 * 1000)) || { error: "The check took too long — use View deal" }; }
+      catch (e) { result = { error: String(e.message || e) }; }
       logResult(j, result);
       send(rt, { type: "PC_CHECK_RESULT", job: j, result });
     }

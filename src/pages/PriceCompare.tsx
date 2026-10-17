@@ -169,6 +169,7 @@ export default function PriceCompare() {
   const [checks, setChecks] = useState<Record<string, string>>({});   // "hid|site" → "checking" | "ok" | error text
   const onCheckMsg = useRef<(m: any) => void>(() => {});
   const afterFetch = useRef<(c: City, h: Hotel) => void>(() => {});
+  const lastAck = useRef(0);              // last time the extension confirmed it received a check
   // automatic exact prices: ON by default (switch at the top)
   const [autoOn, setAutoOn] = useState<boolean>(() => { try { return localStorage.getItem("pc:auto") !== "off"; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem("pc:auto", autoOn ? "on" : "off"); } catch { /* */ } }, [autoOn]);
@@ -179,6 +180,7 @@ export default function PriceCompare() {
       if (e.source !== window || !e.data || e.data.source !== "pc-grab-ext") return;
       if (e.data.type === "PC_EXT_READY") { setExtReady(true); if (e.data.auto) setExtAuto(true); }
       if (/^PC_CHECK_/.test(e.data.type)) onCheckMsg.current(e.data);
+      if (e.data.type === "PC_EXT_STALE") onCheckMsg.current({ type: "PC_EXT_STALE" });
       if (e.data.type === "PC_GRAB_PRICE" && e.data.grab?.total > 0) { setExtReady(true); setGrab(e.data.grab); }
     };
     window.addEventListener("message", onMsg);
@@ -349,11 +351,23 @@ export default function PriceCompare() {
     if (!jobs.length) { if (!silent) setMsg({ kind: "err", text: "Nothing to check — open the hotel's prices first (Search / See all prices)." }); return; }
     setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [`${j.hid}|${j.source}`, "queued"])) }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
+    const keys = jobs.map(j => `${j.hid}|${j.source}`), postedAt = Date.now();
+    setTimeout(() => setChecks(o => {
+      if (lastAck.current >= postedAt || !keys.some(kk => o[kk] === "queued")) return o;   // the extension answered → fine
+      const n = { ...o }; keys.forEach(kk => { if (n[kk] === "queued") n[kk] = NOT_STARTED; }); return n;
+    }), 25000);
     if (!silent) setMsg({ kind: "ok", text: `⚡ Checking ${plural(jobs.length, "price", "prices")} on the websites in background tabs — keep Chrome open…` });
   };
   afterFetch.current = (c, h) => { if (autoOn && extAuto && sameRooms) autoCheck([{ c, h }], true); };
+  const NOT_STARTED = "Not started — the extension was updated or stopped: press F5 on this page, then Re-check";
   onCheckMsg.current = (m: any) => {
     const j = m.job; const k = j ? `${j.hid}|${j.source}` : "";
+    if (m.type === "PC_CHECK_QUEUED" || m.type === "PC_CHECK_STARTED" || m.type === "PC_CHECK_RESULT") lastAck.current = Date.now();
+    if (m.type === "PC_EXT_STALE") {
+      setChecks(o => Object.fromEntries(Object.entries(o).map(([kk, v]) => [kk, v === "queued" ? NOT_STARTED : v])));
+      setMsg({ kind: "err", text: "The Grab-price extension was updated or restarted — press F5 to reconnect, then Re-check exact prices." });
+      return;
+    }
     if (m.type === "PC_CHECK_STARTED") setChecks(o => ({ ...o, [k]: "checking" }));
     if (m.type === "PC_CHECK_RESULT") {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);

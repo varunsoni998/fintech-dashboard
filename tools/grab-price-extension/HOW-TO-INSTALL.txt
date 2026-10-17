@@ -3,7 +3,7 @@ CustomHolidays – Grab Price (Chrome extension)
 
 WHAT IT DOES
 1) AUTOMATIC (main use): just click Search (or "See all prices") in Price Compare. With "⚡ Auto exact prices: ON"
-   the extension opens each Booking.com / Expedia / Hotels.com / MakeMyTrip deal link in a SMALL WINDOW at the
+   the extension opens each Booking.com / Expedia / Hotels.com / MakeMyTrip deal link in a checker WINDOW at the
    top-left of your screen (sites only show prices when the page is on screen), reads the final total for the
    stay, and fills it in as "✓ Confirmed on site (auto)". The window closes by itself. ~5–10 seconds per site.
    Don't close that small window while it works. Keep Chrome open.
