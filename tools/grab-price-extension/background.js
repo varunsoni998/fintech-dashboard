@@ -176,23 +176,36 @@ async function readSitePrice(site, nights, adults, hotelName) {
       const per = [...txt.matchAll(rx(R + AMT + "\\s*\\+\\s*" + R + AMT + "\\s*taxes\\s*(?:&|and)\\s*fees"))].map(m => (num(m[1]) + num(m[2])) * (nights || 1));
       if (per.length) return { total: cents(Math.min(...per)), url: location.href };
     } else if (site === "Agoda") {
-      // Agoda's full price (with its "extra charges") is only shown on the booking form:
-      // "Price  Rs. 15,903.21"  (not "Price Before Taxes", not "Room price")
+      // Agoda's full price (with taxes and its "extra charges") is only shown on the booking form:
+      // "Price  Rs. 25,716.37"  (not "Price Before Taxes", not "Room price"). Room name is in the address (roomName=…).
       if (/\/book\//i.test(location.pathname) || /booking form/i.test(document.title)) {
         const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(?:Total price|Price)\\s*\\n?\\s*" + R + AMT))].pop();
         if (m) {
-          const rm = [...document.querySelectorAll("[data-selenium*='room-name' i], [data-element-name*='room-name' i], [class*='RoomName']")].map(e => clean(e.innerText).trim()).find(Boolean) || "";
-          return { total: cents(num(m[1])), room: rm.split("\n")[0] || ss.get("pcRoom"), url: location.href, allRooms: true };
+          let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
+          return { total: cents(num(m[1])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancellation/i.test(txt) && !/non-refundable/i.test(txt) };
         }
-      } else if (!clicked && t >= 2 && Date.now() - (+ss.get("pcPressed") || 0) > 20000) {
-        // hotel page → press "Book now" on the cheapest room (this only opens Agoda's booking form – nothing is booked)
-        const grid = document.querySelector("#roomGridContent, [data-selenium='RoomGrid'], [data-element-name='room-grid']") || document.body;
-        if (await pressCheapest(grid, /^(book now|reserve|book)$/i, "")) { clicked = true; return { wait: true }; }
-        if (t === 2 || t === 10) {                                  // Agoda's "View this deal" scrolls to the room list
-          const v = [...document.querySelectorAll("button, a, [role='button']")].find(e => /^(view this deal|see rooms|select room)$/i.test(clean(e.innerText).trim()));
-          if (v) v.click();
+      } else if (!clicked && Date.now() - (+ss.get("pcPressed") || 0) > 20000) {
+        // hotel page: each offer is [data-testid=room-offer] with "₹ 7,057 Per night before taxes & fees", "2 adults"
+        // and a "Book" button whose label names the room ("Book Deluxe Palm View Double Room Offer 1").
+        const offers = [...document.querySelectorAll("[data-testid='room-offer'], [data-element-name='mob-room-offer'], [data-selenium='ChildRoomsList-room']")].map(o => {
+          const ot = clean(o.innerText);
+          const pm = ot.match(new RegExp(R + AMT + "\\s*(?:Per night|per room per night|/ night)", "i"));
+          const b = o.querySelector("button[data-element-name*='book' i], [data-testid='book-button'] button, button[aria-label^='Book' i]")
+            || [...o.querySelectorAll("button, a")].find(x => /^(book|book now|reserve)$/i.test(clean(x.innerText).trim()));
+          const ad = ot.match(/(\d+)\s*adults?/i);
+          return { o, b, amt: pm ? num(pm[1]) : 0, adults: ad ? +ad[1] : null, room: ((b && b.getAttribute("aria-label")) || "").replace(/^Book\s+/i, "").replace(/\s+Offer\s+\d+$/i, "") };
+        }).filter(x => x.b && x.amt && (x.adults === null || x.adults >= adults));
+        if (offers.length) {
+          const pick = offers.sort((x, y) => x.amt - y.amt)[0];
+          ss.set("pcRoom", pick.room); ss.set("pcPressed", String(Date.now())); clicked = true;
+          pick.b.scrollIntoView({ block: "center" }); await sleep(700); pick.b.click();
+          return { wait: true };
         }
-        if (grid !== document.body) { grid.scrollIntoView({ block: "start" }); await sleep(1000); continue; }
+        // room list not on screen yet → move down step by step until it appears (never jump to the bottom)
+        const grid = document.querySelector("#roomGridContent, [data-element-name='room-grid'], #roomSection");
+        if (grid && t % 3 === 0) grid.scrollIntoView({ block: "start" });
+        else if (!grid) { const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 50; if (atBottom) window.scrollTo(0, 0); else window.scrollBy(0, 600); }
+        await sleep(1000); continue;
       }
     } else {
       // any other website (the hotel's own site / its booking engine): read the stay total it shows
@@ -200,13 +213,22 @@ async function readSitePrice(site, nights, adults, hotelName) {
       const tot = [...txt.matchAll(rx(LABEL + "([^0-9\\n]{0,40}?)" + R + AMT))]
         .filter(m => !/sav|discount|off|deposit|tax(es)? only/i.test(m[0])).map(m => num(m[2])).filter(v => v > 100);
       const tot2 = [...txt.matchAll(rx(R + AMT + "[ \\t]*(?:total|in total|for " + (nights || 1) + " nights?)\\b"))].map(m => num(m[1])).filter(v => v > 100);
-      const all = [...tot, ...tot2];
+      // some booking engines write the currency after the number: "Total 11,655.00 INR"
+      const RA = "\\s?(?:INR|₹|Rs\\.?|USD|US\\$|EUR|€|AED|GBP|£|SGD|AUD|THB)";
+      const tot3 = [...txt.matchAll(rx(LABEL + "([^0-9\\n]{0,40}?)" + AMT + RA))]
+        .filter(m => !/sav|discount|off|deposit/i.test(m[0])).map(m => num(m[2])).filter(v => v > 100);
+      const all = [...tot, ...tot2, ...tot3];
       if (all.length && t >= 3) return { total: cents(Math.min(...all)), room: "", url: location.href };
       if (t >= 12) {
         const per = [...txt.matchAll(rx(R + AMT + "[ \\t]*(?:/|per|a|avg\\.?(?: per)?)\\s*night"))].map(m => num(m[1])).filter(v => v > 100);
         if (per.length) return { total: cents(Math.min(...per) * (nights || 1)), room: "", url: location.href };
       }
-      if (t >= 15) return { error: "The hotel's website didn't show a price for these dates", debug: txt.slice(0, 300) };
+      // homepage instead of the booking page → press its "Check availability" button once (opens the booking engine, books nothing)
+      if (t === 5 && !ss.get("pcPressed")) {
+        const go = [...document.querySelectorAll("button, a, input[type=submit]")].find(e => e.offsetParent !== null && /^(check availability|check rates|view rates|see rates|search|find rooms|show rooms|book now)$/i.test(clean(e.innerText || e.value).trim()));
+        if (go) { ss.set("pcPressed", String(Date.now())); go.click(); return { wait: true }; }
+      }
+      if (t >= 20) return { error: "The hotel's website didn't show a price for these dates", debug: (location.hostname + " · " + txt.slice(0, 300)) };
       await sleep(1000); continue;                               // no scrolling on hotel websites
     }
 
