@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
@@ -232,7 +232,7 @@ export default function PriceCompare() {
       ...(h.online?.prices || []).map(p => {
         const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
         return cf
-          ? { source: p.source, room: h.confirmedRoom?.[p.source] || p.room || undefined, rupees: cf, amt: cf, ccy: "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          ? { source: p.source, room: h.confirmedRoom?.[p.source] || p.room || undefined, rupees: cf, amt: h.confirmedSite?.[p.source]?.amt || cf, ccy: h.confirmedSite?.[p.source]?.ccy || "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
               return fx?.kind === "adjust"
@@ -302,13 +302,14 @@ export default function PriceCompare() {
     await fetchOne(c, h, true); loadStatus();
   };
   // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
-  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false, room = "") => {
+  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false, room = "", site?: { amt: number; ccy: string }) => {
     if (!(v > 0)) return;
     setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== c.id ? x : { ...x, hotels: x.hotels.map(y => {
       if (y.id !== h.id) return y;
       const ca = { ...(y.confirmedAuto || {}) }; if (auto) ca[source] = Date.now(); else delete ca[source];
       const cr = { ...(y.confirmedRoom || {}) }; if (room) cr[source] = room; else delete cr[source];
-      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca, confirmedRoom: cr };
+      const cs = { ...(y.confirmedSite || {}) }; if (site) cs[source] = site; else delete cs[source];   // the amount the site itself showed (e.g. USD 291.26)
+      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca, confirmedRoom: cr, confirmedSite: cs };
     }) }) }));
     // learn how far Google was off for this site (and this city), to correct other hotels' prices
     const g = (h.online?.prices || []).find(p => p.source === source);
@@ -375,8 +376,8 @@ export default function PriceCompare() {
       if (m.result?.total > 0 && city && hotel) {
         const cur = (m.result.currency || "INR").toUpperCase(), amount = m.result.total * (j.mult || 1);
         const save = (rate: number) => {
-          const note = cur !== "INR" ? `${m.result.room ? m.result.room + " · " : ""}site showed ${cur} ${Math.round(amount).toLocaleString("en-IN")}, converted at ₹${rate.toFixed(2)}` : (m.result.room || "");
-          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, note);
+          const note = cur !== "INR" ? `${m.result.room ? m.result.room + " · " : ""}site showed ${cur} ${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}, converted at ₹${rate.toFixed(2)}` : (m.result.room || "");
+          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, note, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined);
           setChecks(o => ({ ...o, [k]: "ok" }));
         };
         if (cur === "INR") save(1);
@@ -413,7 +414,8 @@ export default function PriceCompare() {
 
   // ── Sorting like Skyscanner (Best / Cheapest / Top rated) ──────────────────
   // discovered hotels sort by their list price, so a card doesn't jump when you open its prices
-  const sortPrice = (h: Hotel) => (!isMine(h) && h.fromPrice ? h.fromPrice : bestOf(h));
+  // …but once a site's exact price is confirmed, sort by the real prices
+  const sortPrice = (h: Hotel) => (!isMine(h) && h.fromPrice && !Object.keys(h.confirmed || {}).length ? h.fromPrice : bestOf(h));
   const sortList = (hs: Hotel[], by: SortKey) => {
     const bestOf = sortPrice;
     const prices = hs.map(bestOf).filter((x): x is number => !!x);
