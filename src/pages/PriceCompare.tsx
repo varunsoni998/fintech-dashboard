@@ -343,10 +343,10 @@ export default function PriceCompare() {
     setGrab(null);
   };
   // ── ⚡ automatic exact prices: the extension opens each deal link in a background tab and reads the total ──
-  const AUTO_SITES = ["Booking.com", "Expedia", "Hotels.com", "MakeMyTrip"];
+  // every site with a deal link is checked (Agoda, the hotel's own website, …)
   const sameRooms = rooms.every(r => r.adults === rooms[0].adults && r.ages.join() === rooms[0].ages.join());
   const autoJobs = (list: { c: City; h: Hotel }[]) => list.flatMap(({ c, h }) =>
-    (h.online?.prices || []).filter(p => AUTO_SITES.includes(p.source) && p.link)
+    (h.online?.prices || []).filter(p => !!p.link)
       .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name })));
   const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
     if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
@@ -376,7 +376,7 @@ export default function PriceCompare() {
     if (m.type === "PC_CHECK_RESULT") {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
       if (m.result?.total > 0 && city && hotel) {
-        const cur = (m.result.currency || "INR").toUpperCase(), amount = m.result.total * (j.mult || 1);
+        const cur = (m.result.currency || "INR").toUpperCase(), amount = m.result.total * (m.result.allRooms ? 1 : (j.mult || 1));   // checkout pages already show all rooms
         const save = (rate: number) => {
           const note = m.result.room || "";   // just the room name
           applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, note, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined);

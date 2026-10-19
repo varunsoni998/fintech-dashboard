@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CustomHolidays – Grab Price",
-  "version": "2.1.0",
-  "description": "Checks exact hotel prices on Booking.com, Expedia, Hotels.com and MakeMyTrip for BusinessOS Price Compare (you complete any robot check yourself).",
+  "version": "2.2.0",
+  "description": "Checks exact hotel prices on any booking website (Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip, hotel websites) for BusinessOS Price Compare (you complete any robot check yourself).",
   "action": {
     "default_popup": "popup.html",
     "default_title": "Grab this price for Price Compare",
@@ -28,22 +28,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "https://businessos-roan-iota.vercel.app/*",
-    "https://*.booking.com/*",
-    "https://*.expedia.co.in/*",
-    "https://*.expedia.com/*",
-    "https://*.expedia.co.uk/*",
-    "https://*.expedia.ca/*",
-    "https://*.expedia.com.au/*",
-    "https://*.expedia.com.sg/*",
-    "https://*.expedia.ae/*",
-    "https://*.expedia.co.th/*",
-    "https://*.expedia.com.my/*",
-    "https://www.google.com/*",
-    "https://www.google.co.in/*",
-    "https://*.hotels.com/*",
-    "https://*.makemytrip.com/*",
-    "https://*.agoda.com/*"
+    "<all_urls>"
   ],
   "content_scripts": [
     {
