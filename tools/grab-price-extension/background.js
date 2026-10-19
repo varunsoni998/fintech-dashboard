@@ -9,13 +9,24 @@ const GOOGLE = /(^|\.)google\.[a-z.]+$/i;   // Google's own 'redirecting…' pag
 const onSite = (host) => !!host && !GOOGLE.test(host) && !/(^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/i.test(host);
 const KNOWN = ["Booking.com", "Expedia", "Hotels.com", "MakeMyTrip", "Agoda"];
 // Always look at prices in rupees (₹). Each rule was checked on the live site.
-function inrUrl(u) {
+function inrUrl(u, job) {
   try {
-    const x = new URL(u), h = x.hostname;
-    if (/(^|\.)agoda\.com$/i.test(h)) { if (x.searchParams.get("currency") === "INR") return u; x.searchParams.set("currency", "INR"); return x.href; }
-    if (/(^|\.)booking\.com$/i.test(h)) { if (x.searchParams.get("selected_currency") === "INR") return u; x.searchParams.set("selected_currency", "INR"); return x.href; }
-    if (INDIA_SITES.expedia && /^(www\.)?expedia\.(com|co\.uk|ca|com\.au|com\.sg|ae)$/i.test(h)) { x.hostname = "www.expedia.co.in"; return x.href; }
-    if (INDIA_SITES.hotels && /^(www\.)?hotels\.com$/i.test(h)) { x.hostname = "in.hotels.com"; return x.href; }
+    const x = new URL(u), h = x.hostname, q = x.searchParams, before = x.href;
+    const ci = job?.checkIn, co = job?.checkOut, ad = job?.adults, rm = job?.rooms;
+    if (/(^|\.)agoda\.com$/i.test(h)) {
+      q.set("currency", "INR");
+      if (ci && !/\/book\//i.test(x.pathname)) { q.set("checkIn", ci); if (job.nights) q.set("los", String(job.nights)); if (ad) q.set("adults", String(ad)); if (rm) q.set("rooms", String(rm)); }
+    } else if (/(^|\.)booking\.com$/i.test(h) && !/^secure\./i.test(h)) {
+      if (!ci && !q.get("checkin")) return u;                     // no dates known → don't reload (would lose them)
+      q.set("selected_currency", "INR");
+      if (ci) { q.set("checkin", ci); q.set("checkout", co); if (ad) q.set("group_adults", String(ad)); if (rm) q.set("no_rooms", String(rm)); if (!q.get("group_children")) q.set("group_children", "0"); }
+    } else if (INDIA_SITES.expedia && /^(www\.)?expedia\.(com|co\.uk|ca|com\.au|com\.sg|ae)$/i.test(h)) {
+      x.hostname = "www.expedia.co.in";
+    } else if (INDIA_SITES.hotels && /^(www\.)?hotels\.com$/i.test(h)) {
+      x.hostname = "in.hotels.com";
+    }
+    if (ci && /expedia\.co\.in$|hotels\.com$/i.test(x.hostname) && /Hotel-Information|\/ho\d+/i.test(x.pathname) && !q.get("chkin")) { q.set("chkin", ci); q.set("chkout", co); }
+    return x.href === before ? u : x.href;
   } catch {}
   return u;
 }
@@ -114,20 +125,22 @@ async function readSitePrice(site, nights, adults, hotelName) {
     } else if (site === "Expedia" || site === "Hotels.com") {
       // a "how would you like to pay?" box after pressing Reserve → take the first option
       if (ss.get("pcPressed")) {
-        const dlg = [...document.querySelectorAll("[role='dialog'], dialog, [class*='sheet'], [class*='Dialog']")].find(d => d.offsetParent !== null && /pay now|pay at property|pay later|reserve/i.test(d.innerText || ""));
-        const opt = dlg && [...dlg.querySelectorAll("button, a")].find(b => /^(pay now|pay at property|pay later|reserve|continue)$/i.test(clean(b.innerText).trim()));
-        if (opt && !clicked) { clicked = true; opt.click(); return { wait: true }; }
+        const shown = (e) => e.getClientRects().length > 0;
+        const dlg = [...document.querySelectorAll("[role='dialog'], dialog, [class*='sheet'], [class*='Dialog'], [data-stid*='dialog']")].find(d => shown(d) && /pay now|pay at property|pay when you stay|pay later/i.test(d.innerText || ""));
+        if (dlg && !clicked) {
+          const opts = [...dlg.querySelectorAll("button, a")].filter(b => /^(pay now|pay at property|pay later|reserve|continue)$/i.test(clean(b.innerText).trim())).map(b => {
+            let c = b, amt = 0;
+            for (let k = 0; k < 7 && c && c !== dlg; k++, c = c.parentElement) { const m = clean(c.innerText).match(new RegExp(R + AMT + "\\s*total", "i")); if (m) { amt = num(m[1]); break; } }
+            return { b, amt };
+          });
+          const pick = opts.filter(o => o.amt).sort((x, y) => x.amt - y.amt)[0] || opts[0];
+          if (pick) { clicked = true; ss.set("pcPay", clean(pick.b.innerText).trim()); pick.b.click(); return { wait: true }; }
+        }
       }
       const HOTEL_LINK = 'a[href*="Hotel-Information"], a[href*="/ho"]';
       const isHotelLink = (a) => /Hotel-Information|\/ho\d+/i.test(a.getAttribute("href") || "");
       if (/Hotel-Search|search\.do|\/search/i.test(location.pathname)) {
         // 1) the hotel Google linked to is pinned at the top under "Continue with your booking" → its total is right there
-        const pinAt = txt.search(/Continue with your booking/i);
-        if (pinAt >= 0) {
-          const card = txt.slice(pinAt, pinAt + 900);
-          const mm = [...card.matchAll(rx(R + AMT + "\\s*total\\b"))][0];
-          if (mm) return { total: cents(num(mm[1])), room: "", url: location.href, note: "price from the pinned card at the top" };
-        }
         // list of hotels → open THIS hotel's own page.
         // The hotel Google linked to is pinned at the top under "Continue with your booking".
         const links = [...document.querySelectorAll(HOTEL_LINK)].filter(isHotelLink);
@@ -166,7 +179,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
             if (await pressCheapest(roomsEl, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }
           }
           // couldn't reach the checkout → room-list total (resort fee may be extra)
-          if (c && (pressedAgo < 60000 || t >= 6)) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
+          if (c && ((pressedAgo < 60000 && t >= 12) || (pressedAgo >= 60000 && t >= 6))) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
         }
       }
     } else if (site === "Booking.com") {
@@ -368,7 +381,7 @@ async function checkOne(job, windowId) {
       await waitForSite(cur, 45000);
       if (!inrDone) {
         inrDone = true;
-        const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "", fixed = inrUrl(now);
+        const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "", fixed = inrUrl(now, job);
         if (fixed !== now) { await chrome.tabs.update(cur, { url: fixed }); await sleep(1500); continue; }
       }
       await sleep(2000);
