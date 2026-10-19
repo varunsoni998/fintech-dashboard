@@ -3,7 +3,8 @@
 // (Chrome pauses hidden tabs, and sites like Expedia only draw their prices when the page is on screen),
 // read the final total for the stay, close the tab and send the price back. The window closes by itself.
 
-const ALLOWED = /(^|\.)(booking\.com|expedia\.co\.in|expedia\.com|hotels\.com|makemytrip\.com|agoda\.com)$/i;
+const ALLOWED = /(^|\.)(booking\.com|expedia\.(?:com|co\.in|co\.uk|ca|com\.au|com\.sg|ae|co\.th|com\.my)|hotels\.com|makemytrip\.com|agoda\.com)$/i;
+const GOOGLE = /(^|\.)google\.[a-z.]+$/i;   // Google's own 'redirecting…' page in between
 const WINDOWS = 1;                 // one checker window, one site at a time (looks less like a robot to the sites)
 // Hotels.com shows a "Bot or Not?" robot test to automatic visits → not checked automatically (same rooms as Expedia).
 // Expedia does the same ("Bot or Not?"), so neither is opened automatically – repeated tries could get your
@@ -38,6 +39,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
   const core = async () => {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const num = (s) => parseFloat(String(s).replace(/,/g, ""));
+  const cents = (v) => Math.round(v * 100) / 100;
   const R = "(?:₹|Rs\\.?|INR|US\\$|USD|A\\$|AUD|S\\$|SGD|AED|€|EUR|£|GBP|฿|THB|\\$)\\s?";   // any currency; converted to ₹ in Price Compare
   const AMT = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)";
   const rx = (s) => new RegExp(s, "gi");
@@ -67,7 +69,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
         if (pinAt >= 0) {
           const card = txt.slice(pinAt, pinAt + 900);
           const mm = [...card.matchAll(rx(R + AMT + "\\s*total\\b"))][0];
-          if (mm) return { total: Math.round(num(mm[1])), room: "", url: location.href, note: "price from the pinned card at the top" };
+          if (mm) return { total: cents(num(mm[1])), room: "", url: location.href, note: "price from the pinned card at the top" };
         }
         // list of hotels → open THIS hotel's own page.
         // The hotel Google linked to is pinned at the top under "Continue with your booking".
@@ -100,7 +102,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
           }
           if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
           const c = cheapest(found);
-          if (c) return { total: Math.round(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
+          if (c) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
         }
       }
     } else if (site === "Booking.com") {
@@ -121,19 +123,19 @@ async function readSitePrice(site, nights, adults, hotelName) {
           found.push({ total, room, free: /Free cancellation/i.test(rt) });
         }
         const c = cheapest(found);
-        if (c) return { total: Math.round(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
+        if (c) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
       // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
       const top = [...txt.matchAll(rx(R + AMT + "[^₹$€£]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0]
         || [...txt.matchAll(rx(R + AMT + "[^₹$€£]{0,40}?includes taxes and (?:charges|fees)"))][0];
-      if (top && t >= 3) return { total: Math.round(num(top[1]) + (top[2] ? num(top[2]) : 0)), room: "", url: location.href, note: "price shown at the top of the page" };
+      if (top && t >= 3) return { total: cents(num(top[1]) + (top[2] ? num(top[2]) : 0)), room: "", url: location.href, note: "price shown at the top of the page" };
       // checkout page: "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
       const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
-      if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: Math.round(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href }; }
+      if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: cents(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href }; }
     } else if (site === "MakeMyTrip") {
       // "₹ 4,999  + ₹ 600 taxes & fees  Per Night"
       const per = [...txt.matchAll(rx(R + AMT + "\\s*\\+\\s*" + R + AMT + "\\s*taxes\\s*(?:&|and)\\s*fees"))].map(m => (num(m[1]) + num(m[2])) * (nights || 1));
-      if (per.length) return { total: Math.round(Math.min(...per)), url: location.href };
+      if (per.length) return { total: cents(Math.min(...per)), url: location.href };
     } else {
       return { error: "Not read automatically for this site" };
     }
@@ -164,8 +166,9 @@ async function readSitePrice(site, nights, adults, hotelName) {
 async function waitForSite(tabId, ms) {
   // Ready when the tab is on the booking site AND (finished loading OR has been there 6 s).
   // Some sites (Expedia) never report "finished" because adverts keep loading.
+  // If Google's redirect page stays on screen, follow its link to the booking site ourselves.
   const end = Date.now() + ms;
-  let onSiteSince = 0, host = "";
+  let onSiteSince = 0, onGoogleSince = 0, host = "", nudged = 0;
   while (Date.now() < end) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
     if (!t) throw new Error("Tab closed");
@@ -173,10 +176,30 @@ async function waitForSite(tabId, ms) {
     if (ALLOWED.test(host)) {
       if (!onSiteSince) onSiteSince = Date.now();
       if (t.status === "complete" || Date.now() - onSiteSince > 6000) return;
-    } else onSiteSince = 0;
+    } else {
+      onSiteSince = 0;
+      if (GOOGLE.test(host)) {
+        if (!onGoogleSince) onGoogleSince = Date.now();
+        if (Date.now() - onGoogleSince > 5000 && nudged < 2) {
+          nudged++; onGoogleSince = Date.now();
+          try {
+            const [res] = await chrome.scripting.executeScript({ target: { tabId }, args: [ALLOWED.source], func: (src) => {
+              const ok = new RegExp(src, "i");
+              for (const a of document.querySelectorAll("a[href]")) {
+                try { const u = new URL(a.href); if (ok.test(u.hostname)) return u.href;
+                  for (const v of u.searchParams.values()) { try { const w = new URL(v); if (ok.test(w.hostname)) return w.href; } catch {} } } catch {}
+              }
+              return "";
+            } });
+            if (res?.result) await chrome.tabs.update(tabId, { url: res.result });
+          } catch { /* can't read Google's page */ }
+        }
+      } else onGoogleSince = 0;
+    }
     await sleep(500);
   }
-  throw new Error(host ? `The site took too long to open (${host})` : "The link didn't open a booking site");
+  if (ALLOWED.test(host)) throw new Error(`The site took too long to open (${host})`);
+  throw new Error(host ? `The link stopped at ${host} instead of the booking site` : "The link didn't open a booking site");
 }
 
 // Robot test on screen: bring the window to the front, notify, and wait until the person has completed it.
