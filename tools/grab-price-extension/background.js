@@ -190,6 +190,20 @@ async function readSitePrice(site, nights, adults, hotelName) {
           if (c && ((pressedAgo < 60000 && t >= 12) || (pressedAgo >= 60000 && t >= 6))) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
         }
       }
+    } else if (site === "Booking.com" && /searchresults/i.test(location.pathname)) {
+      // Google sometimes opens Booking's list of hotels → open THIS hotel's page, keeping the dates and ₹
+      const cards = [...document.querySelectorAll("[data-testid='property-card']")];
+      const scored = cards.map(c => ({ c, s: overlap(hotelName, (c.querySelector("[data-testid='title']") || c).textContent || "") })).sort((x, y) => y.s - x.s);
+      let destHotel = false; try { destHotel = new URL(location.href).searchParams.get("dest_type") === "hotel"; } catch {}
+      const best = (scored[0] && scored[0].s >= 0.5) ? scored[0].c : (destHotel && cards[0]) || null;
+      const a = best && best.querySelector("a[data-testid='title-link'], a[href*='/hotel/']");
+      if (a) {
+        const to = new URL(a.href, location.href), from = new URL(location.href).searchParams;
+        for (const k of ["checkin", "checkout", "group_adults", "no_rooms", "group_children", "selected_currency"]) if (from.get(k)) to.searchParams.set(k, from.get(k));
+        return { go: to.href };
+      }
+      if (t > 10 && cards.length) return { error: "Booking.com showed a list of hotels and this hotel wasn't in it", debug: txt.slice(0, 300) };
+      await sleep(1000); continue;
     } else if (site === "Booking.com") {
       const rows = [...document.querySelectorAll("#hprt-table tbody tr, table.hprt-table tbody tr")];
       const head = clean(document.querySelector("#hprt-table thead, table.hprt-table thead")?.innerText || "");
