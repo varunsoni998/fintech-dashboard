@@ -8,6 +8,36 @@ const GOOGLE = /(^|\.)google\.[a-z.]+$/i;   // Google's own 'redirecting…' pag
 // any real website counts (hotel's own site, booking engines, …) – just not Google itself or our dashboard
 const onSite = (host) => !!host && !GOOGLE.test(host) && !/(^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/i.test(host);
 const KNOWN = ["Booking.com", "Expedia", "Hotels.com", "MakeMyTrip", "Agoda"];
+// Always look at prices in rupees: Agoda "currency=INR", Booking.com "selected_currency=INR" (both verified on the live sites)
+function inrUrl(u) {
+  try {
+    const x = new URL(u), h = x.hostname;
+    if (/(^|\.)agoda\.com$/i.test(h) && x.searchParams.get("currency") !== "INR") { x.searchParams.set("currency", "INR"); return x.href; }
+    if (/(^|\.)booking\.com$/i.test(h) && x.searchParams.get("selected_currency") !== "INR") { x.searchParams.set("selected_currency", "INR"); return x.href; }
+  } catch {}
+  return u;
+}
+// Expedia / Hotels.com: the Indian sites show rupees (used only if a page came up in another currency)
+function indiaSite(u) {
+  try {
+    const x = new URL(u);
+    if (/^(www\.)?expedia\.com$/i.test(x.hostname)) { x.hostname = "www.expedia.co.in"; return x.href; }
+    if (/^(www\.)?hotels\.com$/i.test(x.hostname)) { x.hostname = "in.hotels.com"; return x.href; }
+  } catch {}
+  return "";
+}
+// "View deal" tabs opened from Price Compare → switch Agoda / Booking.com to rupees too
+const fromDashboard = new Set();
+chrome.tabs.onCreated.addListener((t) => {
+  if (!t.openerTabId) return;
+  chrome.tabs.get(t.openerTabId).then(o => { if (/vercel\.app|localhost|127\.0\.0\.1/.test(o.url || "")) fromDashboard.add(t.id); }).catch(() => {});
+});
+chrome.tabs.onUpdated.addListener((id, info, t) => {
+  if (!fromDashboard.has(id) || !info.url) return;
+  const fixed = inrUrl(info.url);
+  if (fixed !== info.url) { fromDashboard.delete(id); chrome.tabs.update(id, { url: fixed }).catch(() => {}); }
+});
+chrome.tabs.onRemoved.addListener((id) => fromDashboard.delete(id));
 const WINDOWS = 1;                 // one checker window, one site at a time (looks less like a robot to the sites)
 // Hotels.com shows a "Bot or Not?" robot test to automatic visits → not checked automatically (same rooms as Expedia).
 // Expedia does the same ("Bot or Not?"), so neither is opened automatically – repeated tries could get your
@@ -184,6 +214,16 @@ async function readSitePrice(site, nights, adults, hotelName) {
           let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
           return { total: cents(num(m[1])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancellation/i.test(txt) && !/non-refundable/i.test(txt) };
         }
+      } else if (/\/search/i.test(location.pathname)) {
+        // search results (Google sometimes links here): the card for the hotel ("selectedproperty") → its own page
+        const cards = [...document.querySelectorAll("[data-selenium='hotel-item']")];
+        let sel = ""; try { sel = new URL(location.href).searchParams.get("selectedproperty") || ""; } catch {}
+        const card = (sel && cards.find(c => c.getAttribute("data-hotelid") === sel))
+          || cards.map(c => ({ c, s: overlap(hotelName, (c.querySelector("[data-selenium='hotel-name']") || c).textContent || "") })).sort((a, b) => b.s - a.s).find(x => x.s >= 0.5)?.c;
+        const a = card && [...card.querySelectorAll("a[href]")].find(x => /propertyId=|\/hotel\//i.test(x.getAttribute("href") || ""));
+        if (a) return { go: new URL(a.getAttribute("href"), location.href).href };
+        if (t > 10 && cards.length) return { error: "Agoda showed a list of hotels and this hotel wasn't in it", debug: txt.slice(0, 300) };
+        await sleep(1000); continue;
       } else if (!clicked && Date.now() - (+ss.get("pcPressed") || 0) > 20000) {
         // hotel page: each offer is [data-testid=room-offer] with "₹ 7,057 Per night before taxes & fees", "2 adults"
         // and a "Book" button whose label names the room ("Book Deluxe Palm View Double Room Offer 1").
@@ -325,17 +365,21 @@ async function checkOne(job, windowId) {
   const opened = [];                                             // a site may open its booking form in a NEW tab
   const onNew = (t) => { if (t.openerTabId === cur) opened.push(t.id); };
   chrome.tabs.onCreated.addListener(onNew);
-  const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
+  const other = !KNOWN.includes(job.source);
+  let fallback = null;                                           // price in another currency, if the Indian site doesn't work                     // hotel's own site → also read inside booking-engine frames
   try {
-    let robotDone = false;
-    for (let hop = 0; hop < 8; hop++) {
+    let robotDone = false, inrDone = false, indiaTried = false;
+    for (let hop = 0; hop < 10; hop++) {
       await waitForSite(cur, 45000);
+      { const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "", fixed = inrUrl(now);
+        if (fixed !== now && !inrDone) { inrDone = true; await chrome.tabs.update(cur, { url: fixed }); await sleep(1500); continue; } }
       await sleep(2000);
       let r;
       try {
         const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: other }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || ""] });
         const rs = res.map(x => x?.result).filter(Boolean);
         r = rs.find(x => x.total) || rs.find(x => x.robot || x.go || x.wait) || res[0]?.result;
+        if (r?.error && fallback) return fallback;
       } catch (e) { await sleep(2000); continue; }             // the page changed while reading → try again
       if (r?.go) { await chrome.tabs.update(cur, { url: r.go }); await sleep(1500); continue; }   // list page → this hotel's page
       if (r?.wait) {                                             // pressed "Book now" → wait for the booking form
@@ -356,9 +400,14 @@ async function checkOne(job, windowId) {
         robotDone = true;
         continue;                                                // test gone → read the price
       }
-      return r || { error: "Couldn't read the page" };
+      if (r?.total && r.currency && r.currency !== "INR" && !indiaTried && (job.source === "Expedia" || job.source === "Hotels.com")) {
+        indiaTried = true;
+        const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "", india = indiaSite(now);
+        if (india) { const keep = r; await chrome.tabs.update(cur, { url: india }); await sleep(1500); fallback = keep; continue; }
+      }
+      return r || fallback || { error: "Couldn't read the page" };
     }
-    return { error: "The site kept redirecting" };
+    return fallback || { error: "The site kept redirecting" };
   } finally {
     chrome.tabs.onCreated.removeListener(onNew);
     chrome.tabs.remove([tab.id, ...opened, cur].filter((v, i, a) => a.indexOf(v) === i)).catch(() => {});
