@@ -3,18 +3,22 @@ CustomHolidays – Grab Price (Chrome extension)
 
 WHAT IT DOES
 1) AUTOMATIC (main use): just click Search (or "See all prices") in Price Compare. With "⚡ Auto exact prices: ON"
-   the extension opens EVERY deal link (Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip, the hotel's website) in a checker WINDOW at the
+   the extension opens each Booking.com / Agoda / Expedia / Hotels.com / MakeMyTrip deal link
+   (hotel websites are not checked for now – they keep Google's price, use View deal) in a checker WINDOW at the
    top-left of your screen (sites only show prices when the page is on screen), reads the final total for the
    stay, and fills it in as "✓ Confirmed on site (auto)". The window closes by itself. ~5–10 seconds per site.
    Don't close that small window while it works. Keep Chrome open.
    (Agoda's full price – with its "extra charges" – only shows on its booking form, so the checker presses
     "Book now" on the cheapest room to see it. That only opens the form: nothing is booked or paid.
-    Hotel websites all look different, so a few may still say "use View deal".
-    ROBOT TESTS: Expedia / Hotels.com sometimes show "Bot or Not?". Then the checker window comes to the front,
+     ROBOT TESTS: Expedia / Hotels.com sometimes show "Bot or Not?". Then the checker window comes to the front,
     a Windows pop-up says "Expedia needs you" – press & hold / tick the check yourself. As soon as it's gone the
     price is read automatically. If you don't do it within 3 minutes, that row says "use View deal".)
    OTHER CURRENCIES: if a site shows $ / € / AUD etc., the price is converted to ₹ with today's rate (the row says so).
    For the most accurate prices set the currency to INR once on expedia.co.in, hotels.com and booking.com.
+   EXPEDIA / HOTELS.COM: the room list leaves out the resort fee, so the checker presses "Reserve" on the cheapest
+   room and reads the Total on the payment page (it never types anything or presses "Book").
+   RUPEES (v2.6): every site opens in ₹ – for the checker AND when you click View deal:
+   Agoda (currency=INR), Booking.com (selected_currency=INR), Expedia → expedia.co.in, Hotels.com → in.hotels.com.
    EXPEDIA via Google: if Google's "redirecting…" page gets stuck, the extension now follows its link itself.
    If a row says "The link stopped at <website>", send a screenshot of that row.
    If a site can't be read, that row says "Couldn't … — use View deal". Click the ₹ icon → "Recent auto-checks"

@@ -346,7 +346,7 @@ export default function PriceCompare() {
   // every site with a deal link is checked (Agoda, the hotel's own website, …)
   const sameRooms = rooms.every(r => r.adults === rooms[0].adults && r.ages.join() === rooms[0].ages.join());
   const autoJobs = (list: { c: City; h: Hotel }[]) => list.flatMap(({ c, h }) =>
-    (h.online?.prices || []).filter(p => !!p.link)
+    (h.online?.prices || []).filter(p => !!p.link && p.source !== "Hotel website")   /* hotel websites: not checked for now */
       .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name })));
   const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
     if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
