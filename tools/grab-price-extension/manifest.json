@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CustomHolidays – Grab Price",
-  "version": "2.4.0",
+  "version": "2.2.0",
   "description": "Checks exact hotel prices on any booking website (Booking.com, Agoda, Expedia, Hotels.com, MakeMyTrip, hotel websites) for BusinessOS Price Compare (you complete any robot check yourself).",
   "action": {
     "default_popup": "popup.html",
