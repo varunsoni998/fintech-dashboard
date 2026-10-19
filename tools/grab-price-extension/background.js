@@ -57,13 +57,42 @@ async function readSitePrice(site, nights, adults, hotelName) {
   adults = adults || 2;
   const cheapest = (list) => list.filter(x => x.total > 100).sort((a, b) => a.total - b.total)[0];
   let snippet = "", clicked = false;
+  const ss = { get: (k) => { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
+  // press the booking button of the cheapest room (this only opens the site's checkout / booking form – nothing is booked)
+  const pressCheapest = async (scope, btnRx, room) => {
+    const btns = [...scope.querySelectorAll("button, a, [role='button']")].filter(b => btnRx.test(clean(b.innerText).trim()) && b.offsetParent !== null);
+    const priced = btns.map(b => {
+      let c = b, amt = 0;
+      for (let k = 0; k < 8 && c; k++, c = c.parentElement) {
+        const ms = [...clean(c.innerText).matchAll(rx(R + AMT))].map(x => num(x[1])).filter(v => v > 100);
+        if (ms.length) { amt = ms[ms.length - 1]; break; }
+      }
+      return { b, amt };
+    }).filter(x => x.amt);
+    const pick = priced.sort((a, b) => a.amt - b.amt)[0] || (btns[0] && { b: btns[0] });
+    if (!pick) return false;
+    if (room) ss.set("pcRoom", room);
+    ss.set("pcPressed", String(Date.now()));
+    pick.b.scrollIntoView({ block: "center" }); await sleep(600); pick.b.click();
+    return true;
+  };
 
   for (let t = 0; t < 30; t++) {
     const txt = clean(document.body?.innerText || "");
     if (/captcha|are you a robot|bot or not|robot or human|are you human|verify you are human|unusual traffic|access denied|press (and|&) hold/i.test(document.title + " " + txt) && txt.length < 6000)
       return { robot: true, debug: txt.slice(0, 300) };
 
-    if (site === "Expedia" || site === "Hotels.com") {
+    if ((site === "Expedia" || site === "Hotels.com") && /checkout/i.test(location.pathname + location.hostname)) {
+      // checkout: "Total ₹17,496.70" (room + taxes + resort fee). Never touch the form or the "Book" button.
+      const m = [...txt.matchAll(rx("(?:^|\\n)\\s*Total\\s*\\n?\\s*" + R + AMT))].pop();
+      if (m && num(m[1]) > 100) return { total: cents(num(m[1])), room: ss.get("pcRoom"), url: location.href, allRooms: true, free: /fully refundable|free cancellation/i.test(txt) };
+    } else if (site === "Expedia" || site === "Hotels.com") {
+      // a "how would you like to pay?" box after pressing Reserve → take the first option
+      if (ss.get("pcPressed")) {
+        const dlg = [...document.querySelectorAll("[role='dialog'], dialog, [class*='sheet'], [class*='Dialog']")].find(d => d.offsetParent !== null && /pay now|pay at property|pay later|reserve/i.test(d.innerText || ""));
+        const opt = dlg && [...dlg.querySelectorAll("button, a")].find(b => /^(pay now|pay at property|pay later|reserve|continue)$/i.test(clean(b.innerText).trim()));
+        if (opt && !clicked) { clicked = true; opt.click(); return { wait: true }; }
+      }
       const HOTEL_LINK = 'a[href*="Hotel-Information"], a[href*="/ho"]';
       const isHotelLink = (a) => /Hotel-Information|\/ho\d+/i.test(a.getAttribute("href") || "");
       if (/Hotel-Search|search\.do|\/search/i.test(location.pathname)) {
@@ -105,7 +134,14 @@ async function readSitePrice(site, nights, adults, hotelName) {
           }
           if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
           const c = cheapest(found);
-          if (c) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
+          // the room list's "total" leaves out resort fees → open the checkout of the cheapest room to see the full total
+          const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
+          if (c && !clicked && pressedAgo > 60000) {
+            const roomsEl = [...document.querySelectorAll("section, div")].find(e => /^choose your room/i.test(clean(e.innerText).trim()) && (e.innerText || "").length > 400 && (e.innerText || "").length < 60000) || document.body;
+            if (await pressCheapest(roomsEl, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }
+          }
+          // couldn't reach the checkout → room-list total (resort fee may be extra)
+          if (c && (pressedAgo < 60000 || t >= 6)) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
         }
       }
     } else if (site === "Booking.com") {
@@ -146,22 +182,12 @@ async function readSitePrice(site, nights, adults, hotelName) {
         const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(?:Total price|Price)\\s*\\n?\\s*" + R + AMT))].pop();
         if (m) {
           const rm = [...document.querySelectorAll("[data-selenium*='room-name' i], [data-element-name*='room-name' i], [class*='RoomName']")].map(e => clean(e.innerText).trim()).find(Boolean) || "";
-          return { total: cents(num(m[1])), room: rm.split("\n")[0], url: location.href, allRooms: true };
+          return { total: cents(num(m[1])), room: rm.split("\n")[0] || ss.get("pcRoom"), url: location.href, allRooms: true };
         }
-      } else if (!clicked && t >= 2) {
+      } else if (!clicked && t >= 2 && Date.now() - (+ss.get("pcPressed") || 0) > 20000) {
         // hotel page → press "Book now" on the cheapest room (this only opens Agoda's booking form – nothing is booked)
         const grid = document.querySelector("#roomGridContent, [data-selenium='RoomGrid'], [data-element-name='room-grid']") || document.body;
-        const btns = [...grid.querySelectorAll("button, a, [role='button']")].filter(b => /^(book now|reserve|book)$/i.test(clean(b.innerText).trim()));
-        const priced = btns.map(b => {
-          let c = b, amt = 0;
-          for (let k = 0; k < 8 && c; k++, c = c.parentElement) {
-            const ms = [...clean(c.innerText).matchAll(rx(R + AMT))].map(x => num(x[1])).filter(v => v > 100);
-            if (ms.length) { amt = ms[ms.length - 1]; break; }
-          }
-          return { b, amt };
-        }).filter(x => x.amt);
-        const pick = priced.sort((a, b) => a.amt - b.amt)[0] || (btns[0] && { b: btns[0] });
-        if (pick) { clicked = true; pick.b.scrollIntoView({ block: "center" }); await sleep(600); pick.b.click(); return { wait: true }; }
+        if (await pressCheapest(grid, /^(book now|reserve|book)$/i, "")) { clicked = true; return { wait: true }; }
         if (t === 2 || t === 10) {                                  // Agoda's "View this deal" scrolls to the room list
           const v = [...document.querySelectorAll("button, a, [role='button']")].find(e => /^(view this deal|see rooms|select room)$/i.test(clean(e.innerText).trim()));
           if (v) v.click();
@@ -180,6 +206,8 @@ async function readSitePrice(site, nights, adults, hotelName) {
         const per = [...txt.matchAll(rx(R + AMT + "[ \\t]*(?:/|per|a|avg\\.?(?: per)?)\\s*night"))].map(m => num(m[1])).filter(v => v > 100);
         if (per.length) return { total: cents(Math.min(...per) * (nights || 1)), room: "", url: location.href };
       }
+      if (t >= 15) return { error: "The hotel's website didn't show a price for these dates", debug: txt.slice(0, 300) };
+      await sleep(1000); continue;                               // no scrolling on hotel websites
     }
 
     const k = txt.search(/₹|Rs\.?\s?\d/);
@@ -278,7 +306,7 @@ async function checkOne(job, windowId) {
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
     let robotDone = false;
-    for (let hop = 0; hop < 6; hop++) {
+    for (let hop = 0; hop < 8; hop++) {
       await waitForSite(cur, 45000);
       await sleep(2000);
       let r;

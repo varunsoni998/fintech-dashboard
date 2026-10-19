@@ -234,7 +234,7 @@ export default function PriceCompare() {
       ...(h.online?.prices || []).map(p => {
         const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
         return cf
-          ? { source: p.source, room: roomOnly(h.confirmedRoom?.[p.source]) || p.room || undefined, rupees: cf, amt: h.confirmedSite?.[p.source]?.amt || cf, ccy: h.confirmedSite?.[p.source]?.ccy || "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          ? { source: p.source, room: roomOnly(h.confirmedRoom?.[p.source]) || p.room || undefined, rupees: cf, amt: cf, ccy: "INR",   /* second line = trip currency, like every other row */ mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
               return fx?.kind === "adjust"

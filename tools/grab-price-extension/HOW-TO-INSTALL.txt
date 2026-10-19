@@ -15,6 +15,9 @@ WHAT IT DOES
     price is read automatically. If you don't do it within 3 minutes, that row says "use View deal".)
    OTHER CURRENCIES: if a site shows $ / € / AUD etc., the price is converted to ₹ with today's rate (the row says so).
    For the most accurate prices set the currency to INR once on expedia.co.in, hotels.com and booking.com.
+   EXPEDIA / HOTELS.COM: the room list leaves out the resort fee, so the checker presses "Reserve" on the cheapest
+   room and reads the Total on the payment page (it never types anything or presses "Book").
+   Keep those sites on INR (₹) – prices in ₹ can differ from the $ prices.
    EXPEDIA via Google: if Google's "redirecting…" page gets stuck, the extension now follows its link itself.
    If a row says "The link stopped at <website>", send a screenshot of that row.
    If a site can't be read, that row says "Couldn't … — use View deal". Click the ₹ icon → "Recent auto-checks"
