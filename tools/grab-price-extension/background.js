@@ -188,6 +188,9 @@ async function readSitePrice(site, nights, adults, hotelName) {
       }
     } else if (site === "Booking.com") {
       const rows = [...document.querySelectorAll("#hprt-table tbody tr, table.hprt-table tbody tr")];
+      const head = clean(document.querySelector("#hprt-table thead, table.hprt-table thead")?.innerText || "");
+      const hn = head.match(/Price for (\d+) nights?/i);
+      if (rows.length && hn && nights && +hn[1] !== nights) return { error: `Booking.com showed prices for ${hn[1]} nights, not ${nights}`, debug: head.slice(0, 200) };
       if (rows.length) {
         let room = ""; const found = [];
         for (const r of rows) {
@@ -207,9 +210,6 @@ async function readSitePrice(site, nights, adults, hotelName) {
         if (c) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
       // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
-      const top = [...txt.matchAll(rx(R + AMT + "[^₹$€£]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0]
-        || [...txt.matchAll(rx(R + AMT + "[^₹$€£]{0,40}?includes taxes and (?:charges|fees)"))][0];
-      if (top && t >= 3) return { total: cents(num(top[1]) + (top[2] ? num(top[2]) : 0)), room: "", url: location.href, note: "price shown at the top of the page" };
       // checkout page: "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
       const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
       if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: cents(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href, allRooms: true }; }
@@ -380,9 +380,10 @@ async function checkOne(job, windowId) {
   chrome.tabs.onCreated.addListener(onNew);
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
-    let robotDone = false; const fixedHosts = new Set();
+    let robotDone = false; const fixedHosts = new Set(); const trail = [];
     for (let hop = 0; hop < 10; hop++) {
       await waitForSite(cur, 45000, !other);
+      try { const u = new URL((await chrome.tabs.get(cur)).url), d = u.searchParams.get("checkin") || u.searchParams.get("chkin") || u.searchParams.get("startDate") || u.searchParams.get("checkIn"); trail.push(u.hostname + u.pathname.slice(0, 40) + (d ? " (" + d + ")" : "")); } catch {}
       { // switch to ₹ + the trip's dates once per site (not on the ad-redirect pages in between)
         const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "";
         let host = ""; try { host = new URL(now).hostname; } catch {}
@@ -418,7 +419,7 @@ async function checkOne(job, windowId) {
         robotDone = true;
         continue;                                                // test gone → read the price
       }
-      return r || { error: "Couldn't read the page" };
+      return Object.assign(r || { error: "Couldn't read the page" }, { trail });
     }
     return { error: "The site kept redirecting" };
   } finally {
@@ -429,7 +430,7 @@ async function checkOne(job, windowId) {
 
 async function logResult(job, result) {
   const { pcLog = [] } = await chrome.storage.local.get("pcLog");
-  pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...result });
+  pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...result, version: chrome.runtime.getManifest().version, dates: job.checkIn ? job.checkIn + " → " + job.checkOut : "" });
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }
 

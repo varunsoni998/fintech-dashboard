@@ -167,6 +167,7 @@ export default function PriceCompare() {
   // ── Grab-price Chrome extension: receives the exact checkout price from a booking page ──
   type Grab = { id: number; site: string; hotel: string; total: number; url: string; checkIn?: string; checkOut?: string };
   const [extReady, setExtReady] = useState(false);
+  const [extVer, setExtVer] = useState("");
   const [extAuto, setExtAuto] = useState(false);
   const [checks, setChecks] = useState<Record<string, string>>({});   // "hid|site" → "checking" | "ok" | error text
   const onCheckMsg = useRef<(m: any) => void>(() => {});
@@ -181,7 +182,7 @@ export default function PriceCompare() {
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       if (e.source !== window || !e.data || e.data.source !== "pc-grab-ext") return;
-      if (e.data.type === "PC_EXT_READY") { setExtReady(true); if (e.data.auto) setExtAuto(true); }
+      if (e.data.type === "PC_EXT_READY") { setExtReady(true); if (e.data.version) setExtVer(String(e.data.version)); if (e.data.auto) setExtAuto(true); }
       if (/^PC_CHECK_/.test(e.data.type)) onCheckMsg.current(e.data);
       if (e.data.type === "PC_EXT_STALE") onCheckMsg.current({ type: "PC_EXT_STALE" });
       if (e.data.type === "PC_GRAB_PRICE" && e.data.grab?.total > 0) { setExtReady(true); setGrab(e.data.grab); }
@@ -695,7 +696,7 @@ export default function PriceCompare() {
           {extAuto ? (
             <button onClick={() => setAutoOn(v => !v)} title="When ON, every hotel whose prices are fetched is also checked on Booking.com / Expedia / Hotels.com / MakeMyTrip in background tabs"
               style={{ ...pill(BG, autoOn ? GREEN : MUTED), boxShadow: autoOn ? SHADOW_IN : SHADOW_SM, fontSize: 12, padding: "7px 12px", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Zap style={{ width: 13, height: 13 }} /> Auto exact prices: {autoOn ? "ON" : "OFF"}
+              <Zap style={{ width: 13, height: 13 }} /> Auto exact prices: {autoOn ? "ON" : "OFF"}{extVer ? ` · v${extVer}` : ""}
             </button>
           ) : extReady ? <span title="Update the Grab-price extension to v1.1 for automatic exact prices" style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px" }}>Update Grab-price extension</span>
             : <span title="Install the Grab-price Chrome extension (tools/grab-price-extension.zip) for exact prices" style={{ ...pill(BG, MUTED), boxShadow: SHADOW_IN, fontSize: 12, padding: "7px 12px" }}>Exact prices: install extension</span>}
