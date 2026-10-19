@@ -452,7 +452,9 @@ async function checkOne(job, windowId) {
         robotDone = true;
         continue;                                                // test gone → read the price
       }
-      return Object.assign(r || { error: "Couldn't read the page" }, { trail });
+      const out = Object.assign(r || { error: "Couldn't read the page" }, { trail });
+      if (out.total || (out.error && !out.robot)) out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
+      return out;
     }
     return { error: "The site kept redirecting" };
   } finally {
@@ -462,9 +464,29 @@ async function checkOne(job, windowId) {
   }
 }
 
+// Screenshot of the price for the vision check: bring the total (or the price summary) into view, then capture the window
+async function snapPrice(tabId, windowId, total) {
+  try {
+    await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+    await chrome.scripting.executeScript({ target: { tabId }, args: [total || 0], func: (tot) => {
+      let el = null;
+      if (tot) {
+        const re = new RegExp(String(Math.floor(tot)).split("").join("[,.\\s]?"));
+        el = [...document.querySelectorAll("body *")].filter(e => e.children.length <= 4 && e.getClientRects().length && re.test((e.innerText || "").replace(/\s/g, "")))
+          .sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0] || null;
+      }
+      if (!el) el = [...document.querySelectorAll("h2, h3, h4, div, span")].find(e => /^(total|price details|price summary|your price summary|choose your room|choose your unit)$/i.test((e.innerText || "").trim()));
+      if (el) el.scrollIntoView({ block: "center" });
+    } }).catch(() => {});
+    await sleep(900);
+    return await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 60 });
+  } catch { return ""; }
+}
+
 async function logResult(job, result) {
   const { pcLog = [] } = await chrome.storage.local.get("pcLog");
-  pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...result, version: chrome.runtime.getManifest().version, dates: job.checkIn ? job.checkIn + " → " + job.checkOut : "" });
+  const { shot, ...rest } = result || {};
+  pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...rest, hadShot: !!shot, version: chrome.runtime.getManifest().version, dates: job.checkIn ? job.checkIn + " → " + job.checkOut : "" });
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }
 

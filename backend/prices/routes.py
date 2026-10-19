@@ -412,3 +412,88 @@ def excel(body: dict, authorization: Optional[str] = Header(None)):
     return FileResponse(tmp.name, filename=f"{name} costing.xlsx",
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         background=BackgroundTask(lambda: os.path.exists(tmp.name) and os.unlink(tmp.name)))
+
+
+# ── Vision check: read the price from a screenshot of the booking site (Gemini) ─────────────────
+# Env: GEMINI_API_KEY (free key from aistudio.google.com), optional GEMINI_MODEL (default gemini-flash-latest).
+# The extension screenshots the price box of the checker window; Price Compare sends it here and compares the
+# answer with what the page reader found. The key never leaves the server.
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+VISION_PROMPT = """You are reading a screenshot of a hotel booking website ({site}).
+We expect: hotel "{hotel}", check-in {check_in}, check-out {check_out} ({nights} nights), {adults} adults, {rooms} room(s).
+Find the FINAL TOTAL price for the whole stay as shown on this page (including taxes and fees if the page shows a total that includes them).
+Do NOT use per-night prices, crossed-out prices, savings/discount amounts, deposits, "pay today" amounts of 0, or prices of other hotels.
+Return ONLY JSON with these keys:
+{{"found": true/false, "total": number or null, "currency": "INR"/"USD"/... or null,
+ "per_night": number or null, "includes_taxes": true/false/null,
+ "room": string or null, "hotel_name": string or null,
+ "check_in": "YYYY-MM-DD" or null, "check_out": "YYYY-MM-DD" or null, "nights": number or null, "adults": number or null,
+ "cancellation": short text (e.g. "Free cancellation until 20 Oct", "Non-refundable", "Partially refundable: fee ₹22,092") or null,
+ "meal": short text (e.g. "Breakfast included", "Room only") or null,
+ "page": "checkout" | "hotel page" | "list of hotels" | "robot check" | "other",
+ "confidence": "high" | "medium" | "low"}}
+Write numbers without commas or currency symbols. If the page shows no clear total for this stay, set found=false."""
+
+
+class VisionIn(BaseModel):
+    image: str                       # data URL or base64 JPEG/PNG
+    site: str = ""
+    hotel: str = ""
+    check_in: str = ""
+    check_out: str = ""
+    nights: int = 0
+    adults: int = 2
+    rooms: int = 1
+
+
+def _gemini_key() -> str:
+    return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+
+
+@router.get("/vision/status")
+def vision_status(authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    return {"configured": bool(_gemini_key()), "model": os.getenv("GEMINI_MODEL", "gemini-flash-latest")}
+
+
+@router.post("/vision")
+def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    key = _gemini_key()
+    if not key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
+    img = body.image
+    mime = "image/jpeg"
+    if img.startswith("data:"):
+        head, img = img.split(",", 1)
+        mime = head[5:].split(";")[0] or mime
+    if len(img) > 6_000_000:
+        raise HTTPException(status_code=413, detail="Screenshot too large")
+    prompt = VISION_PROMPT.format(site=body.site or "a booking site", hotel=body.hotel, check_in=body.check_in or "?",
+                                  check_out=body.check_out or "?", nights=body.nights or "?", adults=body.adults, rooms=body.rooms)
+    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+    payload = {"contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": mime, "data": img}}]}],
+               "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
+    try:
+        r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=45,
+                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Vision service unreachable: {e}")
+    if r.status_code == 429:
+        raise HTTPException(status_code=429, detail="Free vision limit reached for today")
+    if r.status_code >= 400:
+        logger.warning("Gemini error %s: %s", r.status_code, r.text[:300])
+        raise HTTPException(status_code=502, detail=f"Vision service error {r.status_code}")
+    try:
+        import json as _json
+        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
+    except Exception:
+        raise HTTPException(status_code=502, detail="Vision service gave an unreadable answer")
+    for k in ("total", "per_night"):
+        try:
+            out[k] = float(str(out.get(k)).replace(",", "")) if out.get(k) not in (None, "") else None
+        except Exception:
+            out[k] = None
+    out["model"] = model
+    return out

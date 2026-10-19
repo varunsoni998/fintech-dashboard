@@ -173,6 +173,7 @@ export default function PriceCompare() {
   const onCheckMsg = useRef<(m: any) => void>(() => {});
   const afterFetch = useRef<(c: City, h: Hotel) => void>(() => {});
   const lastAck = useRef(0);
+  const visionOff = useRef(false);   // server has no GEMINI_API_KEY → don't keep asking
   const fx = useRef<Record<string, number>>({});   // ₹ per 1 unit, for prices a site showed in another currency              // last time the extension confirmed it received a check
   // automatic exact prices: ON by default (switch at the top)
   const [autoOn, setAutoOn] = useState<boolean>(() => { try { return localStorage.getItem("pc:auto") !== "off"; } catch { return true; } });
@@ -376,20 +377,46 @@ export default function PriceCompare() {
     if (m.type === "PC_CHECK_STARTED") setChecks(o => ({ ...o, [k]: "checking" }));
     if (m.type === "PC_CHECK_RESULT") {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
-      if (m.result?.total > 0 && city && hotel) {
-        const cur = (m.result.currency || "INR").toUpperCase(), amount = m.result.total * (m.result.allRooms ? 1 : (j.mult || 1));   // checkout pages already show all rooms
+      const res = m.result || {};
+      if (!city || !hotel) return;
+      // Two independent readings: the page reader (text) and Gemini looking at a screenshot of the price.
+      // Agree → confirmed. Only one found it → use it (screenshot only if it is the booking/checkout page).
+      // Disagree, or the site shows other dates → "Check manually" (never a wrong price).
+      (async () => {
+        let v: any = null;
+        if (res.shot && !visionOff.current) {
+          try {
+            v = await (await authFetch("/vision", { image: res.shot, site: j.source, hotel: j.hotel || hotel.name, check_in: j.checkIn || "", check_out: j.checkOut || "", nights: j.nights || 0, adults: j.adults || 2, rooms: j.rooms || 1 })).json();
+          } catch (e: any) { if (/GEMINI_API_KEY/.test(String(e?.message))) visionOff.current = true; v = null; }
+        }
+        const fail = (t: string) => setChecks(o => ({ ...o, [k]: t }));
+        const fmt = (c: string, n: number) => `${c === "INR" ? "₹" : c + " "}${Math.round(n).toLocaleString("en-IN")}`;
+        if (v && v.page === "robot check") return fail("The site showed a robot check");
+        const badDates = v && v.found && ((v.check_in && j.checkIn && v.check_in !== j.checkIn) || (v.check_out && j.checkOut && v.check_out !== j.checkOut) || (v.nights && j.nights && +v.nights !== +j.nights));
+        if (badDates) return fail(`Check manually — the site showed ${v.check_in || "?"} → ${v.check_out || "?"}${v.nights ? ` (${v.nights} nights)` : ""}, not your dates`);
+        const visOk = !!(v && v.found && v.total > 0 && v.confidence !== "low");
+        let total = 0, cur = "INR", room = "", allRooms = !!res.allRooms;
+        if (res.total > 0) {
+          total = res.total; cur = (res.currency || "INR").toUpperCase(); room = res.room || (visOk ? v.room || "" : "");
+          if (visOk) {
+            const vc = (v.currency || cur).toUpperCase();
+            if (vc === cur && Math.abs(v.total - total) / total > 0.02 && v.page === "checkout")
+              return fail(`Check manually — page says ${fmt(cur, total)}, screenshot shows ${fmt(vc, v.total)}`);
+          }
+        } else if (visOk && (v.page === "checkout" || v.page === "hotel page")) {
+          total = v.total; cur = (v.currency || "INR").toUpperCase(); room = v.room || ""; allRooms = v.page === "checkout";
+        } else return fail(res.error || "Couldn't read the price");
+        const amount = total * (allRooms ? 1 : (j.mult || 1));   // checkout pages already show all rooms
         const save = (rate: number) => {
-          const note = m.result.room || "";   // just the room name
-          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, note, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined);
+          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, room, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined);
           setChecks(o => ({ ...o, [k]: "ok" }));
         };
         if (cur === "INR") save(1);
         else if (fx.current[cur]) save(fx.current[cur]);
         else if (cur === trip.currency && roe) save(roe);
         else authFetch(`/roe?ccy=${cur}`).then(r => r.json()).then(r => { fx.current[cur] = r.roe; save(r.roe); })
-          .catch(() => setChecks(o => ({ ...o, [k]: `The site showed ${cur} and the exchange rate couldn't be fetched` })));
-      }
-      else setChecks(o => ({ ...o, [k]: m.result?.error || "Couldn't read the price" }));
+          .catch(() => fail(`The site showed ${cur} and the exchange rate couldn't be fetched`));
+      })();
     }
     if (m.type === "PC_CHECK_DONE") setMsg(o => (o?.text.startsWith("⚡") ? { kind: "ok", text: "⚡ Exact prices updated from the websites." } : o));
   };
