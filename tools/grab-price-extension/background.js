@@ -48,10 +48,19 @@ async function readSitePrice(site, nights, adults, hotelName) {
       return { robot: true, debug: txt.slice(0, 300) };
 
     if (site === "Expedia" || site === "Hotels.com") {
-      if (/Hotel-Search/i.test(location.pathname)) {
+      const HOTEL_LINK = 'a[href*="Hotel-Information"], a[href*="/ho"]';
+      const isHotelLink = (a) => /Hotel-Information|\/ho\d+/i.test(a.getAttribute("href") || "");
+      if (/Hotel-Search|search\.do|\/search/i.test(location.pathname)) {
+        // 1) the hotel Google linked to is pinned at the top under "Continue with your booking" → its total is right there
+        const pinAt = txt.search(/Continue with your booking/i);
+        if (pinAt >= 0) {
+          const card = txt.slice(pinAt, pinAt + 900);
+          const mm = [...card.matchAll(rx(R + AMT + "\\s*total\\b"))][0];
+          if (mm) return { total: Math.round(num(mm[1])), room: "", url: location.href, note: "price from the pinned card at the top" };
+        }
         // list of hotels → open THIS hotel's own page.
         // The hotel Google linked to is pinned at the top under "Continue with your booking".
-        const links = [...document.querySelectorAll('a[href*="Hotel-Information"]')];
+        const links = [...document.querySelectorAll(HOTEL_LINK)].filter(isHotelLink);
         const pin = [...document.querySelectorAll("h2,h3,div,span")].find(e => /^continue with your booking/i.test((e.innerText || "").trim()) && (e.innerText || "").length < 60);
         if (pin) {
           const after = links.find(a => pin.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -84,6 +93,11 @@ async function readSitePrice(site, nights, adults, hotelName) {
         }
       }
     } else if (site === "Booking.com") {
+      // page not in rupees (e.g. AUD/€) → say so instead of scrolling for ever
+      if (t >= 4 && !/₹|Rs\.?\s?\d|INR\s?\d/.test(txt)) {
+        const cur = (txt.match(/(A\$|AUD|US\$|USD|€|EUR|£|GBP|AED|SGD|S\$|THB|฿)\s?\d[\d,]*/) || [])[1];
+        if (cur) return { error: `Booking.com is showing prices in ${cur}, not ₹ — set the currency on Booking.com to INR (top of the site) once, then Re-check`, debug: txt.slice(0, 300) };
+      }
       const rows = [...document.querySelectorAll("#hprt-table tbody tr, table.hprt-table tbody tr")];
       if (rows.length) {
         let room = ""; const found = [];
@@ -103,6 +117,10 @@ async function readSitePrice(site, nights, adults, hotelName) {
         const c = cheapest(found);
         if (c) return { total: Math.round(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
+      // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
+      const top = [...txt.matchAll(rx(R + AMT + "[^₹]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0]
+        || [...txt.matchAll(rx(R + AMT + "[^₹]{0,40}?includes taxes and (?:charges|fees)"))][0];
+      if (top && t >= 3) return { total: Math.round(num(top[1]) + (top[2] ? num(top[2]) : 0)), room: "", url: location.href, note: "price shown at the top of the page" };
       // checkout page: "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
       const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
       if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: Math.round(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href }; }
