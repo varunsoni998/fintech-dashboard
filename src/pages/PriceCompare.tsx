@@ -651,8 +651,6 @@ export default function PriceCompare() {
                   {d.source}
                   {d.mine && <span style={{ ...pill(ACCENT), marginLeft: 8 }}>your rate</span>}
                   {i === 0 && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
-                  {i > 0 && best && Math.round(d.rupees - best.rupees) > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: WARN, fontWeight: 600 }}>+{inr(d.rupees - best.rupees)}</span>}
-                  {i > 0 && best && Math.round(d.rupees - best.rupees) === 0 && <span style={{ marginLeft: 8, fontSize: 12, color: MUTED, fontWeight: 600 }}>same price</span>}
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
@@ -675,14 +673,13 @@ export default function PriceCompare() {
                         <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {checks[`${h.id}|${d.source}`] === "queued" ? "waiting…" : `checking on ${d.source}…`}</span>
                       </>) : d.confirmed ? (<>
                         <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Confirmed on site{h.confirmedAuto?.[d.source] ? " (auto)" : ""}</span>
-                        {h.confirmedAuto?.[d.source] && <span style={{ color: MUTED }}>checked {clock(h.confirmedAuto[d.source])} ·</span>}
-                        <span style={{ color: MUTED }}>Google said {inr(d.google || 0)}</span>
+                        {h.confirmedAuto?.[d.source] && <span style={{ color: MUTED }}>checked {clock(h.confirmedAuto[d.source])}</span>}
                         <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5, padding: 0 }} onClick={() => clearConfirm(c, h, d.source)}>Undo</button>
                       </>) : (<>
                         {d.fx?.kind === "adjust" ? <>
                           <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ est. on site</span>
-                          <span style={{ color: MUTED }}>Google {inr(d.google || 0)} · {d.source} is usually {pct(d.fx.f - 1)} here ({plural(d.fx.n, "check", "checks")})</span>
+                          <span style={{ color: MUTED }}>{d.source} is usually {pct(d.fx.f - 1)} here ({plural(d.fx.n, "check", "checks")})</span>
                         </> : d.fx?.kind === "exact" ? <>
                           <span style={{ ...pill(BG, GREEN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>✓ usually exact</span>
                           <span style={{ color: MUTED }}>Google matched the site in {plural(d.fx.n, "check", "checks")}</span>
