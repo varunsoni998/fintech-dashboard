@@ -69,6 +69,8 @@ const ord = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "s
 const nice = (iso: string) => { const d = new Date(iso + "T00:00:00"); return isNaN(+d) ? iso : `${ord(d.getDate())} ${d.toLocaleString("en", { month: "short" })}`; };
 const num = (s: string) => { const v = parseFloat(String(s).replace(/[^0-9.]/g, "")); return isNaN(v) ? 0 : v; };
 const inr = (v: number) => "₹" + Math.round(v).toLocaleString("en-IN");
+// room name only (older checks also saved "site showed USD …, converted at ₹…")
+const roomOnly = (s?: string) => (s || "").replace(/(^|\s·\s)site showed .*$/, "").trim();
 const money = (v: number, ccy: string) => ccy === "INR" ? inr(v) : `${SYMBOL[ccy] || ccy + " "}${Math.round(v).toLocaleString("en-IN")}`;
 const ratingWord = (r?: number) => !r ? "" : r >= 4.7 ? "Exceptional" : r >= 4.5 ? "Excellent" : r >= 4.2 ? "Very good" : r >= 3.8 ? "Good" : "Okay";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -232,7 +234,7 @@ export default function PriceCompare() {
       ...(h.online?.prices || []).map(p => {
         const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
         return cf
-          ? { source: p.source, room: h.confirmedRoom?.[p.source] || p.room || undefined, rupees: cf, amt: h.confirmedSite?.[p.source]?.amt || cf, ccy: h.confirmedSite?.[p.source]?.ccy || "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          ? { source: p.source, room: roomOnly(h.confirmedRoom?.[p.source]) || p.room || undefined, rupees: cf, amt: h.confirmedSite?.[p.source]?.amt || cf, ccy: h.confirmedSite?.[p.source]?.ccy || "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
               return fx?.kind === "adjust"
@@ -376,7 +378,7 @@ export default function PriceCompare() {
       if (m.result?.total > 0 && city && hotel) {
         const cur = (m.result.currency || "INR").toUpperCase(), amount = m.result.total * (j.mult || 1);
         const save = (rate: number) => {
-          const note = cur !== "INR" ? `${m.result.room ? m.result.room + " · " : ""}site showed ${cur} ${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}, converted at ₹${rate.toFixed(2)}` : (m.result.room || "");
+          const note = m.result.room || "";   // just the room name
           applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, note, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined);
           setChecks(o => ({ ...o, [k]: "ok" }));
         };
@@ -626,7 +628,7 @@ export default function PriceCompare() {
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                      {d.confirmed && h.confirmedRoom?.[d.source] ? <>{h.confirmedRoom[d.source]} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
+                      {d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
                   {!d.mine && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok"].includes(checks[`${h.id}|${d.source}`]) && (
