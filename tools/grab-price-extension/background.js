@@ -168,11 +168,14 @@ async function readSitePrice(site, nights, adults, hotelName) {
         if (best && bs >= 0.5) return { go: best.href };
         if (t > 10) return { error: "The site showed a list of hotels and this hotel wasn't in it", debug: txt.slice(0, 300) };
       } else {
-        const start = txt.search(/Choose your room|Select a room|Room options/i);
+        // the room list: Expedia marks it "section-room-list"; heading is "Choose your room" or, for apartments, "Choose your unit"
+        const listEl = document.querySelector("[data-stid='section-room-list']");
+        const start = listEl ? 0 : txt.search(/Choose your (?:room|unit|apartment|villa)s?|Select a room|Room options/i);
         if (start >= 0) {
-          const rest = txt.slice(start + 15);
-          const stop = rest.search(/\n(Similar properties|Explore similar|Compare similar|You may also like|Popular properties|Properties nearby|Nearby properties|About this property|About the property|Policies|Important information|Guest reviews|Reviews\n|Explore the area|Accessibility)/i);
-          const sec = txt.slice(start, start + 15 + (stop >= 0 ? stop : rest.length));
+          const base = listEl ? clean(listEl.innerText) : txt;
+          const rest = base.slice(start + 15);
+          const stop = rest.search(/\n(Similar properties|Explore similar|Compare similar|You may also like|Have a question\?|Popular properties|Properties nearby|Nearby properties|About this property|About the property|Policies|Important information|Guest reviews|Reviews\n|Explore the area|Accessibility)/i);
+          const sec = base.slice(start, start + 15 + (stop >= 0 ? stop : rest.length));
           const found = [];
           for (const b of sec.split(/View all photos for /i).slice(1)) {
             const room = b.split("\n")[0].trim();
@@ -333,15 +336,17 @@ async function readSitePrice(site, nights, adults, hotelName) {
   return r;
 }
 
-async function waitForSite(tabId, ms, known) {
+async function waitForSite(tabRef, ms, known) {
+  // tabRef can be a function: Chrome may swap the tab for a new one while it redirects
   // Ready when the tab is on the booking site AND (finished loading OR has been there 6 s).
   // Some sites (Expedia) never report "finished" because adverts keep loading.
   // If Google's redirect page stays on screen, follow its link to the booking site ourselves.
   const end = Date.now() + ms;
   let onSiteSince = 0, onGoogleSince = 0, host = "", nudged = 0;
   while (Date.now() < end) {
+    const tabId = typeof tabRef === "function" ? tabRef() : tabRef;
     const t = await chrome.tabs.get(tabId).catch(() => null);
-    if (!t) throw new Error("Tab closed");
+    if (!t) { await sleep(700); const again = typeof tabRef === "function" ? tabRef() : tabRef; if (again !== tabId) continue; throw new Error("Tab closed"); }
     try { host = new URL(t.url || t.pendingUrl || "").hostname; } catch { host = ""; }
     if (known ? ALLOWED.test(host) : onSite(host)) {
       if (!onSiteSince) onSiteSince = Date.now();
@@ -403,12 +408,14 @@ async function checkOne(job, windowId) {
   let cur = tab.id;
   const opened = [];                                             // a site may open its booking form in a NEW tab
   const onNew = (t) => { if (t.openerTabId === cur) opened.push(t.id); };
+  const onSwap = (added, removed) => { if (removed === cur) { cur = added; opened.push(added); } };   // Chrome swapped the tab (prerender)
   chrome.tabs.onCreated.addListener(onNew);
+  chrome.tabs.onReplaced.addListener(onSwap);
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
     let robotDone = false; const fixedHosts = new Map(); const trail = [];
     for (let hop = 0; hop < 10; hop++) {
-      await waitForSite(cur, 45000, !other);
+      await waitForSite(() => cur, 45000, !other);
       try { const u = new URL((await chrome.tabs.get(cur)).url), d = u.searchParams.get("checkin") || u.searchParams.get("chkin") || u.searchParams.get("startDate") || u.searchParams.get("checkIn"); trail.push(u.hostname + u.pathname.slice(0, 40) + (d ? " (" + d + ")" : "")); } catch {}
       { // switch to ₹ + the trip's dates once per site (not on the ad-redirect pages in between)
         const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "";
@@ -450,6 +457,7 @@ async function checkOne(job, windowId) {
     return { error: "The site kept redirecting" };
   } finally {
     chrome.tabs.onCreated.removeListener(onNew);
+    chrome.tabs.onReplaced.removeListener(onSwap);
     chrome.tabs.remove([tab.id, ...opened, cur].filter((v, i, a) => a.indexOf(v) === i)).catch(() => {});
   }
 }
