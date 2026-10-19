@@ -20,12 +20,13 @@ function inrUrl(u, job) {
       if (!ci && !q.get("checkin")) return u;                     // no dates known → don't reload (would lose them)
       q.set("selected_currency", "INR");
       if (ci) { q.set("checkin", ci); q.set("checkout", co); if (ad) q.set("group_adults", String(ad)); if (rm) q.set("no_rooms", String(rm)); if (!q.get("group_children")) q.set("group_children", "0"); }
-    } else if (INDIA_SITES.expedia && /^(www\.)?expedia\.(com|co\.uk|ca|com\.au|com\.sg|ae)$/i.test(h)) {
-      x.hostname = "www.expedia.co.in";
-    } else if (INDIA_SITES.hotels && /^(www\.)?hotels\.com$/i.test(h)) {
-      x.hostname = "in.hotels.com";
+    } else if (INDIA_SITES.expedia && /(^|\.)expedia\.[a-z.]+$/i.test(h) && !/^www\.expedia\.co\.in$/i.test(h)) {
+      x.hostname = "www.expedia.co.in"; q.delete("currency");          // any country's Expedia → the Indian site (₹)
+    } else if (INDIA_SITES.hotels && /(^|\.)hotels\.com$/i.test(h) && !/^in\.hotels\.com$/i.test(h)) {
+      x.hostname = "in.hotels.com"; q.delete("currency"); q.delete("locale"); q.delete("pos"); q.delete("siteid");   // uk./au./www.hotels.com → India site (₹)
     }
     if (ci && /expedia\.co\.in$|hotels\.com$/i.test(x.hostname) && /Hotel-Information|\/ho\d+/i.test(x.pathname) && !q.get("chkin")) { q.set("chkin", ci); q.set("chkout", co); }
+    if (ci && /expedia\.co\.in$|hotels\.com$/i.test(x.hostname) && /Hotel-Search/i.test(x.pathname)) { q.set("startDate", ci); q.set("endDate", co); if (ad) q.set("adults", String(ad)); }
     return x.href === before ? u : x.href;
   } catch {}
   return u;
@@ -144,6 +145,9 @@ async function readSitePrice(site, nights, adults, hotelName) {
         // list of hotels → open THIS hotel's own page.
         // The hotel Google linked to is pinned at the top under "Continue with your booking".
         const links = [...document.querySelectorAll(HOTEL_LINK)].filter(isHotelLink);
+        let selId = ""; try { selId = new URL(location.href).searchParams.get("selected") || ""; } catch {}
+        const exact = selId && links.find(a => new RegExp("\\.h" + selId + "\\.|[?&]selected=" + selId + "\\b|/ho" + selId + "/").test(a.getAttribute("href") || ""));
+        if (exact) return { go: exact.href };
         const pin = [...document.querySelectorAll("h2,h3,div,span")].find(e => /^continue with your booking/i.test((e.innerText || "").trim()) && (e.innerText || "").length < 60);
         if (pin) {
           const after = links.find(a => pin.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -303,7 +307,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
   return r;
 }
 
-async function waitForSite(tabId, ms) {
+async function waitForSite(tabId, ms, known) {
   // Ready when the tab is on the booking site AND (finished loading OR has been there 6 s).
   // Some sites (Expedia) never report "finished" because adverts keep loading.
   // If Google's redirect page stays on screen, follow its link to the booking site ourselves.
@@ -313,7 +317,7 @@ async function waitForSite(tabId, ms) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
     if (!t) throw new Error("Tab closed");
     try { host = new URL(t.url || t.pendingUrl || "").hostname; } catch { host = ""; }
-    if (onSite(host)) {
+    if (known ? ALLOWED.test(host) : onSite(host)) {
       if (!onSiteSince) onSiteSince = Date.now();
       if (t.status === "complete" || Date.now() - onSiteSince > 6000) return;
     } else {
@@ -376,13 +380,17 @@ async function checkOne(job, windowId) {
   chrome.tabs.onCreated.addListener(onNew);
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
-    let robotDone = false, inrDone = false;
+    let robotDone = false; const fixedHosts = new Set();
     for (let hop = 0; hop < 10; hop++) {
-      await waitForSite(cur, 45000);
-      if (!inrDone) {
-        inrDone = true;
-        const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "", fixed = inrUrl(now, job);
-        if (fixed !== now) { await chrome.tabs.update(cur, { url: fixed }); await sleep(1500); continue; }
+      await waitForSite(cur, 45000, !other);
+      { // switch to ₹ + the trip's dates once per site (not on the ad-redirect pages in between)
+        const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "";
+        let host = ""; try { host = new URL(now).hostname; } catch {}
+        if (host && ALLOWED.test(host) && !fixedHosts.has(host)) {
+          fixedHosts.add(host);
+          const fixed = inrUrl(now, job);
+          if (fixed !== now) { fixedHosts.add(new URL(fixed).hostname); await chrome.tabs.update(cur, { url: fixed }); await sleep(1500); continue; }
+        }
       }
       await sleep(2000);
       let r;
