@@ -11,6 +11,8 @@ WHAT IT DOES
     ROBOT TESTS: Expedia / Hotels.com sometimes show "Bot or Not?". Then the checker window comes to the front,
     a Windows pop-up says "Expedia needs you" – press & hold / tick the check yourself. As soon as it's gone the
     price is read automatically. If you don't do it within 3 minutes, that row says "use View deal".)
+   OTHER CURRENCIES: if a site shows $ / € / AUD etc., the price is converted to ₹ with today's rate (the row says so).
+   For the most accurate prices set the currency to INR once on expedia.co.in, hotels.com and booking.com.
    If a site can't be read, that row says "Couldn't … — use View deal". Click the ₹ icon → "Recent auto-checks"
    shows what the page said – send a screenshot of that so the reader can be fixed.
 

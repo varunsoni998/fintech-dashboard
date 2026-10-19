@@ -25,9 +25,20 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 //    (further down the page shows OTHER hotels' totals → only the "Choose your room" section counts)
 //  • Expedia search page (Google sometimes links here): find THIS hotel's card and open its page
 async function readSitePrice(site, nights, adults, hotelName) {
+  // which currency is the page in? (the token most often written right before a number)
+  const pageCurrency = () => {
+    const norm = { "₹": "INR", "RS": "INR", "RS.": "INR", "INR": "INR", "US$": "USD", "USD": "USD", "$": "USD", "A$": "AUD", "AUD": "AUD", "S$": "SGD", "SGD": "SGD",
+      "AED": "AED", "€": "EUR", "EUR": "EUR", "£": "GBP", "GBP": "GBP", "฿": "THB", "THB": "THB" };
+    const counts = {};
+    for (const m of (document.body?.innerText || "").matchAll(/(₹|Rs\.?|INR|US\$|USD|A\$|AUD|S\$|SGD|AED|€|EUR|£|GBP|฿|THB|\$)\s?\d/g)) {
+      const c = norm[m[1].toUpperCase()] || "INR"; counts[c] = (counts[c] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "INR";
+  };
+  const core = async () => {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const num = (s) => parseFloat(String(s).replace(/,/g, ""));
-  const R = "(?:₹|Rs\\.?|INR)\\s?";
+  const R = "(?:₹|Rs\\.?|INR|US\\$|USD|A\\$|AUD|S\\$|SGD|AED|€|EUR|£|GBP|฿|THB|\\$)\\s?";   // any currency; converted to ₹ in Price Compare
   const AMT = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)";
   const rx = (s) => new RegExp(s, "gi");
   const clean = (s) => (s || "").replace(/[   ]/g, " ");
@@ -93,11 +104,6 @@ async function readSitePrice(site, nights, adults, hotelName) {
         }
       }
     } else if (site === "Booking.com") {
-      // page not in rupees (e.g. AUD/€) → say so instead of scrolling for ever
-      if (t >= 4 && !/₹|Rs\.?\s?\d|INR\s?\d/.test(txt)) {
-        const cur = (txt.match(/(A\$|AUD|US\$|USD|€|EUR|£|GBP|AED|SGD|S\$|THB|฿)\s?\d[\d,]*/) || [])[1];
-        if (cur) return { error: `Booking.com is showing prices in ${cur}, not ₹ — set the currency on Booking.com to INR (top of the site) once, then Re-check`, debug: txt.slice(0, 300) };
-      }
       const rows = [...document.querySelectorAll("#hprt-table tbody tr, table.hprt-table tbody tr")];
       if (rows.length) {
         let room = ""; const found = [];
@@ -105,8 +111,8 @@ async function readSitePrice(site, nights, adults, hotelName) {
           const rn = r.querySelector(".hprt-roomtype-link, .hprt-roomtype-icon-link, [data-room-name]");
           if (rn) room = clean(rn.getAttribute("data-room-name") || rn.innerText).trim().split("\n")[0];
           const rt = clean(r.innerText);
-          const p = [...rt.matchAll(rx(R + AMT + "[^₹]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
-          const inc = !p && [...rt.matchAll(rx(R + AMT + "[^₹]{0,40}?includes taxes and (?:charges|fees)"))][0];
+          const p = [...rt.matchAll(rx(R + AMT + "[^₹$€£]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
+          const inc = !p && [...rt.matchAll(rx(R + AMT + "[^₹$€£]{0,40}?includes taxes and (?:charges|fees)"))][0];
           const total = p ? num(p[1]) + num(p[2]) : inc ? num(inc[1]) : 0;
           if (!total) continue;
           const g = rt.match(/Guests?:\s*(\d+)\s*adult/i) || rt.match(/Max(?:imum)? (?:people|persons|guests):?\s*(\d+)/i);
@@ -118,8 +124,8 @@ async function readSitePrice(site, nights, adults, hotelName) {
         if (c) return { total: Math.round(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
       // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
-      const top = [...txt.matchAll(rx(R + AMT + "[^₹]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0]
-        || [...txt.matchAll(rx(R + AMT + "[^₹]{0,40}?includes taxes and (?:charges|fees)"))][0];
+      const top = [...txt.matchAll(rx(R + AMT + "[^₹$€£]{0,60}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0]
+        || [...txt.matchAll(rx(R + AMT + "[^₹$€£]{0,40}?includes taxes and (?:charges|fees)"))][0];
       if (top && t >= 3) return { total: Math.round(num(top[1]) + (top[2] ? num(top[2]) : 0)), room: "", url: location.href, note: "price shown at the top of the page" };
       // checkout page: "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
       const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
@@ -149,6 +155,10 @@ async function readSitePrice(site, nights, adults, hotelName) {
     await sleep(1000);
   }
   return { error: "Couldn't find the price on the page", debug: snippet.replace(/\s+/g, " ").slice(0, 500) };
+  };
+  const r = await core();
+  if (r && r.total) r.currency = pageCurrency();
+  return r;
 }
 
 async function waitForSite(tabId, ms) {

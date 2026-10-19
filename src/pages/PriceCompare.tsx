@@ -169,7 +169,8 @@ export default function PriceCompare() {
   const [checks, setChecks] = useState<Record<string, string>>({});   // "hid|site" → "checking" | "ok" | error text
   const onCheckMsg = useRef<(m: any) => void>(() => {});
   const afterFetch = useRef<(c: City, h: Hotel) => void>(() => {});
-  const lastAck = useRef(0);              // last time the extension confirmed it received a check
+  const lastAck = useRef(0);
+  const fx = useRef<Record<string, number>>({});   // ₹ per 1 unit, for prices a site showed in another currency              // last time the extension confirmed it received a check
   // automatic exact prices: ON by default (switch at the top)
   const [autoOn, setAutoOn] = useState<boolean>(() => { try { return localStorage.getItem("pc:auto") !== "off"; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem("pc:auto", autoOn ? "on" : "off"); } catch { /* */ } }, [autoOn]);
@@ -371,7 +372,19 @@ export default function PriceCompare() {
     if (m.type === "PC_CHECK_STARTED") setChecks(o => ({ ...o, [k]: "checking" }));
     if (m.type === "PC_CHECK_RESULT") {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
-      if (m.result?.total > 0 && city && hotel) { applyConfirm(city, hotel, j.source, m.result.total * (j.mult || 1), true, m.result.room || ""); setChecks(o => ({ ...o, [k]: "ok" })); }
+      if (m.result?.total > 0 && city && hotel) {
+        const cur = (m.result.currency || "INR").toUpperCase(), amount = m.result.total * (j.mult || 1);
+        const save = (rate: number) => {
+          const note = cur !== "INR" ? `${m.result.room ? m.result.room + " · " : ""}site showed ${cur} ${Math.round(amount).toLocaleString("en-IN")}, converted at ₹${rate.toFixed(2)}` : (m.result.room || "");
+          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, note);
+          setChecks(o => ({ ...o, [k]: "ok" }));
+        };
+        if (cur === "INR") save(1);
+        else if (fx.current[cur]) save(fx.current[cur]);
+        else if (cur === trip.currency && roe) save(roe);
+        else authFetch(`/roe?ccy=${cur}`).then(r => r.json()).then(r => { fx.current[cur] = r.roe; save(r.roe); })
+          .catch(() => setChecks(o => ({ ...o, [k]: `The site showed ${cur} and the exchange rate couldn't be fetched` })));
+      }
       else setChecks(o => ({ ...o, [k]: m.result?.error || "Couldn't read the price" }));
     }
     if (m.type === "PC_CHECK_DONE") setMsg(o => (o?.text.startsWith("⚡") ? { kind: "ok", text: "⚡ Exact prices updated from the websites." } : o));
