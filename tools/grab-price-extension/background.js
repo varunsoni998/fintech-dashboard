@@ -23,8 +23,9 @@ function inrUrl(u, job) {
     } else if (INDIA_SITES.expedia && /(^|\.)expedia\.[a-z.]+$/i.test(h) && !/^www\.expedia\.co\.in$/i.test(h)) {
       x.hostname = "www.expedia.co.in"; q.delete("currency");          // any country's Expedia → the Indian site (₹)
     } else if (INDIA_SITES.hotels && /(^|\.)hotels\.com$/i.test(h) && !/^in\.hotels\.com$/i.test(h)) {
-      x.hostname = "in.hotels.com"; q.delete("currency"); q.delete("locale"); q.delete("pos"); q.delete("siteid");   // uk./au./www.hotels.com → India site (₹)
+      x.hostname = "in.hotels.com"; q.delete("currency"); q.delete("pos");   // uk./au./www.hotels.com → India site (₹)
     }
+    if (/^in\.hotels\.com$/i.test(x.hostname)) { q.set("locale", "en_IN"); q.set("siteid", "300000036"); }
     if (ci && /expedia\.co\.in$|hotels\.com$/i.test(x.hostname) && /Hotel-Information|\/ho\d+/i.test(x.pathname) && !q.get("chkin")) { q.set("chkin", ci); q.set("chkout", co); }
     if (ci && /expedia\.co\.in$|hotels\.com$/i.test(x.hostname) && /Hotel-Search/i.test(x.pathname)) { q.set("startDate", ci); q.set("endDate", co); if (ad) q.set("adults", String(ad)); }
     return x.href === before ? u : x.href;
@@ -94,10 +95,11 @@ async function readSitePrice(site, nights, adults, hotelName) {
   const cheapest = (list) => list.filter(x => x.total > 100).sort((a, b) => a.total - b.total)[0];
   let snippet = "", clicked = false;
   const inrLink = (u) => { try { const x = new URL(u); if (/agoda\.com$/i.test(x.hostname)) x.searchParams.set("currency", "INR"); return x.href; } catch { return u; } };
+  const label = (b) => clean(b.innerText || b.value || "").trim().split(/\n/).map(x => x.trim()).filter(Boolean)[0] || "";
   const ss = { get: (k) => { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
   // press the booking button of the cheapest room (this only opens the site's checkout / booking form – nothing is booked)
   const pressCheapest = async (scope, btnRx, room) => {
-    const btns = [...scope.querySelectorAll("button, a, [role='button']")].filter(b => btnRx.test(clean(b.innerText).trim()) && b.offsetParent !== null);
+    const btns = [...scope.querySelectorAll("button, a, [role='button']")].filter(b => btnRx.test(label(b)) && b.getClientRects().length > 0);
     const priced = btns.map(b => {
       let c = b, amt = 0;
       for (let k = 0; k < 8 && c; k++, c = c.parentElement) {
@@ -127,15 +129,18 @@ async function readSitePrice(site, nights, adults, hotelName) {
       // a "how would you like to pay?" box after pressing Reserve → take the first option
       if (ss.get("pcPressed")) {
         const shown = (e) => e.getClientRects().length > 0;
-        const dlg = [...document.querySelectorAll("[role='dialog'], dialog, [class*='sheet'], [class*='Dialog'], [data-stid*='dialog']")].find(d => shown(d) && /pay now|pay at property|pay when you stay|pay later/i.test(d.innerText || ""));
+        // the smallest visible box that offers the payment choices
+        const dlg = [...document.querySelectorAll("[role='dialog'], dialog, [class*='sheet'], [class*='Dialog'], [data-stid*='dialog']")]
+          .filter(d => shown(d) && [...d.querySelectorAll("button, a")].some(b => /^(pay now|pay at property|pay later)$/i.test(label(b))))
+          .sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0];
         if (dlg && !clicked) {
-          const opts = [...dlg.querySelectorAll("button, a")].filter(b => /^(pay now|pay at property|pay later|reserve|continue)$/i.test(clean(b.innerText).trim())).map(b => {
+          const opts = [...dlg.querySelectorAll("button, a")].filter(b => /^(pay now|pay at property|pay later)$/i.test(label(b))).map(b => {
             let c = b, amt = 0;
             for (let k = 0; k < 7 && c && c !== dlg; k++, c = c.parentElement) { const m = clean(c.innerText).match(new RegExp(R + AMT + "\\s*total", "i")); if (m) { amt = num(m[1]); break; } }
             return { b, amt };
           });
           const pick = opts.filter(o => o.amt).sort((x, y) => x.amt - y.amt)[0] || opts[0];
-          if (pick) { clicked = true; ss.set("pcPay", clean(pick.b.innerText).trim()); pick.b.click(); return { wait: true }; }
+          if (pick) { clicked = true; ss.set("pcPay", label(pick.b)); pick.b.click(); return { wait: true }; }
         }
       }
       const HOTEL_LINK = 'a[href*="Hotel-Information"], a[href*="/ho"]';
@@ -179,8 +184,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
           // the room list's "total" leaves out resort fees → open the checkout of the cheapest room to see the full total
           const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
           if (c && !clicked && pressedAgo > 60000) {
-            const roomsEl = [...document.querySelectorAll("section, div")].find(e => /^choose your room/i.test(clean(e.innerText).trim()) && (e.innerText || "").length > 400 && (e.innerText || "").length < 60000) || document.body;
-            if (await pressCheapest(roomsEl, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }
+            if (await pressCheapest(document.body, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }
           }
           // couldn't reach the checkout → room-list total (resort fee may be extra)
           if (c && ((pressedAgo < 60000 && t >= 12) || (pressedAgo >= 60000 && t >= 6))) return { total: cents(c.total), room: c.room, free: !!c.free, options: found.length, url: location.href };
@@ -210,7 +214,15 @@ async function readSitePrice(site, nights, adults, hotelName) {
         if (c) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
       // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
-      // checkout page: "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
+      // checkout page (Google often links straight here): "Total ₹ 67,467.66 Includes taxes and charges"
+      if (/^secure\./i.test(location.hostname) || /book\.html/i.test(location.pathname)) {
+        const tm = [...txt.matchAll(rx("(?:^|\\n)\\s*Total\\s*\\n?\\s*" + R + AMT))].pop();
+        if (tm && num(tm[1]) > 100) {
+          const rm = txt.match(/\n\s*([^\n]{3,70})\n\s*(?:Partially refundable|Free cancellation|Non-refundable|Fully refundable)/i);
+          return { total: cents(num(tm[1])), room: rm ? rm[1].trim() : "", url: location.href, allRooms: true, free: /Free cancellation/i.test(txt) };
+        }
+      }
+      // checkout page (older layout): "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
       const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
       if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: cents(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href, allRooms: true }; }
     } else if (site === "MakeMyTrip") {
@@ -380,17 +392,17 @@ async function checkOne(job, windowId) {
   chrome.tabs.onCreated.addListener(onNew);
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
-    let robotDone = false; const fixedHosts = new Set(); const trail = [];
+    let robotDone = false; const fixedHosts = new Map(); const trail = [];
     for (let hop = 0; hop < 10; hop++) {
       await waitForSite(cur, 45000, !other);
       try { const u = new URL((await chrome.tabs.get(cur)).url), d = u.searchParams.get("checkin") || u.searchParams.get("chkin") || u.searchParams.get("startDate") || u.searchParams.get("checkIn"); trail.push(u.hostname + u.pathname.slice(0, 40) + (d ? " (" + d + ")" : "")); } catch {}
       { // switch to ₹ + the trip's dates once per site (not on the ad-redirect pages in between)
         const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "";
         let host = ""; try { host = new URL(now).hostname; } catch {}
-        if (host && ALLOWED.test(host) && !fixedHosts.has(host)) {
-          fixedHosts.add(host);
+        if (host && ALLOWED.test(host) && (fixedHosts.get(host) || 0) < 2) {
+          fixedHosts.set(host, (fixedHosts.get(host) || 0) + 1);
           const fixed = inrUrl(now, job);
-          if (fixed !== now) { fixedHosts.add(new URL(fixed).hostname); await chrome.tabs.update(cur, { url: fixed }); await sleep(1500); continue; }
+          if (fixed !== now) { await chrome.tabs.update(cur, { url: fixed }); await sleep(1500); continue; }
         }
       }
       await sleep(2000);
