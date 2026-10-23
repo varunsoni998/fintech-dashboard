@@ -303,10 +303,13 @@ async function readSitePrice(site, nights, adults, hotelName, strict) {
           ss.set("pcPressed", "0"); history.back();
           return { wait: true };
         }
-        const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(?:Total price|Price)\\s*\\n?\\s*" + R + AMT))].pop();
+        // "Price  Rs. 25,716.37" – also "Price ⓘ(tooltip) Rs. …", "Total", "Pay at the hotel  Rs. …" (pay-at-hotel rates);
+        // never "Price Before Taxes", "Original price", "Room price" or "You pay Rs.0 today"
+        const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(Total price|Total|Price|Pay at (?:the )?(?:hotel|property)|Total (?:due|payable)[^\\n0-9]{0,25})[^\\n0-9]{0,35}?\\s*(?:tooltip\\s*)?\\n?\\s*(?:tooltip\\s*\\n?\\s*)?" + R + AMT))]
+          .filter(x => !/before|original|room price|discount|saved|coupon|today/i.test(x[0]) && num(x[2]) > 100).pop();
         if (m) {
           let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
-          return { total: cents(num(m[1])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancellation/i.test(txt) && !/non-refundable/i.test(txt) };
+          return { total: cents(num(m[2])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancellation/i.test(txt) && !/non-refundable/i.test(txt) };
         }
       } else if (/\/search/i.test(location.pathname)) {
         // search results (Google sometimes links here): the card for this hotel ("selectedproperty") → its own page
