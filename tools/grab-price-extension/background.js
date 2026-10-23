@@ -76,7 +76,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 //  • Expedia / Hotels.com hotel page: "Choose your room" section, each room "View all photos for <room> … ₹146,910 total"
 //    (further down the page shows OTHER hotels' totals → only the "Choose your room" section counts)
 //  • Expedia search page (Google sometimes links here): find THIS hotel's card and open its page
-async function readSitePrice(site, nights, adults, hotelName) {
+async function readSitePrice(site, nights, adults, hotelName, strict) {
   // which currency is the page in? (the token most often written right before a number)
   const pageCurrency = () => {
     const norm = { "₹": "INR", "RS": "INR", "RS.": "INR", "INR": "INR", "US$": "USD", "USD": "USD", "$": "USD", "A$": "AUD", "AUD": "AUD", "S$": "SGD", "SGD": "SGD",
@@ -97,10 +97,22 @@ async function readSitePrice(site, nights, adults, hotelName) {
   const clean = (s) => (s || "").replace(/[   ]/g, " ");
   const STOP = ["hotel", "hotels", "the", "and", "resort", "by", "a", "an", "of", "at", "in"];
   const words = (s) => clean(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !STOP.includes(w));
+  // words match if equal, or (for longer words) differ by one letter – "Swenska" = "Svenska"
+  const near = (x, y) => {
+    if (x === y) return true;
+    if (Math.min(x.length, y.length) < 5 || Math.abs(x.length - y.length) > 1) return false;
+    let i = 0, j = 0, d = 0;
+    while (i < x.length && j < y.length) {
+      if (x[i] === y[j]) { i++; j++; continue; }
+      if (++d > 1) return false;
+      if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; }
+    }
+    return d + (x.length - i) + (y.length - j) <= 1;
+  };
   const overlap = (a, b) => {
-    const A = words(a), B = new Set(words(b));
+    const A = words(a), B = words(b);
     if (!A.length) return clean(b).toLowerCase().includes(clean(a).toLowerCase().trim()) ? 1 : 0;
-    return A.filter(w => B.has(w)).length / A.length;
+    return A.filter(w => B.some(v => near(w, v))).length / A.length;
   };
   adults = adults || 2;
   const cheapest = (list) => list.filter(x => x.total > 100).sort((a, b) => a.total - b.total)[0];
@@ -169,16 +181,23 @@ async function readSitePrice(site, nights, adults, hotelName) {
           const after = links.find(a => pin.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
           if (after) return { go: after.href };
         }
+        // match the hotel by the card's TITLE (not any text on the card) – strictly, so a different hotel is never picked
         let best = null, bs = 0;
         for (const a of links) {
           const card = a.closest("[data-stid*='lodging-card'], li, article, [data-stid='property-listing']") || a;
-          const label = (a.getAttribute("aria-label") || "") + " " + (card.innerText || "").slice(0, 160);
-          const s2 = overlap(hotelName, label);
+          const title = clean((card.querySelector("h3, h2, [data-stid='content-hotel-title']") || {}).innerText || a.getAttribute("aria-label") || "").split("\n")[0];
+          const s2 = overlap(hotelName, title);
           if (s2 > bs) { bs = s2; best = a; }
         }
-        if (best && bs >= 0.5) return { go: best.href };
+        const need = words(hotelName).length <= 2 ? 1 : 0.75;
+        if (best && bs >= need) return { go: best.href };
         if (t > 10) return { error: "The site showed a list of hotels and this hotel wasn't in it", debug: txt.slice(0, 300) };
       } else {
+        if (strict && hotelName) {
+          const h1 = clean((document.querySelector("h1") || {}).innerText || "");
+          const need = words(hotelName).length <= 2 ? 1 : 0.75;
+          if (h1 && overlap(hotelName, h1) < need) return { error: `${site} showed a different hotel (${h1.slice(0, 60)}) — use View deal` };
+        }
         // the room list: Expedia marks it "section-room-list"; heading is "Choose your room" or, for apartments, "Choose your unit"
         const listEl = document.querySelector("[data-stid='section-room-list']");
         const start = listEl ? 0 : txt.search(/Choose your (?:room|unit|apartment|villa)s?|Select a room|Room options/i);
@@ -209,7 +228,8 @@ async function readSitePrice(site, nights, adults, hotelName) {
       const cards = [...document.querySelectorAll("[data-testid='property-card']")];
       const scored = cards.map(c => ({ c, s: overlap(hotelName, (c.querySelector("[data-testid='title']") || c).textContent || "") })).sort((x, y) => y.s - x.s);
       let destHotel = false; try { destHotel = new URL(location.href).searchParams.get("dest_type") === "hotel"; } catch {}
-      const best = (scored[0] && scored[0].s >= 0.5) ? scored[0].c : (destHotel && cards[0]) || null;
+      const needB = words(hotelName).length <= 2 ? 1 : 0.75;
+      const best = (scored[0] && scored[0].s >= needB) ? scored[0].c : (destHotel && !strict && cards[0]) || null;
       const a = best && best.querySelector("a[data-testid='title-link'], a[href*='/hotel/']");
       if (a) {
         const to = new URL(a.href, location.href), from = new URL(location.href).searchParams;
@@ -293,7 +313,7 @@ async function readSitePrice(site, nights, adults, hotelName) {
         const cards = [...document.querySelectorAll("[data-selenium='hotel-item']")];
         let sel = ""; try { sel = new URL(location.href).searchParams.get("selectedproperty") || ""; } catch {}
         const card = (sel && cards.find(c => c.getAttribute("data-hotelid") === sel))
-          || cards.map(c => ({ c, s: overlap(hotelName, (c.querySelector("[data-selenium='hotel-name']") || c).textContent || "") })).sort((a, b) => b.s - a.s).find(x => x.s >= 0.5)?.c;
+          || cards.map(c => ({ c, s: overlap(hotelName, (c.querySelector("[data-selenium='hotel-name']") || c).textContent || "") })).sort((a, b) => b.s - a.s).find(x => x.s >= (words(hotelName).length <= 2 ? 1 : 0.75))?.c;
         const a = card && [...card.querySelectorAll("a[href]")].find(x => /propertyId=|\/hotel\//i.test(x.getAttribute("href") || ""));
         if (a) return { go: inrLink(new URL(a.getAttribute("href"), location.href).href) };
         if (t > 12 && cards.length) return { error: "Agoda showed a list of hotels and this hotel wasn't in it", debug: txt.slice(0, 300) };
@@ -480,7 +500,7 @@ async function checkOne(job, windowId) {
       await sleep(2000);
       let r;
       try {
-        const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: other }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || ""] });
+        const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: other }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || "", usedDirect] });
         const rs = res.map(x => x?.result).filter(Boolean);
         r = rs.find(x => x.total) || rs.find(x => x.robot || x.go || x.wait) || res[0]?.result;
       } catch (e) { await sleep(2000); continue; }             // the page changed while reading → try again

@@ -412,6 +412,11 @@ export default function PriceCompare() {
         const fmt = (c: string, n: number) => `${c === "INR" ? "₹" : c + " "}${Math.round(n).toLocaleString("en-IN")}`;
         if (v && v.page === "robot check") return fail("The site showed a robot check");
         const badDates = v && v.found && ((v.check_in && j.checkIn && v.check_in !== j.checkIn) || (v.check_out && j.checkOut && v.check_out !== j.checkOut) || (v.nights && j.nights && +v.nights !== +j.nights));
+        // the hotel on screen must be ours (e.g. not "Fairmont Mumbai" when we asked for Swenska Design Hotel)
+        const nameWords = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !["hotel", "hotels", "the", "and", "resort", "resorts", "by", "a", "an", "of", "at", "in", "spa", "&"].includes(w));
+        const want = nameWords(j.hotel || hotel.name), seen = new Set(nameWords(String(v?.hotel_name || "")));
+        if (v && v.found && v.hotel_name && want.length && want.filter(w => seen.has(w)).length / want.length < 0.5)
+          return fail(`Check manually — the site showed ${v.hotel_name}, not ${j.hotel || hotel.name}`);
         if (badDates) return fail(`Check manually — the site showed ${v.check_in || "?"} → ${v.check_out || "?"}${v.nights ? ` (${v.nights} nights)` : ""}, not your dates`);
         const visOk = !!(v && v.found && v.total > 0 && v.confidence !== "low");
         let total = 0, cur = "INR", room = "", allRooms = !!res.allRooms;
