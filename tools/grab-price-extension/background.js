@@ -362,7 +362,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
         // and a "Book" button whose label names the room ("Book Deluxe Palm View Double Room Offer 1").
         // show EVERY offer once: the room list draws itself as you move down it, and each room hides offers behind "Show N more offers"
         const grid0 = document.querySelector("#roomGridContent, [data-element-name='room-grid'], #roomSection");
-        const anyOffer = document.querySelector("[data-testid='room-offer'], [data-element-name='mob-room-offer']");
+        const anyOffer = document.querySelector("[data-testid='room-offer'], [data-element-name='mob-room-offer']") || [...document.querySelectorAll("button")].find(b => /^book$/i.test(label(b)));
         if (grid0 && anyOffer && !window.__pcExpanded) {
           window.__pcExpanded = true;
           grid0.scrollIntoView({ block: "start" }); await sleep(800);
@@ -374,7 +374,13 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
           }
           grid0.scrollIntoView({ block: "start" }); await sleep(600);
         }
-        const offers0 = [...document.querySelectorAll("[data-testid='room-offer'], [data-element-name='mob-room-offer'], [data-selenium='ChildRoomsList-room']")].filter(o => o.getClientRects().length > 0).map(o => {
+        // offer boxes; on other Agoda layouts (e.g. /accom/property) fall back to: each visible "Book" button + the box around it that shows "per night"
+        let boxes = [...document.querySelectorAll("[data-testid='room-offer'], [data-element-name='mob-room-offer'], [data-selenium='ChildRoomsList-room']")].filter(o => o.getClientRects().length > 0);
+        if (!boxes.length) boxes = [...document.querySelectorAll("button, a, [role='button']")].filter(b => b.getClientRects().length && (/^book( now)?$/i.test(label(b)) || /^Book /i.test(b.getAttribute("aria-label") || ""))).map(b => {
+          let e = b; for (let k = 0; k < 9 && e; k++, e = e.parentElement) if (/per night|\/ ?night|per room/i.test(e.innerText || "") && new RegExp(R + AMT).test(clean(e.innerText))) return e;
+          return null;
+        }).filter((e, i, arr) => e && arr.indexOf(e) === i);
+        const offers0 = boxes.map(o => {
           const ot = clean(o.innerText);
           const pm = ot.match(new RegExp(R + AMT + "\\s*(?:Per night|per room per night|/ night)", "i"));
           const b = o.querySelector("button[data-element-name*='book' i], [data-testid='book-button'] button, button[aria-label^='Book' i]")
