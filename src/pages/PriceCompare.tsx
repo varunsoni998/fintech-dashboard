@@ -37,21 +37,22 @@ interface Hotel {
 }
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
-interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string; summary?: string; full?: string }
-const cxlLine = (c?: Cxl) => {
+interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string; summary?: string; full?: string; pct?: number; noshow?: string }
+// cancellation in numbers only: dates, amounts, percentages
+const cxlLine = (c?: Cxl, total?: number) => {
   if (!c) return "";
-  if (c.summary) return c.summary;                         // one complete line from the screenshot reading
+  if (c.summary) return c.summary;
   const d = (iso?: string) => { if (!iso) return ""; const x = new Date(iso + "T00:00:00"); return isNaN(+x) ? iso : x.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); };
-  const fee = c.fee ? `${!c.feeCcy || c.feeCcy === "INR" ? "₹" : c.feeCcy + " "}${Math.round(c.fee).toLocaleString("en-IN")}` : "";
-  if (c.kind === "non-refundable") return "Non-refundable";
+  const amt = (n?: number, ccy?: string) => n ? `${!ccy || ccy === "INR" ? "₹" : ccy + " "}${Math.round(n).toLocaleString("en-IN")}` : "";
+  if (c.kind === "non-refundable") return `Non-refundable · 100% charged${total ? ` (${amt(total)})` : ""}`;
   const parts: string[] = [];
-  if (c.kind === "free" || c.until) parts.push(c.until ? `Free cancellation till ${d(c.until)}` : "Free cancellation");
-  else if (c.kind === "partial") parts.push("Partially refundable");
-  if (fee) parts.push(`then fee ${fee}${c.feeFrom ? ` from ${d(c.feeFrom)}` : ""}${c.note ? ` (${c.note})` : ""}`);
-  else if (c.feeFrom && c.kind !== "free") parts.push(`fee applies from ${d(c.feeFrom)}`);
-  return parts.length ? parts.join(" · ") : (c.text || "");
+  if (c.until) parts.push(`Free till ${d(c.until)}`); else if (c.kind === "free") parts.push("Free cancellation");
+  const fee = c.fee ? amt(c.fee, c.feeCcy) : c.pct && total ? amt(total * c.pct / 100) : "";
+  if (fee || c.pct) parts.push(`${c.until ? "after: " : ""}${c.pct ? `${c.pct}% ` : ""}fee${fee ? ` ${fee}` : ""}${c.feeFrom && !c.until ? ` from ${d(c.feeFrom)}` : ""}${c.note ? ` (${c.note})` : ""}`);
+  if (c.noshow) parts.push(`no-show: ${c.noshow}`);
+  return parts.length ? parts.join(" · ") : c.kind === "partial" ? "Partially refundable" : "";
 };
-const cxlShort = (c?: Cxl) => !c ? "" : c.summary ? c.summary : c.kind === "non-refundable" ? "NRF" : c.until ? `Free cxl till ${c.until}${c.fee ? `, then ${Math.round(c.fee)}` : ""}` : c.kind === "free" ? "Free cxl" : c.fee ? `Cxl fee ${Math.round(c.fee)}` : (c.text || "");
+const cxlShort = (c?: Cxl, total?: number) => !c ? "" : c.summary ? c.summary : c.kind === "non-refundable" ? cxlLine(c, total) : c.until ? `Free cxl till ${c.until}${c.fee ? `, then ${Math.round(c.fee)}` : ""}` : c.kind === "free" ? "Free cxl" : c.fee ? `Cxl fee ${Math.round(c.fee)}` : (c.text || "");
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
 interface Room { adults: number; ages: number[] }
 interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight?: boolean; cities: City[] }
@@ -434,7 +435,7 @@ export default function PriceCompare() {
         // cancellation terms: the screenshot reading (structured) first, else the words found on the page
         const txt = String(res.policyText || res.cxlText || "");
         const cxl: Cxl | undefined = visOk && (v.cxl_type || v.free_until || v.cxl_fee || v.cancellation)
-          ? { kind: v.cxl_type || undefined, until: v.free_until || undefined, fee: v.cxl_fee || undefined, feeCcy: v.cxl_fee_currency || undefined, feeFrom: v.cxl_fee_from || undefined, note: v.cxl_fee_note || undefined, text: v.cancellation || txt || undefined, summary: v.cxl_summary || undefined, full: res.policyText || undefined }
+          ? { kind: v.cxl_type || undefined, until: v.free_until || undefined, fee: v.cxl_fee || undefined, feeCcy: v.cxl_fee_currency || undefined, feeFrom: v.cxl_fee_from || undefined, note: v.cxl_fee_note || undefined, text: v.cancellation || txt || undefined, summary: v.cxl_summary || undefined, full: res.policyText || undefined, pct: v.cxl_fee_percent || undefined, noshow: v.noshow || undefined }
           : txt ? { kind: /non-?refundable/i.test(txt) && !/free|fully refundable/i.test(txt) ? "non-refundable" : /free cancell?ation|fully refundable|cancel for free/i.test(txt) ? "free" : /partially/i.test(txt) ? "partial" : undefined, text: txt.split("\n").slice(0, 3).join(" · "), full: res.policyText || undefined } : undefined;
         const save = (rate: number) => {
           applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, room, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined, cxl);
@@ -504,7 +505,7 @@ export default function PriceCompare() {
         const online = [...ds.filter(d => !d.mine && d.confirmed), ...ds.filter(d => !d.mine && !d.confirmed)];
         const bcom = online.find(d => /booking\.com/i.test(d.source));
         const cmpP = bcom || online[0];
-        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cxlShort(cmpP.cxl) || (cmpP.free ? "Free cxl" : undefined) } : undefined;
+        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cxlShort(cmpP.cxl, cmpP.rupees / perRoom(cmpP)) || (cmpP.free ? "Free cxl" : undefined) } : undefined;
         const checked = online.filter(d => d.confirmed);
         const remark = checked.length ? checked.slice(0, 6).map(d => `${d.source} ${money(d.rupees / perRoom(d), "INR")}`).join(" · ") + " (checked on the sites)" : undefined;
         const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || deals(h).find(d => !d.mine && d.room)?.room || "Room"}`;
@@ -516,7 +517,7 @@ export default function PriceCompare() {
         const mine = ds.filter(d => d.mine);
         const main = mine.length ? mine : [online[0] || ds[0]];
         main.forEach((d, i) => rows.push({ bid: h.label || undefined, description: desc, source: d.source, ...asCost(d), meal: h.meal,
-          cancel: d.mine ? h.cancel || undefined : cxlShort(d.cxl) || (d.free ? "Free cxl" : undefined), markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
+          cancel: d.mine ? h.cancel || undefined : cxlShort(d.cxl, d.rupees / perRoom(d)) || (d.free ? "Free cxl" : undefined), markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
           compare: d.mine || (bcom && d.source !== bcom.source) ? compare : undefined, remark: i === 0 ? remark : undefined }));
       }
       return { title: `${c.name} ${nice(c.checkIn)} to ${nice(c.checkOut)} ${nightsOf(c)}N`, rows };
@@ -730,8 +731,7 @@ export default function PriceCompare() {
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlLine(d.cxl) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}
-                  {d.cxl?.full && <div title={d.cxl.full} style={{ marginTop: 3, fontSize: 10.5, fontWeight: 500, color: MUTED, lineHeight: 1.35, whiteSpace: "pre-line", maxHeight: 58, overflow: "hidden" }}>{d.cxl.full.replace(/^(Cancell?ation( polic(y|ies))?|x)\n/i, "")}</div>}</div>
+                <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlLine(d.cxl, d.rupees) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>
                 {priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
                 {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
                   : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}

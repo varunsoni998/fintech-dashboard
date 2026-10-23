@@ -437,9 +437,13 @@ Return ONLY JSON with these keys:
  "cxl_fee_currency": "INR"/... or null,
  "cxl_fee_from": "YYYY-MM-DD" (from when that fee applies) or null,
  "cxl_fee_note": short text (e.g. "first night's rate plus taxes", "100% of the stay") or null,
- "cxl_summary": ONE line with ALL the cancellation and prepayment rules in plain words, keeping every date, % and amount
-   (e.g. "Free cancellation till 18 Nov 2026 · after that (within 2 days of arrival) fee = first night · no-show = same fee · pay nothing until 16 Nov 2026"
-    or "Partially refundable: 50% of the total if cancelled after booking · no-show = full price · pay online at booking") or null,
+ "cxl_fee_percent": number (fee as % of the total, e.g. 50, 100) or null,
+ "noshow": short ("100%", "same as cancellation fee", "₹13,123") or null,
+ "cxl_summary": ONE short line with ONLY dates, amounts and percentages – no sentences. Use the stay currency for amounts.
+   Examples: "Free till 18 Nov 2026 · after: fee ₹4,375 (1st night) · no-show: same"
+             "50% fee (₹1,14,423) if cancelled · no-show: 100%"
+             "Non-refundable · 100% charged (₹13,123)"
+   or null,
  "meal": short text (e.g. "Breakfast included", "Room only") or null,
  "page": "checkout" | "hotel page" | "list of hotels" | "robot check" | "other",
  "confidence": "high" | "medium" | "low"}}
