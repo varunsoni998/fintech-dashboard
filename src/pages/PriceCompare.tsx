@@ -307,7 +307,7 @@ export default function PriceCompare() {
   };
   // the chosen room type on one site: exact checkout price > site's own list (same meal) > Google's list
   const typeFor = (h: Hotel, site: string) => {
-    if (!h.room) return null;
+    if (!h.room || site === "Hotel website") return null;
     const g = roomGroups(h).find(x => x.type === h.room); if (!g) return null;
     const meal = MEAL_NAME[h.meal] || "";
     const its = g.items.filter(x => x.site === site);
@@ -315,7 +315,8 @@ export default function PriceCompare() {
     const own = its.filter(x => x.src === "site");
     const item = cheap(own.filter(x => x.meal === meal)) || cheap(its.filter(x => x.src === "google")) || cheap(own);
     const tk = `${site}|${g.type}|${h.meal}`;
-    return { g, item, tk, ex: h.typeExact?.[tk], names: [...new Set([...its.map(x => x.name), g.type])] };
+    // names to look for on the site: this site's own names first, then what the other sites call it
+    return { g, item, tk, ex: h.typeExact?.[tk], names: [...new Set([...its.map(x => x.name), ...g.items.map(x => x.name), g.type])].slice(0, 12) };
   };
 
   // ── Rooms picker ───────────────────────────────────────────────────────────
@@ -403,7 +404,10 @@ export default function PriceCompare() {
     setBusy(false); loadStatus();
   };
   const seeAll = async (c: City, h: Hotel) => {
-    if (h.online && h.searchedFor === key(c, h)) return setHotel(c.id, h.id, { open: !h.open });
+    if (h.online && h.searchedFor === key(c, h)) {
+      if (!h.open && h.room && extAuto) autoCheck([{ c, h }], true);   // room chosen → exact prices of that room
+      return setHotel(c.id, h.id, { open: !h.open });
+    }
     await fetchOne(c, h, true); loadStatus();
   };
   // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
@@ -451,15 +455,20 @@ export default function PriceCompare() {
   const sameRooms = rooms.every(r => r.adults === rooms[0].adults && r.ages.join() === rooms[0].ages.join());
   const autoJobs = (list: { c: City; h: Hotel }[]) => list.flatMap(({ c, h }) =>
     (h.online?.prices || []).filter(p => !!p.link && p.source !== "Hotel website")   /* hotel websites: not checked for now */
-      .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name })));
+      .map(p => {
+        const base = { cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name };
+        const t = typeFor(h, p.source);   // a room type is chosen → the exact price of THAT room on every site
+        return t ? { ...base, pickWant: { names: t.names, meal: MEAL_NAME[h.meal] || "" }, typeKey: t.tk } : base;
+      }));
+  const jobKey = (j: any) => `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}`;
   const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
     if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
     if (!sameRooms) { if (!silent) setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
     const jobs = autoJobs(list);
     if (!jobs.length) { if (!silent) setMsg({ kind: "err", text: "Nothing to check — open the hotel's prices first (Search / See all prices)." }); return; }
-    setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [`${j.hid}|${j.source}`, "queued"])) }));
+    setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [jobKey(j), "queued"])) }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
-    const keys = jobs.map(j => `${j.hid}|${j.source}`), postedAt = Date.now();
+    const keys = jobs.map(jobKey), postedAt = Date.now();
     setTimeout(() => setChecks(o => {
       if (lastAck.current >= postedAt || !keys.some(kk => o[kk] === "queued")) return o;   // the extension answered → fine
       const n = { ...o }; keys.forEach(kk => { if (n[kk] === "queued") n[kk] = NOT_STARTED; }); return n;
@@ -913,7 +922,7 @@ export default function PriceCompare() {
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                      {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : tsel ? <span title={tsel.ex?.room || tsel.item?.name}>{short(tsel.ex?.room || tsel.item?.name || `${tsel.g.type} — not in ${d.source}'s room list`, 90)}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
+                      {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : tsel ? <span title={tsel.ex?.room || tsel.item?.name}>{short(tsel.ex?.room || tsel.item?.name || tsel.g.type, 90)}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
                   {!d.mine && siteRooms.length > 0 && (
@@ -990,7 +999,8 @@ export default function PriceCompare() {
                     <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {tsel.ex ? <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ exact {clock(tsel.ex.at)}</span>
                         : tBusy ? <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {tck === "queued" ? "waiting…" : tck === "verifying" ? "verifying…" : `checking ${tsel.g.type} on ${d.source}…`}</span>
-                        : tsel.item ? <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{tsel.item.src === "google" ? "Google room price" : "room-list price"}</span> : null}
+                        : tsel.item ? <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{tsel.item.src === "google" ? "Google room price" : "room-list price"}</span>
+                        : <span style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>Google didn't give {d.source}'s price for this room — Check exact reads it on the site</span>}
                       {!tBusy && <button style={lb(ACCENT)} onClick={() => checkType(c, h, d.source, tsel)}>{tsel.ex ? "Re-check" : "Check exact"}</button>}
                       {tPrice ? (tPk ? <button style={lb(GREEN)} title="Click to take it out of the Excel" onClick={() => setPicks(c.id, h.id, ps => ps.filter(x => x.id !== tPk.id))}>✓ In Excel</button>
                         : <button style={lb(TEXT)} onClick={() => setPicks(c.id, h.id, ps => [...ps, { id: uid(), site: d.source, key: tKey, room: tsel.ex?.room || tsel.item?.name || tsel.g.type, meal: tMeal || MEAL_NAME[h.meal] || "Room only", cxl: tCx, total: tPrice, taxes: tsel.ex ? true : tsel.item?.taxes !== false, exact: tsel.ex?.total }])}>+ Add to Excel</button>) : null}
@@ -1049,12 +1059,12 @@ export default function PriceCompare() {
                   <span style={{ color: sr.meal === "Room only" ? MUTED : GREEN, fontWeight: 700 }}>{sr.meal}</span>
                   <span style={{ color: /^free/i.test(srCx) ? GREEN : /non-?refundable|no free/i.test(srCx) ? WARN : MUTED }}>{srCx || "—"}</span>
                 </div> : tsel ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span style={{ color: tMeal && tMeal !== "Room only" ? GREEN : MUTED, fontWeight: 700 }}>{tMeal || (tsel.item?.src === "google" ? "meal: see site" : "—")}</span>
+                  <span style={{ color: tMeal && tMeal !== "Room only" ? GREEN : MUTED, fontWeight: 700 }}>{tMeal || (MEAL_NAME[h.meal] ? `${MEAL_NAME[h.meal]} (asked)` : "—")}</span>
                   <span style={{ color: /^free/i.test(tCx) ? GREEN : /non-?refundable|no free/i.test(tCx) ? WARN : MUTED }}>{tCx || "—"}</span>
                 </div> : <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlLine(d.cxl, d.rupees) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>}
                 {sr ? (sr.exact || sr.ccy === "INR" ? <div>{priceBlock(sr.exact || sr.total, n)}{!sr.exact && !sr.taxes && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div>
                   : <div style={{ textAlign: "right", fontWeight: 800, color: TEXT }}>{sr.ccy} {Math.round(sr.total).toLocaleString("en-IN")}</div>)
-                  : tsel ? (tPrice ? <div>{priceBlock(tPrice, n)}{!tsel.ex && tsel.item?.taxes === false && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div> : <div style={{ textAlign: "right", fontSize: 12, color: MUTED }}>not listed</div>)
+                  : tsel ? (tPrice ? <div>{priceBlock(tPrice, n)}{!tsel.ex && tsel.item?.taxes === false && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div> : <div style={{ textAlign: "right", fontSize: 12, color: MUTED }}>{tBusy ? "checking…" : "price on the site"}</div>)
                   : priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
                 {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
                   : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}

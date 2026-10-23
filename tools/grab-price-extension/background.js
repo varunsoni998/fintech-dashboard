@@ -248,7 +248,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
           if (found.length && found[0].key) setList(found);
           if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
           const c = picking ? choose(found, x => x.room, x => x.text, x => x.key, x => x.total) : cheapest(found);
-          if (picking && !c && t >= 12) return { error: `That room isn't shown on ${site} any more` };
+          if (picking && !c && t >= 12) return { error: pickKey ? `That room isn't shown on ${site} any more` : `${site} doesn't have this room type for these dates` };
           // the room list's "total" leaves out resort fees → open the checkout of the cheapest room to see the full total
           const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
           if (c && !clicked && pressedAgo > 60000) {
@@ -305,7 +305,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
         }
         if (found.length) setList(found);
         const c = picking ? choose(found, x => x.room, x => x.text, x => x.key, x => x.total) : cheapest(found);
-        if (picking && !c && t >= 12) return { error: "That room isn't shown on Booking.com any more" };
+        if (picking && !c && t >= 12) return { error: pickKey ? "That room isn't shown on Booking.com any more" : "Booking.com doesn't have this room type for these dates" };
         // go to Booking's checkout for the full price + cancellation terms: choose 1 of the cheapest room, press "I'll reserve"
         // (this only opens the "Your details" page – nothing is typed or booked)
         const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
@@ -412,7 +412,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
         const usable = offers.filter(x => !skip.includes(keyOf(x)));    // rooms that sold out while checking are skipped
         const one = picking ? choose(usable, x => x.room, x => x.ot, okey, x => x.amt) : null;
         const wanted = picking ? (one ? [one] : []) : usable;
-        if (picking && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : "That room isn't shown on Agoda any more" };
+        if (picking && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : (pickKey ? "That room isn't shown on Agoda any more" : "Agoda doesn't have this room type for these dates") };
         if (wanted.length) {
           const pick = wanted.sort((x, y) => x.amt - y.amt)[0];
           ss.set("pcRoom", pick.room); ss.set("pcPick", keyOf(pick)); ss.set("pcPressed", String(Date.now())); clicked = true;
