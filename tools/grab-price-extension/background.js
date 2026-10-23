@@ -477,7 +477,11 @@ async function checkOne(job, windowId) {
       const out = Object.assign(r || { error: "Couldn't read the page" }, { trail });
       if (out.total || (out.error && !out.robot)) {
         out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
-        out.shot2 = await snapCancel(cur, windowId);           // cancellation terms (may be lower on the page)
+        // full cancellation policy: open the site's "cancellation policy" pop-up (Booking.com) or read the written policy
+        const pol = await grabPolicy(cur);
+        if (pol.text) out.policyText = pol.text;
+        if (pol.opened) { await sleep(700); out.shot2 = await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 60 }).catch(() => ""); await closePolicy(cur); }
+        else out.shot2 = await snapCancel(cur, windowId);    // cancellation terms (may be lower on the page)
       }
       return out;
     }
@@ -506,6 +510,44 @@ async function snapPrice(tabId, windowId, total) {
     await sleep(900);
     return await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 60 });
   } catch { return ""; }
+}
+
+// Read the complete cancellation policy. Only opens an information pop-up (and closes it again) – never books anything.
+async function grabPolicy(tabId) {
+  try {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: async () => {
+      const shown = (e) => e.getClientRects().length > 0;
+      const clean = (t) => (t || "").replace(/[\u00a0\u202f\u2009]/g, " ").replace(/\n{2,}/g, "\n").trim();
+      const dialogText = () => {
+        const d = [...document.querySelectorAll("[role='dialog'], [aria-modal='true'], dialog")]
+          .filter(x => shown(x) && /cancel/i.test(x.innerText || "")).sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0];
+        return d ? clean(d.innerText).slice(0, 1500) : "";
+      };
+      // 1) a button that opens the policy (Booking.com: "More details on cancellation and prepayment policies")
+      const btn = [...document.querySelectorAll("button, a, [role='button']")].find(e => shown(e) && (
+        /cancell?ation (and prepayment )?polic|cancellation and prepayment|info on .*cancell?ation/i.test(e.getAttribute("aria-label") || "") ||
+        /^(cancell?ation policy|see cancell?ation policy|view cancell?ation policy|policy details)$/i.test((e.innerText || "").trim())));
+      if (btn && !dialogText()) { btn.click(); await new Promise(r => setTimeout(r, 1500)); const t = dialogText(); if (t) return { text: t, opened: true }; }
+      // 2) the policy written on the page (Expedia / Hotels.com / Agoda): the "Cancellation policy" section
+      const head = [...document.querySelectorAll("h1, h2, h3, h4, h5, div, span, p, strong")]
+        .find(e => shown(e) && /^(cancell?ation polic(y|ies)|cancell?ation)$/i.test((e.innerText || "").trim()));
+      if (head) {
+        let box = head.parentElement;
+        for (let k = 0; k < 4 && box && (box.innerText || "").length < 120; k++) box = box.parentElement;
+        const t = clean(box?.innerText || "");
+        if (t.length > 20) return { text: t.slice(0, 1500), opened: false };
+      }
+      return { text: "", opened: false };
+    } });
+    return res?.result || { text: "", opened: false };
+  } catch { return { text: "", opened: false }; }
+}
+async function closePolicy(tabId) {
+  await chrome.scripting.executeScript({ target: { tabId }, func: () => {
+    const d = [...document.querySelectorAll("[role='dialog'], [aria-modal='true'], dialog")].find(x => x.getClientRects().length && /cancel/i.test(x.innerText || ""));
+    const x = d && [...d.querySelectorAll("button")].find(b => /close|dismiss/i.test(b.getAttribute("aria-label") || "") || /^(close|×|✕)$/i.test((b.innerText || "").trim()));
+    if (x) x.click(); else document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  } }).catch(() => {});
 }
 
 async function snapCancel(tabId, windowId) {

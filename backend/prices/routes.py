@@ -437,6 +437,9 @@ Return ONLY JSON with these keys:
  "cxl_fee_currency": "INR"/... or null,
  "cxl_fee_from": "YYYY-MM-DD" (from when that fee applies) or null,
  "cxl_fee_note": short text (e.g. "first night's rate plus taxes", "100% of the stay") or null,
+ "cxl_summary": ONE line with ALL the cancellation and prepayment rules in plain words, keeping every date, % and amount
+   (e.g. "Free cancellation till 18 Nov 2026 · after that (within 2 days of arrival) fee = first night · no-show = same fee · pay nothing until 16 Nov 2026"
+    or "Partially refundable: 50% of the total if cancelled after booking · no-show = full price · pay online at booking") or null,
  "meal": short text (e.g. "Breakfast included", "Room only") or null,
  "page": "checkout" | "hotel page" | "list of hotels" | "robot check" | "other",
  "confidence": "high" | "medium" | "low"}}
@@ -446,6 +449,7 @@ Write numbers without commas or currency symbols. If the page shows no clear tot
 class VisionIn(BaseModel):
     image: str                       # data URL or base64 JPEG/PNG
     image2: str = ""                 # optional 2nd screenshot (cancellation section)
+    policy_text: str = ""            # the cancellation policy text read from the page
     site: str = ""
     hotel: str = ""
     check_in: str = ""
@@ -483,6 +487,8 @@ def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
     prompt = VISION_PROMPT.format(site=body.site or "a booking site", hotel=body.hotel, check_in=body.check_in or "?",
                                   check_out=body.check_out or "?", nights=body.nights or "?", adults=body.adults, rooms=body.rooms)
     model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+    if body.policy_text:
+        prompt += "\nThe page's own cancellation-policy text (use it for the cxl_* fields):\n" + body.policy_text[:1500]
     if len(images) > 1:
         prompt += "\nThere are 2 screenshots of the same page: the price area and the cancellation-policy area."
     payload = {"contents": [{"parts": [{"text": prompt}, *images]}],
