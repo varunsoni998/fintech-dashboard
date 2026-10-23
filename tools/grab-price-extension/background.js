@@ -97,7 +97,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
   const rx = (s) => new RegExp(s, "gi");
   const clean = (s) => (s || "").replace(/[   ]/g, " ");
   const STOP = ["hotel", "hotels", "the", "and", "resort", "by", "a", "an", "of", "at", "in"];
-  const words = (s) => clean(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !STOP.includes(w));
+  const words = (s) => clean(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !STOP.includes(w));
   // words match if equal, or (for longer words) differ by one letter – "Swenska" = "Svenska"
   const near = (x, y) => {
     if (x === y) return true;
@@ -146,7 +146,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
     if (!(pickWant && pickWant.names && pickWant.names.length)) return null;
     // the room CATEGORY must be the same (a Club room is never swapped for a Deluxe room)
     const CATS = ["presidential suite", "royal suite", "penthouse", "villa", "cottage", "apartment", "studio", "family room", "junior suite", "executive suite", "deluxe suite", "premier suite", "club suite", "suite", "club", "executive", "premier", "premium", "luxury", "deluxe", "superior", "classic", "standard"];
-    const catOf = (n) => { const t = " " + clean(n).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " "; return CATS.find(c => t.includes(" " + c + " ")) || ""; };
+    const catOf = (n) => { const t = " " + clean(n).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " "; return CATS.find(c => t.includes(" " + c + " ")) || ""; };
     if (pickWant.cat) list = list.filter(x => catOf(roomOf(x) || "") === pickWant.cat);
     const sc = list.map(x => {
       const nm = roomOf(x) || "";
@@ -250,7 +250,15 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
           for (const b of sec.split(/View all photos for /i).slice(1)) {
             const room = b.split("\n")[0].trim();
             const mm = [...b.matchAll(rx(R + AMT + "\\s*total\\b"))];
-            if (mm.length) found.push({ total: num(mm[0][1]), room, key: room + (found.some(f => f.room === room) ? " #" + (found.filter(f => f.room === room).length + 1) : ""), text: b, free: /Fully refundable|Free cancellation/i.test(b) });
+            if (!mm.length) continue;
+            // "Extras": options with a price ("Breakfast for 2  + ₹6,426") are NOT included in the shown total
+            const opts = [...b.matchAll(new RegExp("\\n\\s*([^\\n]{3,60}?)\\s*\\n?\\s*\\+\\s?" + R + AMT, "gi"))].map(o => ({ label: o[1].trim(), amt: num(o[2]) }));
+            const plain = opts.reduce((t2, o) => t2.split(o.label).join(" "), b);          // card text without the paid options
+            const base = { total: num(mm[0][1]), room, key: room + (found.some(f => f.room === room && !f.extra) ? " #" + (found.filter(f => f.room === room && !f.extra).length + 1) : ""), text: plain, free: /Fully refundable|Free cancellation/i.test(b) };
+            found.push(base);
+            // the same room WITH a paid meal (e.g. breakfast) = another option; its price is read at checkout
+            for (const o of opts) if (o.amt > 0 && mealOf(o.label) !== "Room only")
+              found.push({ ...base, key: base.key + " + " + o.label, text: o.label + "\n" + plain, extra: o.label, base, total: base.total + o.amt * (nights || 1), taxes: false });
           }
           if (found.length && found[0].key) setList(found);
           if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
@@ -266,8 +274,15 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
                 const nm = e ? clean(e.innerText).split(/View all photos for /i)[1]?.split("\n")[0].trim() : "";
                 return { b, nm, len: e ? (e.innerText || "").length : 1e9 };
               }).filter(x => x.nm === c.room);
-              const same = found.filter(x => x.room === c.room), idx = same.indexOf(c);
+              const same = found.filter(x => x.room === c.room && !x.extra), idx = same.indexOf(c.base || c);
               const hit = cards[idx] || cards[0];
+              if (hit && c.extra) {
+                // tick the paid option (e.g. "Breakfast for 2") inside this room's card, so the checkout total includes it
+                let card = hit.b; while (card && !/View all photos for /i.test(card.innerText || "")) card = card.parentElement;
+                const lab = card && [...card.querySelectorAll("label, [role='radio'], input[type='radio'], input[type='checkbox']")].find(e => clean(e.innerText || e.getAttribute("aria-label") || (e.id && card.querySelector(`label[for="${e.id}"]`)?.innerText) || "").trim().startsWith(c.extra));
+                if (!lab) return { error: `${site}: couldn't choose "${c.extra}" for this room` };
+                lab.scrollIntoView({ block: "center" }); await sleep(400); lab.click(); await sleep(1800);
+              }
               if (hit) { ss.set("pcRoom", c.room); ss.set("pcPressed", String(Date.now())); hit.b.scrollIntoView({ block: "center" }); await sleep(600); hit.b.click(); clicked = true; return { wait: true }; }
             } else if (await pressCheapest(document.body, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }
           }

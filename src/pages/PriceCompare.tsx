@@ -44,7 +44,7 @@ const MEAL_CODE: Record<string, string> = { "Room only": "RO", Breakfast: "BB", 
 const ROOM_CATS = ["presidential suite", "royal suite", "penthouse", "villa", "cottage", "apartment", "studio", "family room", "junior suite", "executive suite", "deluxe suite", "premier suite", "club suite", "suite", "club", "executive", "premier", "premium", "luxury", "deluxe", "superior", "classic", "standard"];
 const VIEWS = ["sea", "ocean", "lake", "pool", "garden", "city", "mountain", "river", "palace", "beach", "bay", "golf", "courtyard"];
 const roomWordKey = (name: string) => {
-  const t = " " + name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " ";
+  const t = " " + name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " ";
   const cat = ROOM_CATS.find(c => t.includes(" " + c + " ")) || "room";
   const bed = /\btwin\b|\b2 single|\btwo single|single beds|\b2 twin|\b2 beds\b|\btwo beds\b/.test(t) ? "twin" : /\bking\b|\bqueen\b|\bdouble\b|\b1 large bed|\bkingsize|\bking size/.test(t) ? "double" : "";
   const view = VIEWS.find(v => new RegExp(`\\b${v}\\b.{0,14}view|view.{0,6}\\b${v}\\b|\\b${v} facing|\\b${v} front`).test(t)) || "";
