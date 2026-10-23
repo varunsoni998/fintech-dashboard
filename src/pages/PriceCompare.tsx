@@ -425,11 +425,15 @@ export default function PriceCompare() {
           total = res.total; cur = (res.currency || "INR").toUpperCase(); room = res.room || (visOk ? v.room || "" : "");
           if (visOk) {
             const vc = (v.currency || cur).toUpperCase();
-            if (vc === cur && Math.abs(v.total - total) / total > 0.02 && v.page === "checkout")
-              return fail(`Check manually — page says ${fmt(cur, total)}, screenshot shows ${fmt(vc, v.total)}`);
+            // agree if the page total matches the screenshot's total WITH taxes, or before-taxes + taxes (tax lines are not a mismatch)
+            const cands = [v.total_incl_taxes, v.total, v.total_excl_taxes && v.taxes ? v.total_excl_taxes + v.taxes : 0].filter((x: number) => x > 0);
+            const close = (x: number) => Math.abs(x - total) / total <= 0.02;
+            const onlyTax = v.total > 0 && total > v.total && total / v.total <= 1.3 && (v.includes_taxes === false || v.total_excl_taxes === v.total);
+            if (vc === cur && v.page === "checkout" && !cands.some(close) && !onlyTax)
+              return fail(`Check manually — page says ${fmt(cur, total)}, screenshot shows ${fmt(vc, v.total_incl_taxes || v.total)}`);
           }
         } else if (visOk && (v.page === "checkout" || v.page === "hotel page")) {
-          total = v.total; cur = (v.currency || "INR").toUpperCase(); room = v.room || ""; allRooms = v.page === "checkout";
+          total = v.total_incl_taxes || v.total; cur = (v.currency || "INR").toUpperCase(); room = v.room || ""; allRooms = v.page === "checkout";
         } else return fail(res.error || "Couldn't read the price");
         const amount = total * (allRooms ? 1 : (j.mult || 1));   // checkout pages already show all rooms
         // cancellation terms: the screenshot reading (structured) first, else the words found on the page

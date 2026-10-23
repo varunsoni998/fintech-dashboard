@@ -427,6 +427,9 @@ Find the FINAL TOTAL price for the whole stay as shown on this page (including t
 Do NOT use per-night prices, crossed-out prices, savings/discount amounts, deposits, "pay today" amounts of 0, or prices of other hotels.
 Return ONLY JSON with these keys:
 {{"found": true/false, "total": number or null, "currency": "INR"/"USD"/... or null,
+ "total_incl_taxes": number (the total WITH taxes and fees, usually labelled "Total") or null,
+ "total_excl_taxes": number (price before taxes, if shown separately) or null,
+ "taxes": number (taxes and fees amount, if shown) or null,
  "per_night": number or null, "includes_taxes": true/false/null,
  "room": string or null, "hotel_name": string or null,
  "check_in": "YYYY-MM-DD" or null, "check_out": "YYYY-MM-DD" or null, "nights": number or null, "adults": number or null,
@@ -513,7 +516,7 @@ def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
         out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
     except Exception:
         raise HTTPException(status_code=502, detail="Vision service gave an unreadable answer")
-    for k in ("total", "per_night", "cxl_fee"):
+    for k in ("total", "per_night", "cxl_fee", "total_incl_taxes", "total_excl_taxes", "taxes"):
         try:
             out[k] = float(str(out.get(k)).replace(",", "")) if out.get(k) not in (None, "") else None
         except Exception:
