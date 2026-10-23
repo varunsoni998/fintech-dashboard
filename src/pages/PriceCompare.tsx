@@ -150,6 +150,7 @@ export default function PriceCompare() {
   const [trip, setTrip] = useState<Trip>(loadTrip);
   const [status, setStatus] = useState<{ configured: boolean; keys?: number; searches_left?: number; active_key?: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cityTab, setCityTab] = useState<string>("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [roeBusy, setRoeBusy] = useState(false);
@@ -878,7 +879,24 @@ export default function PriceCompare() {
 
         </div>
 
-        {trip.cities.map((c, ci) => {
+        {/* City tabs — one city shown at a time */}
+        {(() => { return (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {trip.cities.map((c, i) => {
+              const on = (trip.cities.find(x => x.id === cityTab) || trip.cities[0]).id === c.id;
+              const cnt = c.hotels.filter(h => h.name.trim() && isMine(h)).length;
+              return (
+                <button key={c.id} onClick={() => setCityTab(c.id)}
+                  style={{ ...btn(), background: on ? GRAD : undefined, color: on ? "#fff" : TEXT, boxShadow: on ? SHADOW_SM : undefined, fontWeight: 800 }}>
+                  {c.name || `City ${i + 1}`}{cnt ? ` (${cnt})` : ""}
+                </button>
+              );
+            })}
+            <button style={btn()} onClick={() => { const nc = newCity(); setT({ cities: [...trip.cities, nc] }); setCityTab(nc.id); }}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
+          </div>
+        ); })()}
+
+        {[trip.cities.find(x => x.id === cityTab) || trip.cities[0]].map((c) => {
           const n = nightsOf(c) || 1;
           const named = c.hotels.filter(h => h.name.trim());
           const mineList = sortList(named.filter(isMine), c.sort);
@@ -903,7 +921,7 @@ export default function PriceCompare() {
                   <button style={{ ...btn(), background: "#3F4FA8", color: "#fff", boxShadow: "none", flex: 1, justifyContent: "center" }} disabled={busy || c.finding} onClick={() => searchAll(c)} title="Your hotels: every site's price. Plus other hotels in the city.">
                     {busy || c.finding ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search
                   </button>
-                  {trip.cities.length > 1 && <button title="Remove city" style={{ ...btn(), background: "transparent", color: "#fff", boxShadow: "none", border: "1px solid rgba(255,255,255,0.5)", padding: "10px 11px" }} onClick={() => setT({ cities: trip.cities.filter(x => x.id !== c.id) })}><X style={{ width: 15, height: 15 }} /></button>}
+                  {trip.cities.length > 1 && <button title="Remove city" style={{ ...btn(), background: "transparent", color: "#fff", boxShadow: "none", border: "1px solid rgba(255,255,255,0.5)", padding: "10px 11px" }} onClick={() => { setT({ cities: trip.cities.filter(x => x.id !== c.id) }); setCityTab(""); }}><X style={{ width: 15, height: 15 }} /></button>}
                 </div>
               </div>
 
@@ -916,10 +934,9 @@ export default function PriceCompare() {
                 <span style={{ fontSize: 12, color: MUTED }}>No hotel added? <b>Search</b> shows all hotels in the city.</span>
               </div>
 
-              {ci === 0 && (<>
+              {(<>
               {/* Actions: below the "Add hotel" row of the first city */}
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
                 <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
                 <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
                 <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
