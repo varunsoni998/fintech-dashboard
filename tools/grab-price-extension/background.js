@@ -353,11 +353,14 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
         }
         // "Price  Rs. 25,716.37" – also "Price ⓘ(tooltip) Rs. …", "Total", "Pay at the hotel  Rs. …" (pay-at-hotel rates);
         // never "Price Before Taxes", "Original price", "Room price" or "You pay Rs.0 today"
-        const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(Total price|Total|Price|Pay at (?:the )?(?:hotel|property)|Total (?:due|payable)[^\\n0-9]{0,25})[^\\n0-9]{0,35}?\\s*(?:tooltip\\s*)?\\n?\\s*(?:tooltip\\s*\\n?\\s*)?" + R + AMT))]
+        const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(Total price|Total|Price|Pay at (?:the )?(?:hotel|property)|Total (?:due|payable))[^\\n₹$€£]{0,50}?\\s*(?:tooltip\\s*)?\\n?\\s*(?:tooltip\\s*\\n?\\s*)?" + R + AMT))]
           .filter(x => !/before|original|room price|discount|saved|coupon|today/i.test(x[0]) && num(x[2]) > 100).pop();
         let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
         if (picking && rm && ss.get("pcRoom") && overlap(ss.get("pcRoom"), rm) < 0.6) return { error: `Agoda opened a different room (${rm.slice(0, 60)})` };
         if (m) return { total: cents(num(m[2])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancell?ation|cancel for free/i.test(txt) && !/non-refundable/i.test(txt) };
+        // or: "Price Before Taxes  Rs. X" + "Taxes and fees  Rs. Y"
+        const pb = txt.match(new RegExp("Price Before Taxes[^\\n₹$€£]{0,40}?\\s*" + R + AMT, "i")), tf = txt.match(new RegExp("Taxes and fees[^\\n₹$€£]{0,40}?\\s*" + R + AMT, "i"));
+        if (pb && tf && num(pb[1]) > 100) return { total: cents(num(pb[1]) + num(tf[1])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancell?ation|cancel for free/i.test(txt) && !/non-refundable/i.test(txt) };
         // the booking form is still loading → wait here (never scroll the booking form)
         if (t >= 25) { const k2 = txt.search(/Price Before Taxes|Room price|Price/i); return { error: "Agoda's booking form didn't show the price", debug: txt.slice(Math.max(0, k2), k2 + 400) }; }
         await sleep(1000); continue;
