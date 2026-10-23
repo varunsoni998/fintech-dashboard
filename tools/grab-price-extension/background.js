@@ -144,6 +144,10 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
   const choose = (list, roomOf, textOf, keyOf, priceOf) => {
     const k = pickKey && list.find(x => keyOf(x) === pickKey); if (k) return k;
     if (!(pickWant && pickWant.names && pickWant.names.length)) return null;
+    // the room CATEGORY must be the same (a Club room is never swapped for a Deluxe room)
+    const CATS = ["presidential suite", "royal suite", "penthouse", "villa", "cottage", "apartment", "studio", "family room", "junior suite", "executive suite", "deluxe suite", "premier suite", "club suite", "suite", "club", "executive", "premier", "premium", "luxury", "deluxe", "superior", "classic", "standard"];
+    const catOf = (n) => { const t = " " + clean(n).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " "; return CATS.find(c => t.includes(" " + c + " ")) || ""; };
+    if (pickWant.cat) list = list.filter(x => catOf(roomOf(x) || "") === pickWant.cat);
     const sc = list.map(x => {
       const nm = roomOf(x) || "";
       const o = Math.max(...pickWant.names.map(n => Math.max(overlap(n, nm), overlap(nm, n))));
