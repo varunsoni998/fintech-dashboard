@@ -478,7 +478,17 @@ export default function PriceCompare() {
         const t = typeFor(h, p.source);   // a room type is chosen → the exact price of THAT room on every site
         return t ? { ...base, pickWant: { names: t.names, meal: MEAL_NAME[h.meal] || "" }, typeKey: t.tk } : base;
       }));
-  const jobKey = (j: any) => `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}`;
+  const jobKey = (j: any) => `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}${j.listOnly ? "|list" : ""}`;
+  // Google has no room list → read just the room lists on the sites (no checkout)
+  const LIST_SITES = ["Booking.com", "Agoda", "Expedia", "Hotels.com"];
+  const loadRoomLists = (c: City, h: Hotel) => {
+    if (!extAuto) { setMsg({ kind: "err", text: "Install (or update) the Grab-price extension to read the room lists." }); return; }
+    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source)).slice(0, 2)
+      .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name, listOnly: true }));
+    if (!jobs.length) { setMsg({ kind: "err", text: "No Booking.com / Agoda / Expedia / Hotels.com link for this hotel." }); return; }
+    setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [jobKey(j), "queued"])) }));
+    window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
+  };
   const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
     if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
     if (!sameRooms) { if (!silent) setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
@@ -512,7 +522,7 @@ export default function PriceCompare() {
   afterFetch.current = (c, h) => { if (autoOn && extAuto && sameRooms) autoCheck([{ c, h }], true); };
   const NOT_STARTED = "Not started — the extension was updated or stopped: press F5 on this page, then Re-check";
   onCheckMsg.current = (m: any) => {
-    const j = m.job; const k = j ? `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}` : "";
+    const j = m.job; const k = j ? `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}${j.listOnly ? "|list" : ""}` : "";
     if (m.type === "PC_CHECK_QUEUED" || m.type === "PC_CHECK_STARTED" || m.type === "PC_CHECK_RESULT") lastAck.current = Date.now();
     if (m.type === "PC_EXT_STALE") {
       setChecks(o => Object.fromEntries(Object.entries(o).map(([kk, v]) => [kk, v === "queued" ? NOT_STARTED : v])));
@@ -533,6 +543,7 @@ export default function PriceCompare() {
           total: rate ? Math.round(r.total * mult * rate) : r.total * mult, ccy: rate ? "INR" : ccy }));
         if (list.length) { patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list })); regroupSoon(city.id, hotel.id); }
       }
+      if (j.listOnly) { setChecks(o => ({ ...o, [k]: res.rooms?.length ? "ok" : (res.error || "Couldn't read the room list") })); return; }
       // Two independent readings: the page reader (text) and Gemini looking at a screenshot of the price.
       // Agree → confirmed. Only one found it → use it (screenshot only if it is the booking/checkout page).
       // Disagree, or the site shows other dates → "Check manually" (never a wrong price).
@@ -824,7 +835,19 @@ export default function PriceCompare() {
                       <div style={{ overflowY: "auto", padding: 6 }}>
                         <button onClick={() => { setHotel(c.id, h.id, { room: "" }); setPicker(null); }} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !h.room ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 700 }}>Any room — cheapest on each site</button>
                         {h.loading && <div style={{ padding: 12, fontSize: 12, color: ACCENT, display: "flex", gap: 6, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Loading this hotel's rooms…</div>}
-                        {!h.loading && groups.length === 0 && <div style={{ padding: 12, fontSize: 12, color: MUTED }}>Google doesn't list the rooms for this hotel. Press <b>Re-check exact prices</b> — the sites' own room lists will show here.</div>}
+                        {!h.loading && groups.length === 0 && (() => {
+                          const lk = Object.entries(checks).filter(([kk]) => kk.startsWith(h.id + "|") && kk.endsWith("|list"));
+                          const going = lk.some(([, v]) => v === "queued" || v === "checking");
+                          const err = lk.map(([, v]) => v).find(v => !["queued", "checking", "ok"].includes(v));
+                          return (
+                            <div style={{ padding: 12, fontSize: 12, color: MUTED, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+                              <span>Google doesn't list the rooms for this hotel. Get them from the booking sites (a checker window opens for about 30 seconds — only the room list is read, no prices are checked).</span>
+                              {going ? <span style={{ color: ACCENT, display: "inline-flex", gap: 6, alignItems: "center", fontWeight: 700 }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Reading the room lists…</span>
+                                : <button style={{ ...btn("primary"), padding: "7px 13px", fontSize: 12.5 }} onClick={() => loadRoomLists(c, h)}><BedDouble style={{ width: 13, height: 13 }} /> Get room list</button>}
+                              {err && !going && <span style={{ color: WARN }}>{err}</span>}
+                            </div>
+                          );
+                        })()}
                         {groups.map(g => {
                           const on = h.room === g.type;
                           return (

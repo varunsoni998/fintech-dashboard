@@ -591,6 +591,8 @@ async function checkOne(job, windowId) {
         r = rs.find(x => x.total) || rs.find(x => x.robot || x.go || x.wait) || res[0]?.result;
       } catch (e) { await sleep(2000); continue; }             // the page changed while reading → try again
       if (r?.rooms?.length && !job.pickKey) { rooms = r.rooms; roomsUrl = r.roomsUrl; }
+      // "room list only": the hotel's rooms are read → done (no checkout needed)
+      if (job.listOnly && rooms) return { rooms, roomsUrl, listOnly: true, currency: "INR", trail };
       if (r?.picked) picked = r.picked;
       if (r?.go) { await chrome.tabs.update(cur, { url: r.go }); await sleep(1500); continue; }   // list page → this hotel's page
       if (r?.wait) {                                             // pressed "Book now" → wait for the booking form
@@ -615,7 +617,7 @@ async function checkOne(job, windowId) {
       delete out.rooms; delete out.roomsUrl;
       if (rooms) { out.rooms = rooms; out.roomsUrl = roomsUrl; }
       if (picked && !out.picked) out.picked = picked;      // every room on the hotel page (for the "All rooms" table)
-      if (out.total || (out.error && !out.robot)) {
+      if (!job.listOnly && (out.total || (out.error && !out.robot))) {
         out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
         // full cancellation policy: open the site's "cancellation policy" pop-up (Booking.com) or read the written policy
         const pol = await grabPolicy(cur);
@@ -719,7 +721,7 @@ const pending = [];
 
 async function run(jobs, replyTabId) {
   // skip a hotel+site that is already waiting in the queue
-  const k = (j) => `${j.hid}|${j.source}|${j.url}|${j.pickKey || ""}|${j.pickWant ? JSON.stringify(j.pickWant) : ""}`;
+  const k = (j) => `${j.hid}|${j.source}|${j.url}|${j.pickKey || ""}|${j.pickWant ? JSON.stringify(j.pickWant) : ""}|${j.listOnly ? "list" : ""}`;
   const queued = new Set(pending.map(x => k(x.j)));
   pending.push(...jobs.filter(j => !queued.has(k(j)) && queued.add(k(j))).map(j => ({ j, replyTabId })));
   const send = (tabId, msg) => chrome.tabs.sendMessage(tabId, msg).catch(() => {});
