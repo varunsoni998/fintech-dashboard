@@ -33,8 +33,10 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
+// one room + option read from a site's room list; "exact" = the checkout total after Check exact
+interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string }
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
 interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string; summary?: string; full?: string; pct?: number; noshow?: string }
@@ -151,6 +153,7 @@ export default function PriceCompare() {
   const [status, setStatus] = useState<{ configured: boolean; keys?: number; searches_left?: number; active_key?: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [cityTab, setCityTab] = useState<string>("");
+  const [roomUi, setRoomUi] = useState<Record<string, { open?: boolean; meal?: string; cxl?: string }>>({});
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [roeBusy, setRoeBusy] = useState(false);
@@ -235,6 +238,9 @@ export default function PriceCompare() {
   const setCity = (cid: string, p: Partial<City>) => setTrip(t => ({ ...t, cities: t.cities.map(c => (c.id === cid ? { ...c, ...p } : c)) }));
   const setHotel = (cid: string, hid: string, p: Partial<Hotel>) =>
     setTrip(t => ({ ...t, cities: t.cities.map(c => (c.id !== cid ? c : { ...c, hotels: c.hotels.map(h => (h.id === hid ? { ...h, ...p } : h)) })) }));
+
+  const patchRooms = (cid: string, hid: string, site: string, f: (r?: { url: string; at: number; list: RoomRow[] }) => { url: string; at: number; list: RoomRow[] }) =>
+    setTrip(t => ({ ...t, cities: t.cities.map(c => (c.id !== cid ? c : { ...c, hotels: c.hotels.map(h => (h.id === hid ? { ...h, roomsBySite: { ...(h.roomsBySite || {}), [site]: f(h.roomsBySite?.[site]) } } : h)) })) }));
 
   // ── Rooms picker ───────────────────────────────────────────────────────────
   const rooms = trip.roomList;
@@ -384,10 +390,18 @@ export default function PriceCompare() {
     }), 25000);
     if (!silent) setMsg({ kind: "ok", text: `⚡ Checking ${plural(jobs.length, "price", "prices")} on the websites in background tabs — keep Chrome open…` });
   };
+  // take ONE room from the "All rooms" table to the site's checkout for its exact total
+  const checkRoom = (c: City, h: Hotel, site: string, r: RoomRow) => {
+    const rb = h.roomsBySite?.[site];
+    if (!rb || !extAuto || !sameRooms) { setMsg({ kind: "err", text: "Exact check needs the Grab-price extension (and all rooms with the same guests)." }); return; }
+    const job = { cid: c.id, hid: h.id, source: site, url: rb.url, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name, pickKey: r.key };
+    setChecks(o => ({ ...o, [`${h.id}|${site}|${r.key}`]: "queued" }));
+    window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs: [job] }, location.origin);
+  };
   afterFetch.current = (c, h) => { if (autoOn && extAuto && sameRooms) autoCheck([{ c, h }], true); };
   const NOT_STARTED = "Not started — the extension was updated or stopped: press F5 on this page, then Re-check";
   onCheckMsg.current = (m: any) => {
-    const j = m.job; const k = j ? `${j.hid}|${j.source}` : "";
+    const j = m.job; const k = j ? `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}` : "";
     if (m.type === "PC_CHECK_QUEUED" || m.type === "PC_CHECK_STARTED" || m.type === "PC_CHECK_RESULT") lastAck.current = Date.now();
     if (m.type === "PC_EXT_STALE") {
       setChecks(o => Object.fromEntries(Object.entries(o).map(([kk, v]) => [kk, v === "queued" ? NOT_STARTED : v])));
@@ -399,6 +413,15 @@ export default function PriceCompare() {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
       const res = m.result || {};
       if (!city || !hotel) return;
+      // every room + option the site listed → "All rooms" table (room-list prices until "Check exact")
+      if (!j.pickKey && Array.isArray(res.rooms) && res.rooms.length && res.roomsUrl) {
+        const ccy = String(res.currency || "INR").toUpperCase(), mult = j.mult || 1;
+        const rate = ccy === "INR" ? 1 : fx.current[ccy] || (ccy === trip.currency && roe ? roe : 0);
+        const list: RoomRow[] = res.rooms.filter((r: any) => r && r.total > 0).slice(0, 60).map((r: any) => ({
+          key: String(r.key), room: String(r.room || ""), meal: String(r.meal || ""), cxl: String(r.cxl || ""), taxes: r.taxes !== false,
+          total: rate ? Math.round(r.total * mult * rate) : r.total * mult, ccy: rate ? "INR" : ccy }));
+        if (list.length) patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list }));
+      }
       // Two independent readings: the page reader (text) and Gemini looking at a screenshot of the price.
       // Agree → confirmed. Only one found it → use it (screenshot only if it is the booking/checkout page).
       // Disagree, or the site shows other dates → "Check manually" (never a wrong price).
@@ -443,6 +466,12 @@ export default function PriceCompare() {
           ? { kind: v.cxl_type || undefined, until: v.free_until || undefined, fee: v.cxl_fee || undefined, feeCcy: v.cxl_fee_currency || undefined, feeFrom: v.cxl_fee_from || undefined, note: v.cxl_fee_note || undefined, text: v.cancellation || txt || undefined, summary: v.cxl_summary || undefined, full: res.policyText || undefined, pct: v.cxl_fee_percent || undefined, noshow: v.noshow || undefined }
           : txt ? { kind: /non-?refundable/i.test(txt) && !/free|fully refundable/i.test(txt) ? "non-refundable" : /free cancell?ation|fully refundable|cancel for free/i.test(txt) ? "free" : /partially/i.test(txt) ? "partial" : undefined, text: txt.split("\n").slice(0, 3).join(" · "), full: res.policyText || undefined } : undefined;
         const save = (rate: number) => {
+          if (j.pickKey) {   // "Check exact" on one room → only that row changes
+            const ex = Math.round(amount * rate);
+            patchRooms(city.id, hotel.id, j.source, r => r ? { ...r, list: r.list.map(x => x.key === j.pickKey ? { ...x, exact: ex, exactAt: Date.now(), exactCxl: cxl ? cxlLine(cxl, ex) : x.cxl } : x) } : { url: j.url, at: Date.now(), list: [] });
+            setChecks(o => ({ ...o, [k]: "ok" }));
+            return;
+          }
           applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, room, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined, cxl);
           setChecks(o => ({ ...o, [k]: "ok" }));
         };
@@ -744,6 +773,67 @@ export default function PriceCompare() {
             ))}
           </div>
         )}
+
+        {/* every room + meal plan + cancellation option the sites listed */}
+        {(() => {
+          const all = Object.entries(h.roomsBySite || {}).flatMap(([site, rb]) => rb.list.map(r => ({ ...r, site })));
+          if (!all.length) return null;
+          const ui = roomUi[h.id] || {};
+          const setUi = (p: { open?: boolean; meal?: string; cxl?: string }) => setRoomUi(o => ({ ...o, [h.id]: { ...(o[h.id] || {}), ...p } }));
+          const meals = ["Room only", "Breakfast", "Half board", "Full board", "All inclusive"].filter(m => all.some(r => r.meal === m));
+          const cxlKind = (t: string) => /^free/i.test(t) ? "free" : /non-?refundable/i.test(t) ? "non" : /partial/i.test(t) ? "partial" : "";
+          const shown = all.filter(r => (!ui.meal || r.meal === ui.meal) && (!ui.cxl || cxlKind(r.exactCxl || r.cxl) === ui.cxl))
+            .sort((a, b) => (a.exact || a.total) - (b.exact || b.total));
+          const money = (v: number, ccy: string) => ccy === "INR" ? inr(v) : `${ccy} ${Math.round(v).toLocaleString("en-IN")}`;
+          return (
+            <div style={{ padding: "0 10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button style={{ ...btn(), padding: "7px 12px", color: ACCENT }} onClick={() => setUi({ open: !ui.open })}>
+                  {ui.open ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />} All rooms ({all.length})</button>
+                {ui.open && <>
+                  <label style={{ ...lbl, flexDirection: "row", alignItems: "center", gap: 6 }}>Meal
+                    <select style={{ ...inp, padding: "6px 8px" }} value={ui.meal || ""} onChange={e => setUi({ meal: e.target.value })}>
+                      <option value="">All</option>{meals.map(m => <option key={m}>{m}</option>)}</select></label>
+                  <label style={{ ...lbl, flexDirection: "row", alignItems: "center", gap: 6 }}>Cancellation
+                    <select style={{ ...inp, padding: "6px 8px" }} value={ui.cxl || ""} onChange={e => setUi({ cxl: e.target.value })}>
+                      <option value="">All</option><option value="free">Free cancellation</option><option value="non">Non-refundable</option><option value="partial">Partially refundable</option></select></label>
+                  <span style={{ fontSize: 11.5, color: MUTED }}>Room-list prices from each site · <b>Check exact</b> takes that room to the site's checkout</span>
+                </>}
+              </div>
+              {ui.open && (<>
+                <div style={{ display: "grid", gridTemplateColumns: "110px 1.6fr 110px 1.3fr 150px 170px", gap: 10, padding: "2px 12px", fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.3 }} className="max-md:!hidden">
+                  <span>Website</span><span>Room</span><span>Meal</span><span>Cancellation</span><span style={{ textAlign: "right" }}>Total · per night</span><span />
+                </div>
+                {shown.length === 0 && <div style={{ fontSize: 12.5, color: MUTED, padding: "6px 12px" }}>No room matches these filters.</div>}
+                {shown.map(r => {
+                  const ck = checks[`${h.id}|${r.site}|${r.key}`];
+                  const busyRow = ck === "queued" || ck === "checking" || ck === "verifying";
+                  const cx = r.exactCxl || r.cxl;
+                  const v = r.exact || r.total, ccy = r.exact ? "INR" : r.ccy;
+                  return (
+                    <div key={r.site + r.key} style={{ display: "grid", gridTemplateColumns: "110px 1.6fr 110px 1.3fr 150px 170px", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12, boxShadow: SHADOW_IN }} className="max-md:!grid-cols-2">
+                      <span style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{r.site}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: TEXT }}>{r.room || "—"}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: r.meal === "Room only" ? MUTED : GREEN }}>{r.meal || "—"}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: cxlKind(cx) === "non" ? WARN : cxlKind(cx) === "free" ? GREEN : MUTED }}>{cx || "—"}</span>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{money(v, ccy)}{!r.exact && !r.taxes ? <span style={{ fontSize: 11, color: WARN }}> + taxes</span> : null}</div>
+                        <div style={{ fontSize: 11, color: MUTED }}>{money(v / n, ccy)} / night</div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                        {r.exact ? <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Exact at checkout {clock(r.exactAt)}</span>
+                          : busyRow ? <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {ck === "queued" ? "waiting…" : ck === "verifying" ? "verifying…" : "checking…"}</span>
+                          : <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>room-list price</span>}
+                        {!busyRow && <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => checkRoom(c, h, r.site, r)}>{r.exact ? "Check again" : "Check exact"}</button>}
+                        {ck && !busyRow && ck !== "ok" && <span style={{ fontSize: 11, color: WARN, textAlign: "right" }}>{ck}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>)}
+            </div>
+          );
+        })()}
       </div>
     );
   };
