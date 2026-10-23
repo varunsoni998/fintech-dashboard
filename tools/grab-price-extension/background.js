@@ -76,7 +76,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 //  • Expedia / Hotels.com hotel page: "Choose your room" section, each room "View all photos for <room> … ₹146,910 total"
 //    (further down the page shows OTHER hotels' totals → only the "Choose your room" section counts)
 //  • Expedia search page (Google sometimes links here): find THIS hotel's card and open its page
-async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
+async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, pickWant) {
   // which currency is the page in? (the token most often written right before a number)
   const pageCurrency = () => {
     const norm = { "₹": "INR", "RS": "INR", "RS.": "INR", "INR": "INR", "US$": "USD", "USD": "USD", "$": "USD", "A$": "AUD", "AUD": "AUD", "S$": "SGD", "SGD": "SGD",
@@ -87,7 +87,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "INR";
   };
-  let roomList = [], roomsUrl = "";
+  let roomList = [], roomsUrl = "", chosenPick = null;
   const core = async () => {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const num = (s) => parseFloat(String(s).replace(/,/g, ""));
@@ -134,6 +134,20 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
     if (/partially refundable/i.test(t)) return "Partially refundable";
     if (/^\s*cancellation policy\s*$/im.test(t)) return "No free cancellation";   // Agoda: only a "Cancellation policy" link = not free
     return "";
+  };
+  // "Check exact" for a room: by its key on this site, or (room type chosen on Price Compare) the closest room name + meal
+  const picking = !!(pickKey || (pickWant && pickWant.names && pickWant.names.length));
+  const choose = (list, roomOf, textOf, keyOf, priceOf) => {
+    const k = pickKey && list.find(x => keyOf(x) === pickKey); if (k) return k;
+    if (!(pickWant && pickWant.names && pickWant.names.length)) return null;
+    const sc = list.map(x => {
+      const nm = roomOf(x) || "";
+      const o = Math.max(...pickWant.names.map(n => Math.max(overlap(n, nm), overlap(nm, n))));
+      return { x, o, s: o + (pickWant.meal && mealOf(textOf(x) || "") === pickWant.meal ? 0.3 : 0) };
+    }).filter(y => y.o >= 0.5);
+    sc.sort((a, b) => (Math.abs(b.s - a.s) > 0.05 ? b.s - a.s : priceOf(a.x) - priceOf(b.x)));
+    if (sc[0]) chosenPick = { room: roomOf(sc[0].x) || "", meal: mealOf(textOf(sc[0].x) || "") };
+    return sc[0] ? sc[0].x : null;
   };
   const setList = (list) => { const seen = new Set(); roomList = list.filter(x => { const d = [x.room, mealOf(x.text || ""), cxlOf(x.text || ""), Math.round(x.total)].join("|"); if (seen.has(d)) return false; seen.add(d); return true; }).map(x => ({ key: x.key, room: x.room, meal: mealOf(x.text || ""), cxl: cxlOf(x.text || ""), total: cents(x.total), taxes: x.taxes !== false })); roomsUrl = location.href; };
   const inrLink = (u) => { try { const x = new URL(u); if (/agoda\.com$/i.test(x.hostname)) x.searchParams.set("currency", "INR"); return x.href; } catch { return u; } };
@@ -233,12 +247,12 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
           }
           if (found.length && found[0].key) setList(found);
           if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
-          const c = pickKey ? found.find(x => x.key === pickKey) : cheapest(found);
-          if (pickKey && !c && t >= 12) return { error: `That room isn't shown on ${site} any more` };
+          const c = picking ? choose(found, x => x.room, x => x.text, x => x.key, x => x.total) : cheapest(found);
+          if (picking && !c && t >= 12) return { error: `That room isn't shown on ${site} any more` };
           // the room list's "total" leaves out resort fees → open the checkout of the cheapest room to see the full total
           const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
           if (c && !clicked && pressedAgo > 60000) {
-            if (pickKey) {
+            if (picking) {
               // the Reserve button inside THIS room's card (the card is the box that names the room)
               const cards = [...document.querySelectorAll("button, a, [role='button']")].filter(b => /^(reserve|select|book now)$/i.test(label(b)) && b.getClientRects().length > 0).map(b => {
                 let e = b; while (e && !/View all photos for /i.test(e.innerText || "")) e = e.parentElement;
@@ -290,8 +304,8 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
           found.push({ total, room, free: /Free cancellation/i.test(rt), row: r, text: rt, key: (r.getAttribute("data-block-id") || "row" + rows.indexOf(r)) });
         }
         if (found.length) setList(found);
-        const c = pickKey ? found.find(x => x.key === pickKey) : cheapest(found);
-        if (pickKey && !c && t >= 12) return { error: "That room isn't shown on Booking.com any more" };
+        const c = picking ? choose(found, x => x.room, x => x.text, x => x.key, x => x.total) : cheapest(found);
+        if (picking && !c && t >= 12) return { error: "That room isn't shown on Booking.com any more" };
         // go to Booking's checkout for the full price + cancellation terms: choose 1 of the cheapest room, press "I'll reserve"
         // (this only opens the "Your details" page – nothing is typed or booked)
         const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
@@ -307,7 +321,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
             return { wait: true };
           }
         }
-        if (c && !pickKey && (pressedAgo >= 60000 || t >= 12)) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
+        if (c && !picking && (pressedAgo >= 60000 || t >= 12)) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
       // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
       // checkout page (Google often links straight here): "Total ₹ 67,467.66 Includes taxes and charges"
@@ -342,7 +356,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
         const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(Total price|Total|Price|Pay at (?:the )?(?:hotel|property)|Total (?:due|payable)[^\\n0-9]{0,25})[^\\n0-9]{0,35}?\\s*(?:tooltip\\s*)?\\n?\\s*(?:tooltip\\s*\\n?\\s*)?" + R + AMT))]
           .filter(x => !/before|original|room price|discount|saved|coupon|today/i.test(x[0]) && num(x[2]) > 100).pop();
         let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
-        if (pickKey && rm && ss.get("pcRoom") && overlap(ss.get("pcRoom"), rm) < 0.6) return { error: `Agoda opened a different room (${rm.slice(0, 60)})` };
+        if (picking && rm && ss.get("pcRoom") && overlap(ss.get("pcRoom"), rm) < 0.6) return { error: `Agoda opened a different room (${rm.slice(0, 60)})` };
         if (m) return { total: cents(num(m[2])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancell?ation|cancel for free/i.test(txt) && !/non-refundable/i.test(txt) };
         // the booking form is still loading → wait here (never scroll the booking form)
         if (t >= 25) { const k2 = txt.search(/Price Before Taxes|Room price|Price/i); return { error: "Agoda's booking form didn't show the price", debug: txt.slice(Math.max(0, k2), k2 + 400) }; }
@@ -396,8 +410,9 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
         const skip = (ss.get("pcSkip") || "").split("|").filter(Boolean);
         const keyOf = (x) => x.room + "@" + x.amt;
         const usable = offers.filter(x => !skip.includes(keyOf(x)));    // rooms that sold out while checking are skipped
-        const wanted = pickKey ? usable.filter(x => okey(x) === pickKey) : usable;
-        if (pickKey && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : "That room isn't shown on Agoda any more" };
+        const one = picking ? choose(usable, x => x.room, x => x.ot, okey, x => x.amt) : null;
+        const wanted = picking ? (one ? [one] : []) : usable;
+        if (picking && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : "That room isn't shown on Agoda any more" };
         if (wanted.length) {
           const pick = wanted.sort((x, y) => x.amt - y.amt)[0];
           ss.set("pcRoom", pick.room); ss.set("pcPick", keyOf(pick)); ss.set("pcPressed", String(Date.now())); clicked = true;
@@ -455,6 +470,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
   };
   const r = await core();
   if (r && roomList.length) { r.rooms = roomList; r.roomsUrl = roomsUrl; }
+  if (r && chosenPick) r.picked = chosenPick;                    // which room + meal was taken to checkout
   if (r && r.total) {
     r.currency = pageCurrency();
     // cancellation wording as the site writes it (checkout pages show it for the chosen room)
@@ -545,7 +561,7 @@ async function checkOne(job, windowId) {
   chrome.tabs.onReplaced.addListener(onSwap);
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
-    let robotDone = false; const fixedHosts = new Map(); const trail = []; let usedDirect = false; let rooms = null, roomsUrl = "";
+    let robotDone = false; const fixedHosts = new Map(); const trail = []; let usedDirect = false; let rooms = null, roomsUrl = "", picked = null;
     for (let hop = 0; hop < 10; hop++) {
       const ws = await waitForSite(() => cur, 45000, !other);
       if (ws === "compare") {
@@ -567,11 +583,12 @@ async function checkOne(job, windowId) {
       await sleep(2000);
       let r;
       try {
-        const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: other }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || "", usedDirect || !!job.pickKey, job.pickKey || ""] });
+        const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: other }, func: readSitePrice, args: [job.source, job.nights, job.adults || 2, job.hotel || "", usedDirect || !!job.pickKey || !!job.pickWant, job.pickKey || "", job.pickWant || null] });
         const rs = res.map(x => x?.result).filter(Boolean);
         r = rs.find(x => x.total) || rs.find(x => x.robot || x.go || x.wait) || res[0]?.result;
       } catch (e) { await sleep(2000); continue; }             // the page changed while reading → try again
       if (r?.rooms?.length && !job.pickKey) { rooms = r.rooms; roomsUrl = r.roomsUrl; }
+      if (r?.picked) picked = r.picked;
       if (r?.go) { await chrome.tabs.update(cur, { url: r.go }); await sleep(1500); continue; }   // list page → this hotel's page
       if (r?.wait) {                                             // pressed "Book now" → wait for the booking form
         const before = (await chrome.tabs.get(cur).catch(() => null))?.url;
@@ -593,7 +610,8 @@ async function checkOne(job, windowId) {
       }
       const out = Object.assign(r || { error: "Couldn't read the page" }, { trail });
       delete out.rooms; delete out.roomsUrl;
-      if (rooms) { out.rooms = rooms; out.roomsUrl = roomsUrl; }      // every room on the hotel page (for the "All rooms" table)
+      if (rooms) { out.rooms = rooms; out.roomsUrl = roomsUrl; }
+      if (picked && !out.picked) out.picked = picked;      // every room on the hotel page (for the "All rooms" table)
       if (out.total || (out.error && !out.robot)) {
         out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
         // full cancellation policy: open the site's "cancellation policy" pop-up (Booking.com) or read the written policy
@@ -698,7 +716,7 @@ const pending = [];
 
 async function run(jobs, replyTabId) {
   // skip a hotel+site that is already waiting in the queue
-  const k = (j) => `${j.hid}|${j.source}|${j.url}|${j.pickKey || ""}`;
+  const k = (j) => `${j.hid}|${j.source}|${j.url}|${j.pickKey || ""}|${j.pickWant ? JSON.stringify(j.pickWant) : ""}`;
   const queued = new Set(pending.map(x => k(x.j)));
   pending.push(...jobs.filter(j => !queued.has(k(j)) && queued.add(k(j))).map(j => ({ j, replyTabId })));
   const send = (tabId, msg) => chrome.tabs.sendMessage(tabId, msg).catch(() => {});

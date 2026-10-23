@@ -28,18 +28,34 @@ const CCYS = ["USD", "EUR", "CHF", "GBP", "AED", "SGD", "THB", "AUD", "INR"];
 const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", CHF: "CHF ", AED: "AED ", SGD: "S$", THB: "฿", AUD: "A$", INR: "₹" };
 
 interface OnlinePrice { source: string; total: number; per_night: number; free_cancellation: boolean; link?: string; before_tax?: number | null; room?: string | null }
-interface Online { found: boolean; name?: string; stars?: number; rating?: number; reviews?: number; image?: string; link?: string; prices: OnlinePrice[]; suggestions?: string[]; currency?: string; roeAt?: number }
+interface Online { found: boolean; name?: string; stars?: number; rating?: number; reviews?: number; image?: string; link?: string; prices: OnlinePrice[]; suggestions?: string[]; currency?: string; roeAt?: number; site_rooms?: Record<string, { name: string; total: number; per_night: number; free_cancellation: boolean; link?: string }[]> }
 interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
 interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string }
 // a room + meal + cancellation option added to the Excel from the "All rooms" list
 interface RoomPick { id: string; site: string; key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; exact?: number }
 const MEAL_CODE: Record<string, string> = { "Room only": "RO", Breakfast: "BB", "Half board": "HB", "Full board": "FB", "All inclusive": "AI" };
+// ── room types: the same room on different sites (word matching; Gemini refines it) ──
+const ROOM_CATS = ["presidential suite", "royal suite", "penthouse", "villa", "cottage", "apartment", "studio", "family room", "junior suite", "executive suite", "deluxe suite", "premier suite", "club suite", "suite", "club", "executive", "premier", "premium", "luxury", "deluxe", "superior", "classic", "standard"];
+const VIEWS = ["sea", "ocean", "lake", "pool", "garden", "city", "mountain", "river", "palace", "beach", "bay", "golf", "courtyard"];
+const roomWordKey = (name: string) => {
+  const t = " " + name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " ";
+  const cat = ROOM_CATS.find(c => t.includes(" " + c + " ")) || "room";
+  const bed = /\btwin\b|\b2 single|\btwo single|single beds/.test(t) ? "twin" : /\bking\b|\bqueen\b|\bdouble\b/.test(t) ? "double" : "";
+  const view = VIEWS.find(v => new RegExp(`\\b${v}\\b.{0,14}view|view.{0,6}\\b${v}\\b|\\b${v} facing|\\b${v} front`).test(t)) || "";
+  return [cat, bed, view].join("|");
+};
+const prettyRoomKey = (k: string) => {
+  const [cat, bed, view] = k.split("|");
+  const C = cat === "room" ? "Room" : cat.replace(/\b\w/g, m => m.toUpperCase()) + (/(suite|villa|cottage|apartment|studio|penthouse|room)$/.test(cat) ? "" : " Room");
+  return [C, bed === "twin" ? "Twin beds" : bed === "double" ? "Double / King bed" : "", view ? view[0].toUpperCase() + view.slice(1) + " view" : ""].filter(Boolean).join(", ");
+};
+interface CatItem { site: string; name: string; total: number; src: "google" | "site"; key?: string; meal?: string; cxl?: string; taxes?: boolean; exact?: number; free?: boolean }
 const MEAL_NAME: Record<string, string> = { RO: "Room only", BB: "Breakfast", HB: "Half board", FB: "Full board", AI: "All inclusive" };
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
@@ -260,6 +276,48 @@ export default function PriceCompare() {
   const setPicks = (cid: string, hid: string, f: (p: RoomPick[]) => RoomPick[]) =>
     setTrip(t => ({ ...t, cities: t.cities.map(c => (c.id !== cid ? c : { ...c, hotels: c.hotels.map(h => (h.id === hid ? { ...h, picks: f(h.picks || []) } : h)) })) }));
 
+  // every room this hotel has: Google's list per site + the sites' own lists (from the extension)
+  const catalog = (h: Hotel): CatItem[] => {
+    const rate = h.online?.roeAt || 1;
+    const g: CatItem[] = Object.entries(h.online?.site_rooms || {}).flatMap(([site, l]) => l.map(r => ({ site, name: r.name, total: Math.round(r.total * rate * (nRooms || 1)), src: "google" as const, free: r.free_cancellation })));
+    const st: CatItem[] = Object.entries(h.roomsBySite || {}).flatMap(([site, rb]) => rb.list.filter(r => r.ccy === "INR" || r.exact).map(r => ({ site, name: r.room, total: r.exact || r.total, src: "site" as const, key: r.key, meal: r.meal, cxl: r.exactCxl || r.cxl, taxes: r.taxes, exact: r.exact })));
+    return [...g, ...st].filter(x => x.name && x.total > 0);
+  };
+  const roomGroups = (h: Hotel) => {
+    const items = catalog(h);
+    const gm = new Map<string, string>(); (h.roomTypes || []).forEach(gr => gr.m.forEach(m => gm.set(m.site + "|" + m.name, gr.type)));
+    const wk = items.map(x => roomWordKey(x.name)), keys = new Set(wk);
+    // a name without a bed type ("Deluxe Room") joins the one matching group that has it ("Deluxe, King")
+    const fixed = wk.map(k => { const [c0, b0, v0] = k.split("|"); if (b0) return k; const o = [...keys].filter(x => { const [c2, b2, v2] = x.split("|"); return c2 === c0 && v2 === v0 && !!b2; }); return o.length === 1 ? o[0] : k; });
+    const byWord = new Map<string, string>(); items.forEach((x, i) => { const t = gm.get(x.site + "|" + x.name); if (t && !byWord.has(fixed[i])) byWord.set(fixed[i], t); });
+    const groups = new Map<string, { type: string; items: CatItem[] }>();
+    items.forEach((x, i) => { const t = gm.get(x.site + "|" + x.name) || byWord.get(fixed[i]) || prettyRoomKey(fixed[i]); if (!groups.has(t)) groups.set(t, { type: t, items: [] }); groups.get(t)!.items.push(x); });
+    return [...groups.values()].map(g => ({ ...g, from: Math.min(...g.items.map(x => x.total)), sites: [...new Set(g.items.map(x => x.site))] })).sort((a, b) => a.from - b.from);
+  };
+  const groupRooms = async (c: City, h: Hotel) => {
+    const seen = new Set<string>();
+    const rooms = catalog(h).map(x => ({ site: x.site, name: x.name })).filter(x => { const k = x.site + "|" + x.name; if (seen.has(k)) return false; seen.add(k); return true; });
+    const sig = rooms.map(x => x.site + "|" + x.name).sort().join("¦");
+    if (rooms.length < 2 || h.roomTypesSig === sig || visionOff.current) return;
+    setHotel(c.id, h.id, { typesLoading: true, roomTypesSig: sig });
+    try {
+      const r = await (await authFetch("/rooms/group", { hotel: h.online?.name || h.name, rooms })).json();
+      setHotel(c.id, h.id, { typesLoading: false, roomTypes: (r.groups || []).map((g: any) => ({ type: String(g.type), m: (g.ids || []).map((i: number) => rooms[i]).filter(Boolean) })) });
+    } catch (e: any) { if (/GEMINI_API_KEY/.test(String(e?.message))) visionOff.current = true; setHotel(c.id, h.id, { typesLoading: false }); }   // word matching stays
+  };
+  // the chosen room type on one site: exact checkout price > site's own list (same meal) > Google's list
+  const typeFor = (h: Hotel, site: string) => {
+    if (!h.room) return null;
+    const g = roomGroups(h).find(x => x.type === h.room); if (!g) return null;
+    const meal = MEAL_NAME[h.meal] || "";
+    const its = g.items.filter(x => x.site === site);
+    const cheap = (l: CatItem[]) => l.slice().sort((a, b) => a.total - b.total)[0];
+    const own = its.filter(x => x.src === "site");
+    const item = cheap(own.filter(x => x.meal === meal)) || cheap(its.filter(x => x.src === "google")) || cheap(own);
+    const tk = `${site}|${g.type}|${h.meal}`;
+    return { g, item, tk, ex: h.typeExact?.[tk], names: [...new Set([...its.map(x => x.name), g.type])] };
+  };
+
   // ── Rooms picker ───────────────────────────────────────────────────────────
   const rooms = trip.roomList;
   const setRoom = (i: number, p: Partial<Room>) => setT({ roomList: rooms.map((r, j) => (j === i ? { ...r, ...p } : r)) });
@@ -416,10 +474,18 @@ export default function PriceCompare() {
     setChecks(o => ({ ...o, [`${h.id}|${site}|${r.key}`]: "queued" }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs: [job] }, location.origin);
   };
+  const checkType = (c: City, h: Hotel, site: string, t: NonNullable<ReturnType<typeof typeFor>>) => {
+    const url = h.roomsBySite?.[site]?.url || (h.online?.prices || []).find(p => p.source === site)?.link;
+    if (!url || !extAuto || !sameRooms) { setMsg({ kind: "err", text: url ? "Exact check needs the Grab-price extension (and all rooms with the same guests)." : `No ${site} link for this hotel.` }); return; }
+    const job = { cid: c.id, hid: h.id, source: site, url, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name,
+      pickWant: { names: t.names, meal: MEAL_NAME[h.meal] || "" }, typeKey: t.tk };
+    setChecks(o => ({ ...o, [`${h.id}|${site}|type:${t.tk}`]: "queued" }));
+    window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs: [job] }, location.origin);
+  };
   afterFetch.current = (c, h) => { if (autoOn && extAuto && sameRooms) autoCheck([{ c, h }], true); };
   const NOT_STARTED = "Not started — the extension was updated or stopped: press F5 on this page, then Re-check";
   onCheckMsg.current = (m: any) => {
-    const j = m.job; const k = j ? `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}` : "";
+    const j = m.job; const k = j ? `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}` : "";
     if (m.type === "PC_CHECK_QUEUED" || m.type === "PC_CHECK_STARTED" || m.type === "PC_CHECK_RESULT") lastAck.current = Date.now();
     if (m.type === "PC_EXT_STALE") {
       setChecks(o => Object.fromEntries(Object.entries(o).map(([kk, v]) => [kk, v === "queued" ? NOT_STARTED : v])));
@@ -484,6 +550,12 @@ export default function PriceCompare() {
           ? { kind: v.cxl_type || undefined, until: v.free_until || undefined, fee: v.cxl_fee || undefined, feeCcy: v.cxl_fee_currency || undefined, feeFrom: v.cxl_fee_from || undefined, note: v.cxl_fee_note || undefined, text: v.cancellation || txt || undefined, summary: v.cxl_summary || undefined, full: res.policyText || undefined, pct: v.cxl_fee_percent || undefined, noshow: v.noshow || undefined }
           : txt ? { kind: /non-?refundable/i.test(txt) && !/free|fully refundable/i.test(txt) ? "non-refundable" : /free cancell?ation|fully refundable|cancel for free/i.test(txt) ? "free" : /partially/i.test(txt) ? "partial" : undefined, text: txt.split("\n").slice(0, 3).join(" · "), full: res.policyText || undefined } : undefined;
         const save = (rate: number) => {
+          if (j.typeKey) {   // "Check exact" for the chosen room type on one site
+            const ex = Math.round(amount * rate);
+            setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => y.id !== hotel.id ? y : { ...y, typeExact: { ...(y.typeExact || {}), [j.typeKey]: { total: ex, room: roomOnly(room) || res.picked?.room || "", cxl: cxl ? cxlLine(cxl, ex) : "", meal: res.picked?.meal || "", at: Date.now() } } }) }) }));
+            setChecks(o => ({ ...o, [k]: "ok" }));
+            return;
+          }
           if (j.pickKey) {   // "Check exact" on one room → only that row changes
             const ex = Math.round(amount * rate);
             patchRooms(city.id, hotel.id, j.source, r => r ? { ...r, list: r.list.map(x => x.key === j.pickKey ? { ...x, exact: ex, exactAt: Date.now(), exactCxl: cxl ? cxlLine(cxl, ex) : x.cxl } : x) } : { url: j.url, at: Date.now(), list: [] });
@@ -578,6 +650,16 @@ export default function PriceCompare() {
           continue;
         }
         const mine = ds.filter(d => d.mine);
+        // a room type is chosen → that room's price on each site (exact checkout price first)
+        const tRows = online.map(d => { const t = typeFor(h, d.source); const v = t?.ex?.total || t?.item?.total; return t && v ? { d, v, exact: !!t.ex, t } : null; }).filter(Boolean)
+          .sort((a, b) => (b!.exact ? 1 : 0) - (a!.exact ? 1 : 0) || a!.v - b!.v) as { d: Deal; v: number; exact: boolean; t: NonNullable<ReturnType<typeof typeFor>> }[];
+        if (!mine.length && tRows.length) {
+          const top = tRows[0];
+          rows.push({ bid: h.label || undefined, description: desc, source: top.d.source, currency: "INR", amount: Math.round(top.v / (nRooms || 1)), meal: h.meal,
+            cancel: top.t.ex?.cxl || top.t.item?.cxl || undefined, markup: 0, pkg: h.inPkg ? ["A"] : [],
+            remark: tRows.slice(0, 6).map(x => `${x.d.source} ${money(x.v / (nRooms || 1), "INR")}${x.exact ? " ✓" : ""}`).join(" · ") + ` (${h.room}; ✓ = exact)`, _ref: { cid: c.id, hid: h.id } });
+          continue;
+        }
         const main = mine.length ? mine : [online[0] || ds[0]];
         main.forEach((d, i) => rows.push({ bid: h.label || undefined, description: desc, source: d.source, ...asCost(d), meal: h.meal,
           cancel: d.mine ? h.cancel || undefined : cxlShort(d.cxl, d.rupees / perRoom(d)) || (d.free ? "Free cxl" : undefined), markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
@@ -673,7 +755,60 @@ export default function PriceCompare() {
             {mineHotel && !h.online && !h.loading && <div style={{ fontSize: 12.5, color: MUTED }}>Click <b>Search</b> to get every site's price.</div>}
             {h.checkedAt && !h.loading && <div style={{ fontSize: 11.5, color: MUTED }}>Prices checked at {clock(h.checkedAt)}{h.online?.currency && h.online.currency !== "INR" ? ` · quoted in ${h.online.currency}` : ""}</div>}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto", alignItems: "center", fontSize: 12.5 }}>
-              <input style={{ ...inp, width: 170, padding: "7px 9px", fontSize: 12.5 }} value={h.room} placeholder="Room type (for Excel)" onChange={e => setHotel(c.id, h.id, { room: e.target.value })} />
+              {(() => {
+                const pid = `type|${h.id}`, open = picker?.id === pid;
+                const groups = open ? roomGroups(h) : [];
+                const toggle = async (e: React.MouseEvent<HTMLButtonElement>) => {
+                  if (open) return setPicker(null);
+                  const r = e.currentTarget.getBoundingClientRect(), w = Math.min(560, window.innerWidth - 24);
+                  const below = window.innerHeight - r.bottom - 12, above = r.top - 12, up = below < 320 && above > below;
+                  setPicker({ id: pid, left: Math.max(12, Math.min(r.left, window.innerWidth - w - 12)), top: up ? r.top - 6 : r.bottom + 6, width: w, up, maxH: Math.min(480, up ? above : below) });
+                  // rooms come with the hotel's prices (1 search, the same one "See all prices" uses)
+                  let hh = h;
+                  if (!h.online || h.searchedFor !== key(c, h)) { const o = await fetchOne(c, h, false, !!h.open, false); if (o) hh = { ...h, online: o }; loadStatus(); }
+                  groupRooms(c, hh);
+                };
+                return (<>
+                  <button data-pc-picker-btn onClick={toggle} title="Room type — the same room is priced on every site" style={{ ...inp, width: 220, padding: "7px 9px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}>
+                    <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: h.room ? TEXT : MUTED }}>{h.room || "Room type (any)"}</span>
+                    {h.loading || h.typesLoading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 13, height: 13 }} />}
+                  </button>
+                  {open && picker && (
+                    <div id="pc-room-picker" style={{ position: "fixed", left: picker.left, width: picker.width, zIndex: 70, ...(picker.up ? { bottom: window.innerHeight - picker.top } : { top: picker.top }),
+                      maxHeight: picker.maxH, display: "flex", flexDirection: "column", background: BG, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35), " + SHADOW_OUT, overflow: "hidden" }}>
+                      <div style={{ padding: "10px 12px", borderBottom: `1px solid ${MUTED}22`, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>Room types at {h.online?.name || h.name}</span>
+                        <input placeholder="…or type a room name and press Enter" style={{ ...inp, padding: "6px 9px", fontSize: 12 }} defaultValue=""
+                          onKeyDown={e => { if (e.key === "Enter") { setHotel(c.id, h.id, { room: (e.target as HTMLInputElement).value.trim() }); setPicker(null); } }} />
+                        {h.typesLoading && <span style={{ fontSize: 11, color: ACCENT, display: "inline-flex", gap: 5, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> Matching the same rooms across sites…</span>}
+                      </div>
+                      <div style={{ overflowY: "auto", padding: 6 }}>
+                        <button onClick={() => { setHotel(c.id, h.id, { room: "" }); setPicker(null); }} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !h.room ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 700 }}>Any room — cheapest on each site</button>
+                        {h.loading && <div style={{ padding: 12, fontSize: 12, color: ACCENT, display: "flex", gap: 6, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Loading this hotel's rooms…</div>}
+                        {!h.loading && groups.length === 0 && <div style={{ padding: 12, fontSize: 12, color: MUTED }}>Google doesn't list the rooms for this hotel. Press <b>Re-check exact prices</b> — the sites' own room lists will show here.</div>}
+                        {groups.map(g => {
+                          const on = h.room === g.type;
+                          return (
+                            <button key={g.type} onClick={() => { setHotel(c.id, h.id, { room: g.type, open: true }); setPicker(null); }}
+                              style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: on ? TINT : "transparent", color: TEXT }}
+                              onMouseEnter={e => { if (!on) e.currentTarget.style.background = `${ACCENT}14`; }} onMouseLeave={e => { e.currentTarget.style.background = on ? TINT : "transparent"; }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.type}</div>
+                                <div style={{ marginTop: 3, fontSize: 11, color: MUTED, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>on {g.sites.join(" · ")} · {plural(g.items.length, "option", "options")}</div>
+                              </div>
+                              <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                                <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700 }}>from</div>
+                                <div style={{ fontSize: 13.5, fontWeight: 800 }}>{inr(g.from)}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>);
+              })()}
               <select style={{ ...inp, width: 66, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>{MEALS.map(m => <option key={m}>{m}</option>)}</select>
               <select style={{ ...inp, width: 86, padding: "7px 6px", fontSize: 12.5 }} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "label"}</option>)}</select>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: TEXT, cursor: "pointer" }}>
@@ -754,6 +889,14 @@ export default function PriceCompare() {
               const siteRooms = (h.roomsBySite?.[d.source]?.list || []).filter(r => { const x = [r.room, r.meal, r.cxl, Math.round(r.total)].join("|"); if (seenR.has(x)) return false; seenR.add(x); return true; })
                 .sort((x, y) => (x.exact || x.total) - (y.exact || y.total));
               const sr = siteRooms.find(r => r.key === h.roomSel?.[d.source]);
+              const tsel = !d.mine && !sr ? typeFor(h, d.source) : null;
+              const tck = tsel ? checks[`${h.id}|${d.source}|type:${tsel.tk}`] : "";
+              const tBusy = tck === "queued" || tck === "checking" || tck === "verifying";
+              const tPrice = tsel ? tsel.ex?.total || tsel.item?.total : undefined;
+              const tCx = tsel ? tsel.ex?.cxl || tsel.item?.cxl || (tsel.item?.free ? "Free cancellation" : "") : "";
+              const tMeal = tsel ? tsel.ex?.meal || tsel.item?.meal || "" : "";
+              const tKey = tsel ? `type:${tsel.tk}` : "";
+              const tPk = tsel && (h.picks || []).find(p => p.site === d.source && p.key === tKey);
               const srCx = sr ? sr.exactCxl || sr.cxl : "";
               const ck = sr ? checks[`${h.id}|${d.source}|${sr.key}`] : "";
               const busyR = ck === "queued" || ck === "checking" || ck === "verifying";
@@ -770,7 +913,7 @@ export default function PriceCompare() {
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                      {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
+                      {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : tsel ? <span title={tsel.ex?.room || tsel.item?.name}>{short(tsel.ex?.room || tsel.item?.name || `${tsel.g.type} — not in ${d.source}'s room list`, 90)}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
                   {!d.mine && siteRooms.length > 0 && (
@@ -791,7 +934,7 @@ export default function PriceCompare() {
                         return (<>
                           <button data-pc-picker-btn onClick={toggle} style={{ ...btn(), padding: "6px 12px", fontSize: 12, maxWidth: 520, gap: 8, boxShadow: open ? SHADOW_IN : SHADOW_SM }}>
                             <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sr ? `${short(sr.room, 40)} · ${sr.meal}` : `${d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} — ${siteRooms.length} rooms on ${d.source}`}</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sr ? `${short(sr.room, 40)} · ${sr.meal}` : h.room && roomGroups(h).some(g => g.type === h.room) ? `Pick another room — ${siteRooms.length} on ${d.source}` : `${d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} — ${siteRooms.length} rooms on ${d.source}`}</span>
                             {open ? <ChevronUp style={{ width: 14, height: 14, flexShrink: 0 }} /> : <ChevronDown style={{ width: 14, height: 14, flexShrink: 0 }} />}
                           </button>
                           {open && picker && (
@@ -843,11 +986,22 @@ export default function PriceCompare() {
                       </>)}
                     </div>
                   )}
+                  {tsel && (
+                    <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      {tsel.ex ? <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ exact {clock(tsel.ex.at)}</span>
+                        : tBusy ? <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {tck === "queued" ? "waiting…" : tck === "verifying" ? "verifying…" : `checking ${tsel.g.type} on ${d.source}…`}</span>
+                        : tsel.item ? <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{tsel.item.src === "google" ? "Google room price" : "room-list price"}</span> : null}
+                      {!tBusy && <button style={lb(ACCENT)} onClick={() => checkType(c, h, d.source, tsel)}>{tsel.ex ? "Re-check" : "Check exact"}</button>}
+                      {tPrice ? (tPk ? <button style={lb(GREEN)} title="Click to take it out of the Excel" onClick={() => setPicks(c.id, h.id, ps => ps.filter(x => x.id !== tPk.id))}>✓ In Excel</button>
+                        : <button style={lb(TEXT)} onClick={() => setPicks(c.id, h.id, ps => [...ps, { id: uid(), site: d.source, key: tKey, room: tsel.ex?.room || tsel.item?.name || tsel.g.type, meal: tMeal || MEAL_NAME[h.meal] || "Room only", cxl: tCx, total: tPrice, taxes: tsel.ex ? true : tsel.item?.taxes !== false, exact: tsel.ex?.total }])}>+ Add to Excel</button>) : null}
+                    </div>
+                  )}
+                  {tsel && tck && !tBusy && tck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {tck}</div>}
                   {sr && ck && !busyR && ck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {ck}</div>}
-                  {!d.mine && !sr && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok", "verifying"].includes(checks[`${h.id}|${d.source}`]) && (
+                  {!d.mine && !sr && !tsel && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok", "verifying"].includes(checks[`${h.id}|${d.source}`]) && (
                     <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {checks[`${h.id}|${d.source}`]} — use View deal</div>
                   )}
-                  {!d.mine && !sr && (
+                  {!d.mine && !sr && !tsel && (
                     <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 11.5, fontWeight: 600 }}>
                       {editing && editing.hid === h.id && editing.source === d.source ? (<>
                         <span style={{ color: MUTED }}>Total on {d.source} ₹</span>
@@ -894,9 +1048,14 @@ export default function PriceCompare() {
                 {sr ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ color: sr.meal === "Room only" ? MUTED : GREEN, fontWeight: 700 }}>{sr.meal}</span>
                   <span style={{ color: /^free/i.test(srCx) ? GREEN : /non-?refundable|no free/i.test(srCx) ? WARN : MUTED }}>{srCx || "—"}</span>
+                </div> : tsel ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ color: tMeal && tMeal !== "Room only" ? GREEN : MUTED, fontWeight: 700 }}>{tMeal || (tsel.item?.src === "google" ? "meal: see site" : "—")}</span>
+                  <span style={{ color: /^free/i.test(tCx) ? GREEN : /non-?refundable|no free/i.test(tCx) ? WARN : MUTED }}>{tCx || "—"}</span>
                 </div> : <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlLine(d.cxl, d.rupees) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>}
                 {sr ? (sr.exact || sr.ccy === "INR" ? <div>{priceBlock(sr.exact || sr.total, n)}{!sr.exact && !sr.taxes && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div>
-                  : <div style={{ textAlign: "right", fontWeight: 800, color: TEXT }}>{sr.ccy} {Math.round(sr.total).toLocaleString("en-IN")}</div>) : priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
+                  : <div style={{ textAlign: "right", fontWeight: 800, color: TEXT }}>{sr.ccy} {Math.round(sr.total).toLocaleString("en-IN")}</div>)
+                  : tsel ? (tPrice ? <div>{priceBlock(tPrice, n)}{!tsel.ex && tsel.item?.taxes === false && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div> : <div style={{ textAlign: "right", fontSize: 12, color: MUTED }}>not listed</div>)
+                  : priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
                 {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
                   : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}
               </div>

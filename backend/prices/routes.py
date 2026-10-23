@@ -162,6 +162,24 @@ def _totals(obj: dict, nights: int):
     return total, per
 
 
+def extract_rooms(prop: dict, nights: int) -> dict:
+    """Every named room Google lists, per site: {source: [{name, total, per_night, free_cancellation, link}]} cheapest first."""
+    out = {}
+    for item in (prop.get("featured_prices") or []) + (prop.get("prices") or []):
+        src = _site(item, prop.get("name") or "")
+        if not src: continue
+        for rm in (item.get("rooms") or []):
+            rt, rp = _totals(rm, nights)
+            name = str(rm.get("name") or "").strip()
+            if rt is None or not name: continue
+            lst = out.setdefault(src, [])
+            if any(x["name"] == name and abs(x["total"] - rt) < 1 for x in lst): continue
+            lst.append({"name": name, "total": round(rt), "per_night": round(rp or rt / max(nights, 1)),
+                        "free_cancellation": bool(rm.get("free_cancellation")), "link": rm.get("link") or item.get("link")})
+    for v in out.values(): v.sort(key=lambda x: x["total"])
+    return out
+
+
 def extract_prices(prop: dict, nights: int) -> List[dict]:
     """All booking-site prices for one property → [{source, total, per_night, room, free_cancellation, link}] cheapest first.
     Google lists the individual rooms (name + price) for its featured sites; for those we keep the cheapest room's name."""
@@ -316,7 +334,7 @@ def _search_one(body: SearchIn, occ: dict, nights: int, token: Optional[str]) ->
             "stars": prop.get("extracted_hotel_class"), "rating": prop.get("overall_rating"),
             "reviews": prop.get("reviews"), "image": (imgs[0].get("thumbnail") if imgs else None),
             "link": prop.get("link"), "property_token": prop.get("property_token"),
-            "nights": nights, "currency": body.currency.upper(), "prices": prices,
+            "nights": nights, "currency": body.currency.upper(), "prices": prices, "site_rooms": extract_rooms(prop, nights),
             "lowest": prices[0] if prices else None, "searches_used": searches}
 
 
@@ -523,3 +541,61 @@ def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
             out[k] = None
     out["model"] = model
     return out
+
+
+# ── Room types: the same room on different sites, grouped (Gemini reads the names; the page falls back to word matching) ──
+class RoomName(BaseModel):
+    site: str
+    name: str
+
+
+class RoomGroupIn(BaseModel):
+    hotel: str
+    rooms: List[RoomName]
+
+
+ROOM_GROUP_PROMPT = """These are the room names that different booking sites show for the hotel "{hotel}".
+Sites name the same room differently (extras, offers and meal plans are added to names).
+Group the names that are the SAME physical room type (same category, same bed type, same view).
+Ignore meal plans, offers and perks ("with breakfast", "20% off spa", "happy hours", "lounge access" etc.) when grouping.
+Give each group a short clean name like "Superior Room, King bed" or "Deluxe Suite, Sea view".
+Return JSON only: {{"groups": [{{"type": "<short name>", "ids": [<numbers>]}}]}} — every id exactly once.
+Names:
+{names}"""
+
+
+@router.post("/rooms/group")
+def rooms_group(body: RoomGroupIn, authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    key = _gemini_key()
+    if not key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
+    rooms = body.rooms[:150]
+    names = "\n".join(f"{i}. [{r.site}] {r.name[:160]}" for i, r in enumerate(rooms))
+    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+    payload = {"contents": [{"parts": [{"text": ROOM_GROUP_PROMPT.format(hotel=body.hotel, names=names)}]}],
+               "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
+    try:
+        r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=45,
+                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gemini unreachable: {e}")
+    if r.status_code == 429:
+        raise HTTPException(status_code=429, detail="Free Gemini limit reached for today")
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Gemini error {r.status_code}")
+    try:
+        import json as _json
+        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
+        groups = []
+        seen = set()
+        for g in out.get("groups") or []:
+            ids = [int(i) for i in (g.get("ids") or []) if str(i).lstrip("-").isdigit() and 0 <= int(i) < len(rooms) and int(i) not in seen]
+            seen.update(ids)
+            if ids: groups.append({"type": str(g.get("type") or rooms[ids[0]].name)[:80], "ids": ids})
+        for i in range(len(rooms)):
+            if i not in seen: groups.append({"type": rooms[i].name[:80], "ids": [i]})
+    except Exception:
+        raise HTTPException(status_code=502, detail="Gemini gave an unreadable answer")
+    return {"groups": groups, "model": model}
