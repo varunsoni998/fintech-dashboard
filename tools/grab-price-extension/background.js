@@ -351,8 +351,9 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
       if (/^secure\./i.test(location.hostname) || /book\.html/i.test(location.pathname)) {
         const tm = [...txt.matchAll(rx("(?:^|\\n)\\s*Total\\s*\\n?\\s*" + R + AMT))].pop();
         if (tm && num(tm[1]) > 100) {
-          const rm = txt.match(/\n\s*([^\n]{3,70})\n\s*(?:Partially refundable|Free cancellation|Non-refundable|Fully refundable)/i);
-          return { total: cents(num(tm[1])), room: rm ? rm[1].trim() : "", url: location.href, allRooms: true, free: /Free cancellation/i.test(txt) };
+          // the room name sits just above its cancellation line – skip headings like "How much will it cost to cancel?"
+          const rm = [...txt.matchAll(/\n\s*([^\n]{3,70})\n\s*(?:Partially refundable|Free cancellation|Non-refundable|Fully refundable)/gi)].map(x => x[1].trim()).find(x => !/\?|cancel|refund|polic|cost|pay|price|total/i.test(x));
+          return { total: cents(num(tm[1])), room: rm || "", url: location.href, allRooms: true, free: /Free cancellation/i.test(txt) };
         }
       }
       // checkout page (older layout): "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"

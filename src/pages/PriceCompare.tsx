@@ -593,10 +593,11 @@ export default function PriceCompare() {
           : txt ? { kind: /non-?refundable/i.test(txt) && !/free|fully refundable/i.test(txt) ? "non-refundable" : /free cancell?ation|fully refundable|cancel for free/i.test(txt) ? "free" : /partially/i.test(txt) ? "partial" : undefined, text: txt.split("\n").slice(0, 3).join(" · "), full: res.policyText || undefined } : undefined;
         const save = (rate: number) => {
           if (j.typeKey) {   // "Check exact" for the chosen room type on one site
-            const got = roomOnly(room) || res.picked?.room || "", gotCat = roomWordKey(got).split("|")[0];
+            // the room chosen on the hotel page is the reliable name (checkout pages show other headings near the room)
+            const got = res.picked?.room || roomOnly(room) || "", gotCat = roomWordKey(got).split("|")[0];
             if (j.pickWant?.cat && got && gotCat !== j.pickWant.cat) { setChecks(o => ({ ...o, [k]: `${j.source} gave "${got.slice(0, 50)}" — not the room you chose` })); return; }
             const ex = Math.round(amount * rate);
-            setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => y.id !== hotel.id ? y : { ...y, typeExact: { ...(y.typeExact || {}), [j.typeKey]: { total: ex, room: roomOnly(room) || res.picked?.room || "", cxl: cxl ? cxlLine(cxl, ex) : "", meal: res.picked?.meal || "", at: Date.now() } } }) }) }));
+            setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => y.id !== hotel.id ? y : { ...y, typeExact: { ...(y.typeExact || {}), [j.typeKey]: { total: ex, room: res.picked?.room || roomOnly(room) || "", cxl: cxl ? cxlLine(cxl, ex) : "", meal: res.picked?.meal || "", at: Date.now() } } }) }) }));
             setChecks(o => ({ ...o, [k]: "ok" }));
             return;
           }
