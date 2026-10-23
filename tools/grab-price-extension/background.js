@@ -225,10 +225,24 @@ async function readSitePrice(site, nights, adults, hotelName) {
           const g = rt.match(/Guests?:\s*(\d+)\s*adult/i) || rt.match(/Max(?:imum)? (?:people|persons|guests):?\s*(\d+)/i);
           const cap = g ? +g[1] : (r.querySelectorAll(".bicon-occupancy, .c-occupancy-icons__adults i, [class*='occupancy'] svg").length || null);
           if (cap !== null && cap < adults) continue;          // e.g. a 1-adult price when we need 2
-          found.push({ total, room, free: /Free cancellation/i.test(rt) });
+          found.push({ total, room, free: /Free cancellation/i.test(rt), row: r });
         }
         const c = cheapest(found);
-        if (c) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
+        // go to Booking's checkout for the full price + cancellation terms: choose 1 of the cheapest room, press "I'll reserve"
+        // (this only opens the "Your details" page – nothing is typed or booked)
+        const pressedAgo = Date.now() - (+ss.get("pcPressed") || 0);
+        if (c && !clicked && pressedAgo > 60000) {
+          const sel = c.row.querySelector("select.hprt-nos-select, select[name^='nr_rooms_']");
+          const one = sel && [...sel.options].find(o => o.value === "1");
+          const btn = [...document.querySelectorAll("button")].find(b => /ll\W*reserve/i.test(b.innerText || "") && !/room for/i.test(b.innerText || ""));
+          if (sel && one && btn) {
+            sel.value = "1"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+            ss.set("pcPressed", String(Date.now())); clicked = true;
+            await sleep(1000); btn.scrollIntoView({ block: "center" }); await sleep(400); btn.click();
+            return { wait: true };
+          }
+        }
+        if (c && (pressedAgo >= 60000 || t >= 12)) return { total: cents(c.total), room: c.room, free: c.free, options: found.length, url: location.href };
       }
       // the room Google linked to is often shown at the top: "₹ 55,151 … Includes taxes and charges" / "+₹ X taxes and charges"
       // checkout page (Google often links straight here): "Total ₹ 67,467.66 Includes taxes and charges"

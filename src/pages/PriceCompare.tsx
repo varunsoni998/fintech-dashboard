@@ -402,6 +402,7 @@ export default function PriceCompare() {
       (async () => {
         let v: any = null;
         if (res.shot && !visionOff.current) {
+          setChecks(o => ({ ...o, [k]: "verifying" }));
           try {
             v = await (await authFetch("/vision", { image: res.shot, image2: res.shot2 || "", site: j.source, hotel: j.hotel || hotel.name, check_in: j.checkIn || "", check_out: j.checkOut || "", nights: j.nights || 0, adults: j.adults || 2, rooms: j.rooms || 1 })).json();
           } catch (e: any) { if (/GEMINI_API_KEY/.test(String(e?.message))) visionOff.current = true; v = null; }
@@ -517,7 +518,7 @@ export default function PriceCompare() {
     const body = {
       sheet_name: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).replace(" ", ""),
       trip: { name: trip.name || "Trip", rooms: roomsForExcel(rooms), pax: paxForExcel(rooms), notes: trip.notes, costing_currency: cc,
-              rates: cc === "INR" ? {} : { [cc]: roe }, markup: 0, gst: num(trip.gst) / 100, tcs: num(trip.tcs) / 100 },
+              rates: cc === "INR" ? {} : { [cc]: roe }, markup: 0, gst: 0.05, tcs: 0.02 },   // standard GST 5% / TCS 2% rows in the sheet
       sections, packages: [{ key: "A", name: "Per package" }],
     };
     try {
@@ -685,7 +686,7 @@ export default function PriceCompare() {
                       {d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
-                  {!d.mine && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok"].includes(checks[`${h.id}|${d.source}`]) && (
+                  {!d.mine && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok", "verifying"].includes(checks[`${h.id}|${d.source}`]) && (
                     <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {checks[`${h.id}|${d.source}`]} — use View deal</div>
                   )}
                   {!d.mine && (
@@ -697,8 +698,8 @@ export default function PriceCompare() {
                           onKeyDown={e => { if (e.key === "Enter") saveConfirm(c, h); if (e.key === "Escape") setEditing(null); }} />
                         <button style={{ ...btn("primary"), padding: "4px 10px", fontSize: 11.5 }} onClick={() => saveConfirm(c, h)}>Save</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5 }} onClick={() => setEditing(null)}>Cancel</button>
-                      </>) : checks[`${h.id}|${d.source}`] === "checking" || checks[`${h.id}|${d.source}`] === "queued" ? (<>
-                        <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {checks[`${h.id}|${d.source}`] === "queued" ? "waiting…" : `checking on ${d.source}…`}</span>
+                      </>) : checks[`${h.id}|${d.source}`] === "checking" || checks[`${h.id}|${d.source}`] === "queued" || checks[`${h.id}|${d.source}`] === "verifying" ? (<>
+                        <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {checks[`${h.id}|${d.source}`] === "queued" ? "waiting…" : checks[`${h.id}|${d.source}`] === "verifying" ? "verifying price…" : `checking on ${d.source}…`}</span>
                       </>) : d.confirmed ? (<>
                         <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Confirmed on site{h.confirmedAuto?.[d.source] ? " (auto)" : ""}</span>
                         {h.confirmedAuto?.[d.source] && <span style={{ color: MUTED }}>checked {clock(h.confirmedAuto[d.source])}</span>}
@@ -876,8 +877,6 @@ export default function PriceCompare() {
             </span>
           </div>
 
-          <label style={lbl}>GST %<input style={inp} value={trip.gst} onChange={e => setT({ gst: e.target.value })} /></label>
-          <label style={lbl}>TCS %<input style={inp} value={trip.tcs} onChange={e => setT({ tcs: e.target.value })} /></label>
         </div>
 
         {trip.cities.map(c => {
