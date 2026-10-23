@@ -332,7 +332,15 @@ async function readSitePrice(site, nights, adults, hotelName) {
   return { error: "Couldn't find the price on the page", debug: snippet.replace(/\s+/g, " ").slice(0, 500) };
   };
   const r = await core();
-  if (r && r.total) r.currency = pageCurrency();
+  if (r && r.total) {
+    r.currency = pageCurrency();
+    // cancellation wording as the site writes it (checkout pages show it for the chosen room)
+    const t = (document.body?.innerText || "").replace(/[\u00a0\u202f\u2009]/g, " ");
+    const pats = [/Free cancell?ation (?:before|until|till|by)[^\n]{0,60}/i, /Fully refundable (?:before|until)[^\n]{0,40}(?:\n[^\n]{0,40})?/i, /Cancel for free (?:before|until)[^\n]{0,50}/i,
+      /If you cancel,? you['’]ll pay[^\n]{0,40}/i, /Partially refundable[^\n]{0,60}/i, /Non-?refundable/i, /Free cancell?ation/i];
+    const bits = []; for (const p of pats) { const m = t.match(p); if (m && !bits.some(b => b.includes(m[0].trim()))) bits.push(m[0].replace(/\s+/g, " ").trim()); if (bits.length >= 2) break; }
+    if (bits.length) r.cxlText = bits.join(" · ");
+  }
   return r;
 }
 
@@ -453,7 +461,10 @@ async function checkOne(job, windowId) {
         continue;                                                // test gone → read the price
       }
       const out = Object.assign(r || { error: "Couldn't read the page" }, { trail });
-      if (out.total || (out.error && !out.robot)) out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
+      if (out.total || (out.error && !out.robot)) {
+        out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
+        out.shot2 = await snapCancel(cur, windowId);           // cancellation terms (may be lower on the page)
+      }
       return out;
     }
     return { error: "The site kept redirecting" };
@@ -483,9 +494,26 @@ async function snapPrice(tabId, windowId, total) {
   } catch { return ""; }
 }
 
+async function snapCancel(tabId, windowId) {
+  try {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: () => {
+      const el = [...document.querySelectorAll("h2, h3, h4, div, span, p")]
+        .filter(e => e.children.length <= 6 && e.getClientRects().length && /cancell?ation policy|how much will it cost to cancel|free cancell?ation|fully refundable|non-?refundable|cancel for free/i.test(e.innerText || ""))
+        .sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0];
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      if (r.top >= 0 && r.bottom <= window.innerHeight) return "same";   // already in the first screenshot
+      el.scrollIntoView({ block: "center" }); return true;
+    } });
+    if (res?.result !== true) return "";
+    await sleep(800);
+    return await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 60 });
+  } catch { return ""; }
+}
+
 async function logResult(job, result) {
   const { pcLog = [] } = await chrome.storage.local.get("pcLog");
-  const { shot, ...rest } = result || {};
+  const { shot, shot2, ...rest } = result || {};
   pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...rest, hadShot: !!shot, version: chrome.runtime.getManifest().version, dates: job.checkIn ? job.checkIn + " → " + job.checkOut : "" });
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }

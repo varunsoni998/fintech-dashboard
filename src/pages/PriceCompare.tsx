@@ -33,13 +33,29 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 type SortKey = "cheapest" | "best" | "rated";
+// cancellation terms read from the site: free until a date, then a fee (or non-refundable)
+interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string }
+const cxlLine = (c?: Cxl) => {
+  if (!c) return "";
+  const d = (iso?: string) => { if (!iso) return ""; const x = new Date(iso + "T00:00:00"); return isNaN(+x) ? iso : x.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); };
+  const fee = c.fee ? `${!c.feeCcy || c.feeCcy === "INR" ? "₹" : c.feeCcy + " "}${Math.round(c.fee).toLocaleString("en-IN")}` : "";
+  if (c.kind === "non-refundable") return "Non-refundable";
+  const parts: string[] = [];
+  if (c.kind === "free" || c.until) parts.push(c.until ? `Free cancellation till ${d(c.until)}` : "Free cancellation");
+  else if (c.kind === "partial") parts.push("Partially refundable");
+  if (fee) parts.push(`then fee ${fee}${c.feeFrom ? ` from ${d(c.feeFrom)}` : ""}${c.note ? ` (${c.note})` : ""}`);
+  else if (c.feeFrom && c.kind !== "free") parts.push(`fee applies from ${d(c.feeFrom)}`);
+  return parts.length ? parts.join(" · ") : (c.text || "");
+};
+const cxlShort = (c?: Cxl) => !c ? "" : c.kind === "non-refundable" ? "NRF" : c.until ? `Free cxl till ${c.until}${c.fee ? `, then ${Math.round(c.fee)}` : ""}` : c.kind === "free" ? "Free cxl" : c.fee ? `Cxl fee ${Math.round(c.fee)}` : (c.text || "");
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
 interface Room { adults: number; ages: number[] }
 interface Trip { name: string; roomList: Room[]; currency: string; roe: string; roeNote: string; gst: string; tcs: string; notes: string; perNight?: boolean; cities: City[] }
-interface Deal { source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean; est?: number; room?: string; fx?: { kind: string; f: number; n: number; lo: number; hi: number } }
+interface Deal { cxl?: Cxl;
+ source: string; rupees: number; amt: number; ccy: string; before?: number; mine: boolean; free: boolean; link?: string; google?: number; confirmed?: boolean; est?: number; room?: string; fx?: { kind: string; f: number; n: number; lo: number; hi: number } }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newHotel = (p: Partial<Hotel> = {}): Hotel => ({ id: uid(), name: "", room: "", meal: "BB", label: "", inPkg: false, ottila: "", tbo: "", otherSource: "DMC", other: "", cancel: "", ...p });
@@ -236,7 +252,7 @@ export default function PriceCompare() {
       ...(h.online?.prices || []).map(p => {
         const cf = h.confirmed?.[p.source];     // price the team checked on the website itself
         return cf
-          ? { source: p.source, room: roomOnly(h.confirmedRoom?.[p.source]) || p.room || undefined, rupees: cf, amt: h.confirmedSite?.[p.source]?.amt || cf, ccy: h.confirmedSite?.[p.source]?.ccy || "INR", mine: false, free: p.free_cancellation, link: p.link, google: p.total * rate, confirmed: true }
+          ? { source: p.source, room: roomOnly(h.confirmedRoom?.[p.source]) || p.room || undefined, rupees: cf, amt: h.confirmedSite?.[p.source]?.amt || cf, ccy: h.confirmedSite?.[p.source]?.ccy || "INR", mine: false, free: h.confirmedCxl?.[p.source] ? h.confirmedCxl[p.source].kind === "free" || !!h.confirmedCxl[p.source].until : p.free_cancellation, cxl: h.confirmedCxl?.[p.source], link: p.link, google: p.total * rate, confirmed: true }
           : (() => {
               const g = p.total * rate, fx = factor(p.source, cityOf(h));
               return fx?.kind === "adjust"
@@ -306,14 +322,15 @@ export default function PriceCompare() {
     await fetchOne(c, h, true); loadStatus();
   };
   // the team types the total they see on the website → replaces Google's price everywhere (ranking, Excel)
-  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false, room = "", site?: { amt: number; ccy: string }) => {
+  const applyConfirm = (c: City, h: Hotel, source: string, v: number, auto = false, room = "", site?: { amt: number; ccy: string }, cxl?: Cxl) => {
     if (!(v > 0)) return;
     setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== c.id ? x : { ...x, hotels: x.hotels.map(y => {
       if (y.id !== h.id) return y;
       const ca = { ...(y.confirmedAuto || {}) }; if (auto) ca[source] = Date.now(); else delete ca[source];
       const cr = { ...(y.confirmedRoom || {}) }; if (room) cr[source] = room; else delete cr[source];
       const cs = { ...(y.confirmedSite || {}) }; if (site) cs[source] = site; else delete cs[source];   // the amount the site itself showed (e.g. USD 291.26)
-      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca, confirmedRoom: cr, confirmedSite: cs };
+      const cx = { ...(y.confirmedCxl || {}) }; if (cxl && (cxl.kind || cxl.until || cxl.fee || cxl.text)) cx[source] = cxl; else delete cx[source];
+      return { ...y, confirmed: { ...(y.confirmed || {}), [source]: v }, confirmedAuto: ca, confirmedRoom: cr, confirmedSite: cs, confirmedCxl: cx };
     }) }) }));
     // learn how far Google was off for this site (and this city), to correct other hotels' prices
     const g = (h.online?.prices || []).find(p => p.source === source);
@@ -386,7 +403,7 @@ export default function PriceCompare() {
         let v: any = null;
         if (res.shot && !visionOff.current) {
           try {
-            v = await (await authFetch("/vision", { image: res.shot, site: j.source, hotel: j.hotel || hotel.name, check_in: j.checkIn || "", check_out: j.checkOut || "", nights: j.nights || 0, adults: j.adults || 2, rooms: j.rooms || 1 })).json();
+            v = await (await authFetch("/vision", { image: res.shot, image2: res.shot2 || "", site: j.source, hotel: j.hotel || hotel.name, check_in: j.checkIn || "", check_out: j.checkOut || "", nights: j.nights || 0, adults: j.adults || 2, rooms: j.rooms || 1 })).json();
           } catch (e: any) { if (/GEMINI_API_KEY/.test(String(e?.message))) visionOff.current = true; v = null; }
         }
         const fail = (t: string) => setChecks(o => ({ ...o, [k]: t }));
@@ -407,8 +424,13 @@ export default function PriceCompare() {
           total = v.total; cur = (v.currency || "INR").toUpperCase(); room = v.room || ""; allRooms = v.page === "checkout";
         } else return fail(res.error || "Couldn't read the price");
         const amount = total * (allRooms ? 1 : (j.mult || 1));   // checkout pages already show all rooms
+        // cancellation terms: the screenshot reading (structured) first, else the words found on the page
+        const txt = String(res.cxlText || "");
+        const cxl: Cxl | undefined = visOk && (v.cxl_type || v.free_until || v.cxl_fee || v.cancellation)
+          ? { kind: v.cxl_type || undefined, until: v.free_until || undefined, fee: v.cxl_fee || undefined, feeCcy: v.cxl_fee_currency || undefined, feeFrom: v.cxl_fee_from || undefined, note: v.cxl_fee_note || undefined, text: v.cancellation || txt || undefined }
+          : txt ? { kind: /non-?refundable/i.test(txt) && !/free|fully refundable/i.test(txt) ? "non-refundable" : /free cancell?ation|fully refundable|cancel for free/i.test(txt) ? "free" : /partially/i.test(txt) ? "partial" : undefined, text: txt } : undefined;
         const save = (rate: number) => {
-          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, room, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined);
+          applyConfirm(city, hotel, j.source, Math.round(amount * rate), true, room, cur !== "INR" ? { amt: Math.round(amount * 100) / 100, ccy: cur } : undefined, cxl);
           setChecks(o => ({ ...o, [k]: "ok" }));
         };
         if (cur === "INR") save(1);
@@ -439,7 +461,9 @@ export default function PriceCompare() {
   };
   const addByName = (c: City) => {
     const name = (c.newName || "").trim(); if (!name) return;
-    setCity(c.id, { hotels: [newHotel({ name, mine: true }), ...c.hotels], newName: "" });
+    const h = newHotel({ name, mine: true });
+    setCity(c.id, { hotels: [h, ...c.hotels], newName: "" });
+    if (c.name.trim() && nightsOf(c)) fetchOne(c, h).then(() => loadStatus());   // all sites + exact-price check
   };
 
   // ── Sorting like Skyscanner (Best / Cheapest / Top rated) ──────────────────
@@ -461,17 +485,21 @@ export default function PriceCompare() {
   const downloadExcel = async () => {
     setMsg(null);
     if (cc !== "INR" && !roe) { fetchRoe(); return setMsg({ kind: "err", text: `Getting today's ${cc} rate — try again in a moment.` }); }
-    const asCost = (d: Deal) => (d.ccy === cc && cc !== "INR" ? { currency: cc, amount: d.amt } : { currency: "INR", amount: Math.round(d.rupees) });
+    // the sheet wants ONE room for the whole stay; site prices are for all rooms → divide by the rooms
+    const perRoom = (d: Deal) => (d.mine ? 1 : (nRooms || 1));
+    const asCost = (d: Deal) => (d.ccy === cc && cc !== "INR" ? { currency: cc, amount: Math.round((d.amt / perRoom(d)) * 100) / 100 } : { currency: "INR", amount: Math.round(d.rupees / perRoom(d)) });
     const sections = trip.cities.filter(c => c.hotels.some(h => h.name.trim())).map(c => {
       const rows: any[] = [];
-      const pick = c.hotels.filter(h => h.name.trim() && (isMine(h) || h.inPkg || h.label || h.online));
+      const pick = c.hotels.filter(h => h.name.trim() && (isMine(h) || h.inPkg || h.label));   // only your hotels (+ labelled / in package)
       for (const h of sortList(pick, "cheapest")) {
         const ds = deals(h);
-        const online = ds.filter(d => !d.mine);
+        // checked prices first: a site price we confirmed beats Google's estimate
+        const online = [...ds.filter(d => !d.mine && d.confirmed), ...ds.filter(d => !d.mine && !d.confirmed)];
         const bcom = online.find(d => /booking\.com/i.test(d.source));
         const cmpP = bcom || online[0];
-        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cmpP.free ? "Free cxl" : undefined } : undefined;
-        const remark = online.length ? online.slice(0, 8).map(d => `${d.source} ${money(d.amt, d.ccy)}${d.confirmed ? " (confirmed)" : d.est ? " (est.)" : " (Google)"}`).join(" · ") : undefined;
+        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cxlShort(cmpP.cxl) || (cmpP.free ? "Free cxl" : undefined) } : undefined;
+        const checked = online.filter(d => d.confirmed);
+        const remark = checked.length ? checked.slice(0, 6).map(d => `${d.source} ${money(d.rupees / perRoom(d), "INR")}`).join(" · ") + " (checked on the sites)" : undefined;
         const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || deals(h).find(d => !d.mine && d.room)?.room || "Room"}`;
         if (!ds.length) {
           rows.push(h.fromPrice ? { bid: h.label || undefined, description: desc, source: "Google (from)", currency: "INR", amount: h.fromPrice, meal: h.meal, markup: 0, pkg: h.inPkg ? ["A"] : [] }
@@ -479,9 +507,9 @@ export default function PriceCompare() {
           continue;
         }
         const mine = ds.filter(d => d.mine);
-        const main = mine.length ? mine : [ds[0]];
+        const main = mine.length ? mine : [online[0] || ds[0]];
         main.forEach((d, i) => rows.push({ bid: h.label || undefined, description: desc, source: d.source, ...asCost(d), meal: h.meal,
-          cancel: d.mine ? h.cancel || undefined : d.free ? "Free cxl" : undefined, markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
+          cancel: d.mine ? h.cancel || undefined : cxlShort(d.cxl) || (d.free ? "Free cxl" : undefined), markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
           compare: d.mine || (bcom && d.source !== bcom.source) ? compare : undefined, remark: i === 0 ? remark : undefined }));
       }
       return { title: `${c.name} ${nice(c.checkIn)} to ${nice(c.checkOut)} ${nightsOf(c)}N`, rows };
@@ -581,7 +609,7 @@ export default function PriceCompare() {
               {h.online && autoJobs([{ c, h }]).length > 0 && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: GREEN }} onClick={() => autoCheck([{ c, h }])} title="Opens each site in a background tab and reads the exact total">
                 <Zap style={{ width: 12, height: 12 }} /> Re-check exact prices
               </button>}
-              {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => setHotel(c.id, h.id, { mine: true })} title="Move to Your hotels">
+              {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => { setHotel(c.id, h.id, { mine: true }); if (h.online && h.searchedFor === key(c, h)) { setHotel(c.id, h.id, { open: true }); autoCheck([{ c, h }], true); } else fetchOne(c, { ...h, mine: true }).then(() => loadStatus()); }} title="Move to Your hotels — gets every site's price">
                 <Pin style={{ width: 12, height: 12 }} /> Add to my hotels
               </button>}
             </div>
@@ -695,7 +723,7 @@ export default function PriceCompare() {
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: d.free ? GREEN : MUTED, fontWeight: 600 }}>{d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>
+                <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlLine(d.cxl) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>
                 {priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
                 {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
                   : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}
@@ -731,6 +759,19 @@ export default function PriceCompare() {
           )}
           <button style={btn()} onClick={() => { if (confirm("Start a new trip? This clears the current one.")) setTrip({ ...EMPTY, currency: trip.currency, roe: trip.roe, roeNote: trip.roeNote, cities: [newCity()] }); }}><Trash2 style={{ width: 14, height: 14 }} /> New trip</button>
         </div>
+
+        {/* Actions (moved up from the bottom) */}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
+          <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
+          <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
+          <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
+            onClick={() => autoCheck(trip.cities.flatMap(c => c.hotels.filter(h => h.online && (isMine(h) || h.open)).map(h => ({ c, h }))))}>
+            <Zap style={{ width: 15, height: 15 }} /> Re-check exact prices</button>
+          <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
+          <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
+        </div>
+        {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
 
         {grab && (
           <div style={{ ...card, padding: 14, display: "flex", flexDirection: "column", gap: 10, border: `2px solid ${GREEN}` }}>
@@ -912,18 +953,6 @@ export default function PriceCompare() {
           );
         })}
 
-        {/* Bottom actions */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
-          <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
-          <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
-          <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
-            onClick={() => autoCheck(trip.cities.flatMap(c => c.hotels.filter(h => h.online && (isMine(h) || h.open)).map(h => ({ c, h }))))}>
-            <Zap style={{ width: 15, height: 15 }} /> Re-check exact prices</button>
-          <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
-          <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
-        </div>
-        {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
       </div>
     </DashboardLayout>
   );

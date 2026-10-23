@@ -428,7 +428,13 @@ Return ONLY JSON with these keys:
  "per_night": number or null, "includes_taxes": true/false/null,
  "room": string or null, "hotel_name": string or null,
  "check_in": "YYYY-MM-DD" or null, "check_out": "YYYY-MM-DD" or null, "nights": number or null, "adults": number or null,
- "cancellation": short text (e.g. "Free cancellation until 20 Oct", "Non-refundable", "Partially refundable: fee ₹22,092") or null,
+ "cancellation": short text exactly as the site states it (e.g. "Free cancellation until 20 Oct 2026, 18:00", "Non-refundable") or null,
+ "cxl_type": "free" | "partial" | "non-refundable" | null,
+ "free_until": "YYYY-MM-DD" (last day you can cancel for free) or null,
+ "cxl_fee": number (what you pay if you cancel after the free period, or the fee for a partially refundable rate) or null,
+ "cxl_fee_currency": "INR"/... or null,
+ "cxl_fee_from": "YYYY-MM-DD" (from when that fee applies) or null,
+ "cxl_fee_note": short text (e.g. "first night's rate plus taxes", "100% of the stay") or null,
  "meal": short text (e.g. "Breakfast included", "Room only") or null,
  "page": "checkout" | "hotel page" | "list of hotels" | "robot check" | "other",
  "confidence": "high" | "medium" | "low"}}
@@ -437,6 +443,7 @@ Write numbers without commas or currency symbols. If the page shows no clear tot
 
 class VisionIn(BaseModel):
     image: str                       # data URL or base64 JPEG/PNG
+    image2: str = ""                 # optional 2nd screenshot (cancellation section)
     site: str = ""
     hotel: str = ""
     check_in: str = ""
@@ -462,17 +469,21 @@ def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
     key = _gemini_key()
     if not key:
         raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
-    img = body.image
-    mime = "image/jpeg"
-    if img.startswith("data:"):
-        head, img = img.split(",", 1)
-        mime = head[5:].split(";")[0] or mime
-    if len(img) > 6_000_000:
-        raise HTTPException(status_code=413, detail="Screenshot too large")
+    def _part(img: str):
+        mime = "image/jpeg"
+        if img.startswith("data:"):
+            head, img = img.split(",", 1)
+            mime = head[5:].split(";")[0] or mime
+        if len(img) > 6_000_000:
+            raise HTTPException(status_code=413, detail="Screenshot too large")
+        return {"inline_data": {"mime_type": mime, "data": img}}
+    images = [_part(body.image)] + ([_part(body.image2)] if body.image2 else [])
     prompt = VISION_PROMPT.format(site=body.site or "a booking site", hotel=body.hotel, check_in=body.check_in or "?",
                                   check_out=body.check_out or "?", nights=body.nights or "?", adults=body.adults, rooms=body.rooms)
     model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
-    payload = {"contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": mime, "data": img}}]}],
+    if len(images) > 1:
+        prompt += "\nThere are 2 screenshots of the same page: the price area and the cancellation-policy area."
+    payload = {"contents": [{"parts": [{"text": prompt}, *images]}],
                "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
     try:
         r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=45,
@@ -490,7 +501,7 @@ def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
         out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
     except Exception:
         raise HTTPException(status_code=502, detail="Vision service gave an unreadable answer")
-    for k in ("total", "per_night"):
+    for k in ("total", "per_night", "cxl_fee"):
         try:
             out[k] = float(str(out.get(k)).replace(",", "")) if out.get(k) not in (None, "") else None
         except Exception:
