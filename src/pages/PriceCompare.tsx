@@ -761,18 +761,6 @@ export default function PriceCompare() {
           <button style={btn()} onClick={() => { if (confirm("Start a new trip? This clears the current one.")) setTrip({ ...EMPTY, currency: trip.currency, roe: trip.roe, roeNote: trip.roeNote, cities: [newCity()] }); }}><Trash2 style={{ width: 14, height: 14 }} /> New trip</button>
         </div>
 
-        {/* Actions (moved up from the bottom) */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
-          <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
-          <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
-          <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
-            onClick={() => autoCheck(trip.cities.flatMap(c => c.hotels.filter(h => h.online && (isMine(h) || h.open)).map(h => ({ c, h }))))}>
-            <Zap style={{ width: 15, height: 15 }} /> Re-check exact prices</button>
-          <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
-          <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
-        </div>
-        {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
 
         {grab && (
           <div style={{ ...card, padding: 14, display: "flex", flexDirection: "column", gap: 10, border: `2px solid ${GREEN}` }}>
@@ -879,7 +867,7 @@ export default function PriceCompare() {
 
         </div>
 
-        {trip.cities.map(c => {
+        {trip.cities.map((c, ci) => {
           const n = nightsOf(c) || 1;
           const named = c.hotels.filter(h => h.name.trim());
           const mineList = sortList(named.filter(isMine), c.sort);
@@ -916,6 +904,21 @@ export default function PriceCompare() {
                 <button style={btn()} onClick={() => addByName(c)}><Plus style={{ width: 14, height: 14 }} /> Add hotel</button>
                 <span style={{ fontSize: 12, color: MUTED }}>No hotel added? <b>Search</b> shows all hotels in the city.</span>
               </div>
+
+              {ci === 0 && (<>
+              {/* Actions: below the "Add hotel" row of the first city */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <button style={btn()} onClick={() => setT({ cities: [...trip.cities, newCity()] })}><Plus style={{ width: 14, height: 14 }} /> Add city</button>
+                <button style={btn("primary")} disabled={busy} onClick={() => searchAll()}>{busy ? <Loader2 className="animate-spin" style={{ width: 15, height: 15 }} /> : <Search style={{ width: 15, height: 15 }} />} Search all cities</button>
+                <button style={btn()} disabled={busy} onClick={() => searchAll(undefined, true)} title="Ask Google again for live prices (uses searches)"><RefreshCw style={{ width: 14, height: 14 }} /> Refresh live prices</button>
+                <button style={{ ...btn(), color: GREEN }} disabled={busy} title="Exact prices for your hotels (and any you opened), read from the websites in background tabs"
+                  onClick={() => autoCheck(trip.cities.flatMap(c => c.hotels.filter(h => h.online && (isMine(h) || h.open)).map(h => ({ c, h }))))}>
+                  <Zap style={{ width: 15, height: 15 }} /> Re-check exact prices</button>
+                <button style={{ ...btn(), color: GREEN }} disabled={busy} onClick={downloadExcel}><Download style={{ width: 15, height: 15 }} /> Download Excel</button>
+                <span style={{ fontSize: 12, color: MUTED }}>≈ Google prices can differ from the website (member prices, taxes). Click View deal, then <b>Confirm price</b> — confirmed prices are used for ranking and the Excel. For {roomSummary(rooms).toLowerCase()}.</span>
+              </div>
+              {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
+              </>)}
 
               {/* Sort tabs */}
               {visible.length > 0 && (
