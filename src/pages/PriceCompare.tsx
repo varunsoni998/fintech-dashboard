@@ -273,7 +273,7 @@ export default function PriceCompare() {
   const findKey = (c: City) => `${c.name}|${c.checkIn}|${c.checkOut}|${c.stars}|${JSON.stringify(rooms)}`;
 
   // one hotel → every site's price (1 search)
-  const fetchOne = async (c: City, h: Hotel, fresh = false, open = true): Promise<Online | null> => {
+  const fetchOne = async (c: City, h: Hotel, fresh = false, open = true, auto = true): Promise<Online | null> => {
     const rate = searchCcy === "INR" ? 1 : roe;
     setHotel(c.id, h.id, { loading: true, error: undefined });
     try {
@@ -281,7 +281,7 @@ export default function PriceCompare() {
       const online = { ...r, currency: r.currency || searchCcy, roeAt: rate };
       setHotel(c.id, h.id, { loading: false, online, searchedFor: key(c, h), checkedAt: Date.now(), open, confirmed: h.searchedFor === key(c, h) ? h.confirmed : undefined,
         token: h.token || (r as any).property_token, image: h.image || r.image, rating: h.rating ?? r.rating, reviews: h.reviews ?? r.reviews, stars: h.stars ?? r.stars });
-      afterFetch.current(c, { ...h, online });     // → exact prices from the sites, automatically
+      if (auto) afterFetch.current(c, { ...h, online });     // → exact prices from the sites, automatically (not for "View deal")
       return online;
     } catch (e: any) { setHotel(c.id, h.id, { loading: false, error: e.message }); return null; }
   };
@@ -453,7 +453,7 @@ export default function PriceCompare() {
     if (h.fromLink) { window.open(h.fromLink, "_blank", "noopener"); return; }
     const w = window.open("about:blank", "_blank");
     if (w) w.document.write(`<p style="font:16px sans-serif;padding:24px">Opening ${h.fromSource || "the best deal"} for ${h.name}…</p>`);
-    const r = await fetchOne(c, h, true, false); loadStatus();
+    const r = await fetchOne(c, h, true, false, false); loadStatus();   // just the link – no checker windows
     const list = (r?.prices || []).slice().sort((a, b) => a.total - b.total);
     const pick = list.find(p => p.source === h.fromSource) || list[0];
     const url = pick?.link || (pick ? `https://www.google.com/search?q=${encodeURIComponent(`${pick.source} ${h.name} ${c.name}`)}` : "");

@@ -377,6 +377,8 @@ def discover(body: DiscoverIn, authorization: Optional[str] = Header(None)):
     out = []
     for p in (data.get("properties") or []):
         if (p.get("type") or "hotel").lower() != "hotel": continue
+        cls = p.get("extracted_hotel_class")
+        if body.stars and cls and int(cls) < int(body.stars): continue   # Google mixes in lower-class hotels → keep only the stars asked for
         total = _num(p.get("total_rate")) or ((_num(p.get("rate_per_night")) or 0) * nights) or None
         if not total: continue                 # Google has no price for these dates → don't show it
         imgs = p.get("images") or []
