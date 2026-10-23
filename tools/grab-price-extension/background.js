@@ -120,6 +120,8 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
   let snippet = "", clicked = false;
   // every room + option on the hotel page (room-list prices) – sent to Price Compare for its "All rooms" table
   const mealOf = (t) => /all[- ]inclusive/i.test(t) ? "All inclusive"
+    : /breakfast included/i.test(t) && /lunch included/i.test(t) && /dinner included/i.test(t) ? "Full board"
+    : /breakfast included/i.test(t) && /(?:dinner|lunch) included/i.test(t) ? "Half board"
     : /full board|breakfast,? lunch (?:&|and) dinner/i.test(t) ? "Full board"
     : /half board|breakfast (?:&|and) dinner|dinner (?:&|and) breakfast/i.test(t) ? "Half board"
     : /breakfast (?:is )?included|includes breakfast|free breakfast|breakfast for \d|breakfast for (?:two|2)|with breakfast|bed and breakfast|\bB&B\b/i.test(t) ? "Breakfast"
@@ -130,9 +132,10 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
     if (/non-?refundable/i.test(t)) return "Non-refundable";
     if (/free cancell?ation|fully refundable/i.test(t)) return "Free cancellation";
     if (/partially refundable/i.test(t)) return "Partially refundable";
+    if (/^\s*cancellation policy\s*$/im.test(t)) return "No free cancellation";   // Agoda: only a "Cancellation policy" link = not free
     return "";
   };
-  const setList = (list) => { roomList = list.map(x => ({ key: x.key, room: x.room, meal: mealOf(x.text || ""), cxl: cxlOf(x.text || ""), total: cents(x.total), taxes: x.taxes !== false })); roomsUrl = location.href; };
+  const setList = (list) => { const seen = new Set(); roomList = list.filter(x => { const d = [x.room, mealOf(x.text || ""), cxlOf(x.text || ""), Math.round(x.total)].join("|"); if (seen.has(d)) return false; seen.add(d); return true; }).map(x => ({ key: x.key, room: x.room, meal: mealOf(x.text || ""), cxl: cxlOf(x.text || ""), total: cents(x.total), taxes: x.taxes !== false })); roomsUrl = location.href; };
   const inrLink = (u) => { try { const x = new URL(u); if (/agoda\.com$/i.test(x.hostname)) x.searchParams.set("currency", "INR"); return x.href; } catch { return u; } };
   const label = (b) => clean(b.innerText || b.value || "").trim().split(/\n/).map(x => x.trim()).filter(Boolean)[0] || "";
   const ss = { get: (k) => { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
@@ -338,10 +341,12 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
         // never "Price Before Taxes", "Original price", "Room price" or "You pay Rs.0 today"
         const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(Total price|Total|Price|Pay at (?:the )?(?:hotel|property)|Total (?:due|payable)[^\\n0-9]{0,25})[^\\n0-9]{0,35}?\\s*(?:tooltip\\s*)?\\n?\\s*(?:tooltip\\s*\\n?\\s*)?" + R + AMT))]
           .filter(x => !/before|original|room price|discount|saved|coupon|today/i.test(x[0]) && num(x[2]) > 100).pop();
-        if (m) {
-          let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
-          return { total: cents(num(m[2])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancellation/i.test(txt) && !/non-refundable/i.test(txt) };
-        }
+        let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
+        if (pickKey && rm && ss.get("pcRoom") && overlap(ss.get("pcRoom"), rm) < 0.6) return { error: `Agoda opened a different room (${rm.slice(0, 60)})` };
+        if (m) return { total: cents(num(m[2])), room: rm || ss.get("pcRoom"), url: location.href, allRooms: true, free: /free cancell?ation|cancel for free/i.test(txt) && !/non-refundable/i.test(txt) };
+        // the booking form is still loading → wait here (never scroll the booking form)
+        if (t >= 25) { const k2 = txt.search(/Price Before Taxes|Room price|Price/i); return { error: "Agoda's booking form didn't show the price", debug: txt.slice(Math.max(0, k2), k2 + 400) }; }
+        await sleep(1000); continue;
       } else if (/\/search/i.test(location.pathname)) {
         // search results (Google sometimes links here): the card for this hotel ("selectedproperty") → its own page
         const cards = [...document.querySelectorAll("[data-selenium='hotel-item']")];
@@ -355,7 +360,21 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
       } else if (!clicked && Date.now() - (+ss.get("pcPressed") || 0) > 20000) {
         // hotel page: each offer is [data-testid=room-offer] with "₹ 7,057 Per night before taxes & fees", "2 adults"
         // and a "Book" button whose label names the room ("Book Deluxe Palm View Double Room Offer 1").
-        const offers = [...document.querySelectorAll("[data-testid='room-offer'], [data-element-name='mob-room-offer'], [data-selenium='ChildRoomsList-room']")].map(o => {
+        // show EVERY offer once: the room list draws itself as you move down it, and each room hides offers behind "Show N more offers"
+        const grid0 = document.querySelector("#roomGridContent, [data-element-name='room-grid'], #roomSection");
+        const anyOffer = document.querySelector("[data-testid='room-offer'], [data-element-name='mob-room-offer']");
+        if (grid0 && anyOffer && !window.__pcExpanded) {
+          window.__pcExpanded = true;
+          grid0.scrollIntoView({ block: "start" }); await sleep(800);
+          for (let s2 = 0; s2 < 60; s2++) {
+            for (const mb of document.querySelectorAll("button[data-element-name='mob-room-group-show-more'], button[data-element-name*='show-more' i]"))
+              if (mb.getClientRects().length && /more offers?|more deals?/i.test(mb.innerText || "")) { mb.click(); await sleep(250); }
+            if (grid0.getBoundingClientRect().bottom < window.innerHeight) break;
+            window.scrollBy(0, 500); await sleep(500);
+          }
+          grid0.scrollIntoView({ block: "start" }); await sleep(600);
+        }
+        const offers0 = [...document.querySelectorAll("[data-testid='room-offer'], [data-element-name='mob-room-offer'], [data-selenium='ChildRoomsList-room']")].filter(o => o.getClientRects().length > 0).map(o => {
           const ot = clean(o.innerText);
           const pm = ot.match(new RegExp(R + AMT + "\\s*(?:Per night|per room per night|/ night)", "i"));
           const b = o.querySelector("button[data-element-name*='book' i], [data-testid='book-button'] button, button[aria-label^='Book' i]")
@@ -363,12 +382,15 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey) {
           const ad = ot.match(/(\d+)\s*adults?/i);
           return { o, b, ot, amt: pm ? num(pm[1]) : 0, adults: ad ? +ad[1] : null, room: ((b && b.getAttribute("aria-label")) || "").replace(/^Book\s+/i, "").replace(/\s+Offer\s+\d+$/i, "") };
         }).filter(x => x.b && x.amt && (x.adults === null || x.adults >= adults));
+        // Agoda repeats every room for 1 / 2 / 3 adults → keep the offers for exactly our guests when it has them
+        const offers = offers0.some(x => x.adults === adults) ? offers0.filter(x => x.adults === null || x.adults === adults) : offers0;
+        const okey = (x) => (x.b.getAttribute("aria-label") || x.room) + " @" + x.amt;
         // room list: Agoda shows the price per night BEFORE taxes → marked "+ taxes" in Price Compare
-        if (offers.length) setList(offers.map(x => ({ key: x.b.getAttribute("aria-label") || (x.room + "@" + x.amt), room: x.room, text: x.ot, total: x.amt * (nights || 1), taxes: false })));
+        if (offers.length) setList(offers.map(x => ({ key: okey(x), room: x.room, text: x.ot, total: x.amt * (nights || 1), taxes: false })));
         const skip = (ss.get("pcSkip") || "").split("|").filter(Boolean);
         const keyOf = (x) => x.room + "@" + x.amt;
         const usable = offers.filter(x => !skip.includes(keyOf(x)));    // rooms that sold out while checking are skipped
-        const wanted = pickKey ? usable.filter(x => (x.b.getAttribute("aria-label") || (x.room + "@" + x.amt)) === pickKey) : usable;
+        const wanted = pickKey ? usable.filter(x => okey(x) === pickKey) : usable;
         if (pickKey && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : "That room isn't shown on Agoda any more" };
         if (wanted.length) {
           const pick = wanted.sort((x, y) => x.amt - y.amt)[0];
