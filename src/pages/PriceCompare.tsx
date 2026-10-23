@@ -742,7 +742,18 @@ export default function PriceCompare() {
   );
 
   const hotelCard = (c: City, h: Hotel, n: number, badges: { cheapest: boolean; best: boolean; rated: boolean }) => {
-    const ds = deals(h); const best = ds[0]; const mineHotel = isMine(h);
+    const ds0 = deals(h); const mineHotel = isMine(h);
+    // rows ranked by the price each row SHOWS (the chosen room / the room picked in its list); rows without it go last
+    const shownOf = (d: Deal) => {
+      if (d.mine) return { v: d.rupees, typed: true };
+      const sk = h.roomSel?.[d.source], sr0 = sk ? (h.roomsBySite?.[d.source]?.list || []).find(r => r.key === sk) : undefined;
+      if (sr0) return { v: sr0.exact || sr0.total, typed: true };
+      if (h.room) { const t = typeFor(h, d.source); if (t) { const v = t.ex?.total || t.item?.total; return v ? { v, typed: true } : { v: Infinity, typed: true }; } return { v: d.rupees, typed: false }; }
+      return { v: d.rupees, typed: true };
+    };
+    const ds = ds0.map(d => ({ d, s: shownOf(d) })).sort((a, b) => (a.s.typed === b.s.typed ? 0 : a.s.typed ? -1 : 1) || a.s.v - b.s.v).map(x => x.d);
+    // the summary on the right = the cheapest row as shown (the chosen room's price when a room type is picked)
+    const best = ds[0] && isFinite(shownOf(ds[0]).v) && shownOf(ds[0]).v !== ds[0].rupees ? { ...ds[0], rupees: shownOf(ds[0]).v, amt: shownOf(ds[0]).v, ccy: "INR", room: h.room || ds[0].room } : ds[0] || ds0[0];
     const showDeals = mineHotel ? ds.length > 0 : !!(h.open && h.online && ds.length);
     const link = (d: Deal) => d.link || `https://www.google.com/search?q=${encodeURIComponent(`${d.source} ${h.name} ${c.name}`)}`;
     const notOnline = h.online && (!h.online.found || !h.online.prices.length);
