@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
 interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string }
@@ -543,6 +543,8 @@ export default function PriceCompare() {
           total: rate ? Math.round(r.total * mult * rate) : r.total * mult, ccy: rate ? "INR" : ccy }));
         if (list.length) { patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list })); regroupSoon(city.id, hotel.id); }
       }
+      // the site has no rooms for these dates → mark it (Google's price for it is out of date)
+      if (res.soldOut || res.total > 0) setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => { if (y.id !== hotel.id) return y; const so = { ...(y.soldOut || {}) }; if (res.soldOut) so[j.source] = Date.now(); else delete so[j.source]; return { ...y, soldOut: so }; }) }) }));
       if (j.listOnly) { setChecks(o => ({ ...o, [k]: res.rooms?.length ? "ok" : (res.error || "Couldn't read the room list") })); return; }
       // Two independent readings: the page reader (text) and Gemini looking at a screenshot of the price.
       // Agree → confirmed. Only one found it → use it (screenshot only if it is the booking/checkout page).
@@ -757,6 +759,7 @@ export default function PriceCompare() {
     // rows ranked by the price each row SHOWS (the chosen room / the room picked in its list); rows without it go last
     const shownOf = (d: Deal) => {
       if (d.mine) return { v: d.rupees, typed: true };
+      if (h.soldOut?.[d.source]) return { v: Infinity, typed: false };
       const sk = h.roomSel?.[d.source], sr0 = sk ? (h.roomsBySite?.[d.source]?.list || []).find(r => r.key === sk) : undefined;
       if (sr0) return { v: sr0.exact || sr0.total, typed: true };
       if (h.room) { const t = typeFor(h, d.source); if (t) { const v = t.ex?.total || t.item?.total; return v ? { v, typed: true } : { v: Infinity, typed: true }; } return { v: d.rupees, typed: false }; }
@@ -970,7 +973,8 @@ export default function PriceCompare() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>
                   {d.source}
                   {d.mine && <span style={{ ...pill(ACCENT), marginLeft: 8 }}>your rate</span>}
-                  {i === 0 && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
+                  {i === 0 && !h.soldOut?.[d.source] && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
+                  {h.soldOut?.[d.source] && <span style={{ ...pill(WARN), marginLeft: 8 }}>sold out for these dates</span>}
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
