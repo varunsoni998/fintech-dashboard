@@ -46,7 +46,7 @@ const VIEWS = ["sea", "ocean", "lake", "pool", "garden", "city", "mountain", "ri
 const roomWordKey = (name: string) => {
   const t = " " + name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " ";
   const cat = ROOM_CATS.find(c => t.includes(" " + c + " ")) || "room";
-  const bed = /\btwin\b|\b2 single|\btwo single|single beds/.test(t) ? "twin" : /\bking\b|\bqueen\b|\bdouble\b/.test(t) ? "double" : "";
+  const bed = /\btwin\b|\b2 single|\btwo single|single beds|\b2 twin|\b2 beds\b|\btwo beds\b/.test(t) ? "twin" : /\bking\b|\bqueen\b|\bdouble\b|\b1 large bed|\bkingsize|\bking size/.test(t) ? "double" : "";
   const view = VIEWS.find(v => new RegExp(`\\b${v}\\b.{0,14}view|view.{0,6}\\b${v}\\b|\\b${v} facing|\\b${v} front`).test(t)) || "";
   return [cat, bed, view].join("|");
 };
@@ -283,6 +283,15 @@ export default function PriceCompare() {
     const st: CatItem[] = Object.entries(h.roomsBySite || {}).flatMap(([site, rb]) => rb.list.filter(r => r.ccy === "INR" || r.exact).map(r => ({ site, name: r.room, total: r.exact || r.total, src: "site" as const, key: r.key, meal: r.meal, cxl: r.exactCxl || r.cxl, taxes: r.taxes, exact: r.exact })));
     return [...g, ...st].filter(x => x.name && x.total > 0);
   };
+  const tripRef = useRef(trip); tripRef.current = trip;
+  const regroupTimers = useRef<Record<string, any>>({});
+  const regroupSoon = (cid: string, hid: string) => {
+    clearTimeout(regroupTimers.current[hid]);
+    regroupTimers.current[hid] = setTimeout(() => {
+      const c = tripRef.current.cities.find(x => x.id === cid), h = c?.hotels.find(x => x.id === hid);
+      if (c && h) groupRooms(c, h);
+    }, 6000);
+  };
   const roomGroups = (h: Hotel) => {
     const items = catalog(h);
     const gm = new Map<string, string>(); (h.roomTypes || []).forEach(gr => gr.m.forEach(m => gm.set(m.site + "|" + m.name, gr.type)));
@@ -312,11 +321,20 @@ export default function PriceCompare() {
     const meal = MEAL_NAME[h.meal] || "";
     const its = g.items.filter(x => x.site === site);
     const cheap = (l: CatItem[]) => l.slice().sort((a, b) => a.total - b.total)[0];
+    let near = "";
+    if (!its.length) {
+      // the same room under a different name: same type + bed, else same type (e.g. "Deluxe King" vs "Deluxe Room, Double / King bed")
+      const want = g.items.map(x => roomWordKey(x.name).split("|"));
+      const mine = catalog(h).filter(x => x.site === site);
+      const lv1 = mine.filter(x => { const [c1, b1] = roomWordKey(x.name).split("|"); return want.some(([c0, b0]) => c0 === c1 && c1 !== "room" && (!b0 || !b1 || b0 === b1)); });
+      const lv2 = lv1.length ? lv1 : mine.filter(x => { const [c1] = roomWordKey(x.name).split("|"); return want.some(([c0]) => c0 === c1 && c1 !== "room"); });
+      its.push(...lv2); if (lv2.length) near = lv1.length ? "same room, different name" : "closest room type";
+    }
     const own = its.filter(x => x.src === "site");
     const item = cheap(own.filter(x => x.meal === meal)) || cheap(its.filter(x => x.src === "google")) || cheap(own);
     const tk = `${site}|${g.type}|${h.meal}`;
     // names to look for on the site: this site's own names first, then what the other sites call it
-    return { g, item, tk, ex: h.typeExact?.[tk], names: [...new Set([...its.map(x => x.name), ...g.items.map(x => x.name), g.type])].slice(0, 12) };
+    return { g, item, tk, near, ex: h.typeExact?.[tk], names: [...new Set([...its.map(x => x.name), ...g.items.map(x => x.name), g.type])].slice(0, 12) };
   };
 
   // ── Rooms picker ───────────────────────────────────────────────────────────
@@ -405,7 +423,7 @@ export default function PriceCompare() {
   };
   const seeAll = async (c: City, h: Hotel) => {
     if (h.online && h.searchedFor === key(c, h)) {
-      if (!h.open && h.room && extAuto) autoCheck([{ c, h }], true);   // room chosen → exact prices of that room
+      if (!h.open && extAuto) autoCheck([{ c, h }], true);   // opening → exact prices from the sites (of the chosen room, if any)
       return setHotel(c.id, h.id, { open: !h.open });
     }
     await fetchOne(c, h, true); loadStatus();
@@ -513,7 +531,7 @@ export default function PriceCompare() {
         const list: RoomRow[] = res.rooms.filter((r: any) => r && r.total > 0).slice(0, 60).map((r: any) => ({
           key: String(r.key), room: String(r.room || ""), meal: String(r.meal || ""), cxl: String(r.cxl || ""), taxes: r.taxes !== false,
           total: rate ? Math.round(r.total * mult * rate) : r.total * mult, ccy: rate ? "INR" : ccy }));
-        if (list.length) patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list }));
+        if (list.length) { patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list })); regroupSoon(city.id, hotel.id); }
       }
       // Two independent readings: the page reader (text) and Gemini looking at a screenshot of the price.
       // Agree → confirmed. Only one found it → use it (screenshot only if it is the booking/checkout page).
@@ -799,7 +817,7 @@ export default function PriceCompare() {
                         {groups.map(g => {
                           const on = h.room === g.type;
                           return (
-                            <button key={g.type} onClick={() => { setHotel(c.id, h.id, { room: g.type, open: true }); setPicker(null); }}
+                            <button key={g.type} onClick={() => { setHotel(c.id, h.id, { room: g.type }); setPicker(null); }}
                               style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: on ? TINT : "transparent", color: TEXT }}
                               onMouseEnter={e => { if (!on) e.currentTarget.style.background = `${ACCENT}14`; }} onMouseLeave={e => { e.currentTarget.style.background = on ? TINT : "transparent"; }}>
                               <div style={{ minWidth: 0 }}>
@@ -922,7 +940,7 @@ export default function PriceCompare() {
                   {!d.mine && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                      {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : tsel ? <span title={tsel.ex?.room || tsel.item?.name}>{short(tsel.ex?.room || tsel.item?.name || tsel.g.type, 90)}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
+                      {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : tsel ? <span title={tsel.ex?.room || tsel.item?.name}>{short(tsel.ex?.room || tsel.item?.name || tsel.g.type, 90)}{tsel.near && !tsel.ex ? <span style={{ color: MUTED, fontWeight: 600 }}> ({tsel.near})</span> : null}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
                     </div>
                   )}
                   {!d.mine && siteRooms.length > 0 && (
