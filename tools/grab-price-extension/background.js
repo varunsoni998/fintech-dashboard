@@ -8,6 +8,17 @@ const GOOGLE = /(^|\.)google\.[a-z.]+$/i;   // Google's own 'redirecting…' pag
 // any real website counts (hotel's own site, booking engines, …) – just not Google itself or our dashboard
 const onSite = (host) => !!host && !GOOGLE.test(host) && !/(^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/i.test(host);
 const KNOWN = ["Booking.com", "Expedia", "Hotels.com", "MakeMyTrip", "Agoda"];
+const COMPARE = /(^|\.)(hotelscombined|kayak|trivago|momondo|skyscanner|wego|tripadvisor)\.[a-z.]+$/i;
+// Google sometimes labels a comparison-site link as "Hotels.com" etc. → search the real site directly
+function directSearch(job) {
+  const q = encodeURIComponent([job.hotel, job.city].filter(Boolean).join(", "));
+  if (!job.checkIn || !q) return "";
+  const a = job.adults || 2, r = job.rooms || 1;
+  if (job.source === "Hotels.com") return `https://in.hotels.com/Hotel-Search?destination=${q}&startDate=${job.checkIn}&endDate=${job.checkOut}&adults=${a}&rooms=${r}&locale=en_IN&siteid=300000036`;
+  if (job.source === "Expedia") return `https://www.expedia.co.in/Hotel-Search?destination=${q}&startDate=${job.checkIn}&endDate=${job.checkOut}&adults=${a}&rooms=${r}`;
+  if (job.source === "Booking.com") return `https://www.booking.com/searchresults.html?ss=${q}&checkin=${job.checkIn}&checkout=${job.checkOut}&group_adults=${a}&no_rooms=${r}&group_children=0&selected_currency=INR`;
+  return "";
+}
 // Always look at prices in rupees (₹). Each rule was checked on the live site.
 function inrUrl(u, job) {
   try {
@@ -264,6 +275,14 @@ async function readSitePrice(site, nights, adults, hotelName) {
       // Agoda's full price (with taxes and its "extra charges") is only shown on the booking form:
       // "Price  Rs. 25,716.37"  (not "Price Before Taxes", not "Room price"). Room name is in the address (roomName=…).
       if (/\/book\//i.test(location.pathname) || /booking form/i.test(document.title)) {
+        if (/someone['’]s just booked that room|can['’]t complete your booking|no longer available|sold out/i.test(txt)) {
+          const tries = (+ss.get("pcSoldTries") || 0) + 1;
+          if (tries > 3) return { error: "The room sold out on Agoda while checking — use View deal" };
+          let rn = ""; try { rn = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
+          ss.set("pcSoldTries", String(tries)); ss.set("pcSkip", (ss.get("pcSkip") ? ss.get("pcSkip") + "|" : "") + (ss.get("pcPick") || rn));
+          ss.set("pcPressed", "0"); history.back();
+          return { wait: true };
+        }
         const m = [...txt.matchAll(rx("(?:^|\\n)\\s*(?:Total price|Price)\\s*\\n?\\s*" + R + AMT))].pop();
         if (m) {
           let rm = ""; try { rm = new URL(location.href).searchParams.get("roomName") || ""; } catch {}
@@ -290,9 +309,12 @@ async function readSitePrice(site, nights, adults, hotelName) {
           const ad = ot.match(/(\d+)\s*adults?/i);
           return { o, b, amt: pm ? num(pm[1]) : 0, adults: ad ? +ad[1] : null, room: ((b && b.getAttribute("aria-label")) || "").replace(/^Book\s+/i, "").replace(/\s+Offer\s+\d+$/i, "") };
         }).filter(x => x.b && x.amt && (x.adults === null || x.adults >= adults));
-        if (offers.length) {
-          const pick = offers.sort((x, y) => x.amt - y.amt)[0];
-          ss.set("pcRoom", pick.room); ss.set("pcPressed", String(Date.now())); clicked = true;
+        const skip = (ss.get("pcSkip") || "").split("|").filter(Boolean);
+        const keyOf = (x) => x.room + "@" + x.amt;
+        const usable = offers.filter(x => !skip.includes(keyOf(x)));    // rooms that sold out while checking are skipped
+        if (usable.length) {
+          const pick = usable.sort((x, y) => x.amt - y.amt)[0];
+          ss.set("pcRoom", pick.room); ss.set("pcPick", keyOf(pick)); ss.set("pcPressed", String(Date.now())); clicked = true;
           pick.b.scrollIntoView({ block: "center" }); await sleep(700); pick.b.click();
           return { wait: true };
         }
@@ -370,6 +392,7 @@ async function waitForSite(tabRef, ms, known) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
     if (!t) { await sleep(700); const again = typeof tabRef === "function" ? tabRef() : tabRef; if (again !== tabId) continue; throw new Error("Tab closed"); }
     try { host = new URL(t.url || t.pendingUrl || "").hostname; } catch { host = ""; }
+    if (known && COMPARE.test(host)) return "compare";
     if (known ? ALLOWED.test(host) : onSite(host)) {
       if (!onSiteSince) onSiteSince = Date.now();
       if (t.status === "complete" || Date.now() - onSiteSince > 6000) return;
@@ -435,9 +458,15 @@ async function checkOne(job, windowId) {
   chrome.tabs.onReplaced.addListener(onSwap);
   const other = !KNOWN.includes(job.source);                     // hotel's own site → also read inside booking-engine frames
   try {
-    let robotDone = false; const fixedHosts = new Map(); const trail = [];
+    let robotDone = false; const fixedHosts = new Map(); const trail = []; let usedDirect = false;
     for (let hop = 0; hop < 10; hop++) {
-      await waitForSite(() => cur, 45000, !other);
+      const ws = await waitForSite(() => cur, 45000, !other);
+      if (ws === "compare") {
+        const d = !usedDirect && directSearch(job);
+        if (!d) return { error: "Google's link opened a price-comparison site, not " + job.source + " — use View deal", trail };
+        usedDirect = true; trail.push("comparison site → " + job.source + " search");
+        await chrome.tabs.update(cur, { url: d }); await sleep(1500); continue;
+      }
       try { const u = new URL((await chrome.tabs.get(cur)).url), d = u.searchParams.get("checkin") || u.searchParams.get("chkin") || u.searchParams.get("startDate") || u.searchParams.get("checkIn"); trail.push(u.hostname + u.pathname.slice(0, 40) + (d ? " (" + d + ")" : "")); } catch {}
       { // switch to ₹ + the trip's dates once per site (not on the ad-redirect pages in between)
         const now = (await chrome.tabs.get(cur).catch(() => null))?.url || "";
