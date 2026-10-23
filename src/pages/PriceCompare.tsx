@@ -40,6 +40,7 @@ interface RoomRow { key: string; room: string; meal: string; cxl: string; total:
 // a room + meal + cancellation option added to the Excel from the "All rooms" list
 interface RoomPick { id: string; site: string; key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; exact?: number }
 const MEAL_CODE: Record<string, string> = { "Room only": "RO", Breakfast: "BB", "Half board": "HB", "Full board": "FB", "All inclusive": "AI" };
+const MEAL_NAME: Record<string, string> = { RO: "Room only", BB: "Breakfast", HB: "Half board", FB: "Full board", AI: "All inclusive" };
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
 interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string; summary?: string; full?: string; pct?: number; noshow?: string }
@@ -158,6 +159,16 @@ export default function PriceCompare() {
   const [cityTab, setCityTab] = useState<string>("");
   const [roomUi, setRoomUi] = useState<Record<string, { open?: boolean; meal?: string; cxl?: string; all?: boolean }>>({});
   const [preview, setPreview] = useState(false);
+  // room picker (one open at a time): which hotel|site, and where to draw the list
+  const [picker, setPicker] = useState<{ id: string; left: number; top: number; width: number; up: boolean; maxH: number } | null>(null);
+  useEffect(() => {
+    if (!picker) return;
+    const close = (e: Event) => { const el = document.getElementById("pc-room-picker"); if (el && e.target instanceof Node && el.contains(e.target)) return; setPicker(null); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setPicker(null); };
+    const down = (e: MouseEvent) => { if (e.target instanceof Element && e.target.closest("[data-pc-picker-btn]")) return; close(e); };
+    window.addEventListener("scroll", close, true); window.addEventListener("resize", close); window.addEventListener("keydown", key); window.addEventListener("mousedown", down);
+    return () => { window.removeEventListener("mousedown", down); window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); window.removeEventListener("keydown", key); };
+  }, [picker?.id]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [roeBusy, setRoeBusy] = useState(false);
@@ -764,11 +775,64 @@ export default function PriceCompare() {
                   )}
                   {!d.mine && siteRooms.length > 0 && (
                     <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <select value={sr?.key || ""} onChange={e => setHotel(c.id, h.id, { roomSel: { ...(h.roomSel || {}), [d.source]: e.target.value } })}
-                        style={{ ...inp, width: "auto", maxWidth: 460, padding: "5px 8px", fontSize: 12 }}>
-                        <option value="">{d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} · {siteRooms.length} options on {d.source}</option>
-                        {siteRooms.map(r => <option key={r.key} value={r.key}>{short(r.room, 48)} · {r.meal} · {r.exactCxl || r.cxl || "—"} — {r.ccy === "INR" ? inr(r.exact || r.total) : `${r.ccy} ${Math.round(r.total)}`}{!r.exact && !r.taxes ? " + taxes" : ""}</option>)}
-                      </select>
+                      {(() => {
+                        const pid = `${h.id}|${d.source}`, open = picker?.id === pid;
+                        const fu = roomUi[pid] || {};
+                        const choose = (key: string) => { setHotel(c.id, h.id, { roomSel: { ...(h.roomSel || {}), [d.source]: key } }); setPicker(null); };
+                        const mealsHere = ["Room only", "Breakfast", "Half board", "Full board", "All inclusive"].filter(m => siteRooms.some(r => r.meal === m));
+                        const vis = siteRooms.filter(r => (!fu.meal || r.meal === fu.meal) && (!fu.cxl || /^free/i.test(r.exactCxl || r.cxl)));
+                        const chip = (on: boolean): React.CSSProperties => ({ border: "none", cursor: "pointer", borderRadius: 999, padding: "4px 10px", fontSize: 11.5, fontWeight: 700, background: on ? GRAD : BG, color: on ? "#fff" : TEXT, boxShadow: on ? "none" : SHADOW_SM });
+                        const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
+                          if (open) return setPicker(null);
+                          const r = e.currentTarget.getBoundingClientRect(), w = Math.min(680, window.innerWidth - 24);
+                          const below = window.innerHeight - r.bottom - 12, above = r.top - 12, up = below < 320 && above > below;
+                          setPicker({ id: pid, left: Math.max(12, Math.min(r.left, window.innerWidth - w - 12)), top: up ? r.top - 6 : r.bottom + 6, width: w, up, maxH: Math.min(460, up ? above : below) });
+                        };
+                        return (<>
+                          <button data-pc-picker-btn onClick={toggle} style={{ ...btn(), padding: "6px 12px", fontSize: 12, maxWidth: 520, gap: 8, boxShadow: open ? SHADOW_IN : SHADOW_SM }}>
+                            <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sr ? `${short(sr.room, 40)} · ${sr.meal}` : `${d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} — ${siteRooms.length} rooms on ${d.source}`}</span>
+                            {open ? <ChevronUp style={{ width: 14, height: 14, flexShrink: 0 }} /> : <ChevronDown style={{ width: 14, height: 14, flexShrink: 0 }} />}
+                          </button>
+                          {open && picker && (
+                            <div id="pc-room-picker" style={{ position: "fixed", left: picker.left, width: picker.width, zIndex: 70, ...(picker.up ? { bottom: window.innerHeight - picker.top } : { top: picker.top }),
+                              maxHeight: picker.maxH, display: "flex", flexDirection: "column", background: BG, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35), " + SHADOW_OUT, overflow: "hidden" }}>
+                              <div style={{ padding: "10px 12px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", borderBottom: `1px solid ${MUTED}22` }}>
+                                <span style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginRight: 4 }}>{d.source} · {vis.length} of {siteRooms.length}</span>
+                                <button style={chip(!fu.meal)} onClick={() => setRoomUi(o => ({ ...o, [pid]: { ...fu, meal: "" } }))}>All meals</button>
+                                {mealsHere.map(m => <button key={m} style={chip(fu.meal === m)} onClick={() => setRoomUi(o => ({ ...o, [pid]: { ...fu, meal: m } }))}>{m}</button>)}
+                                <button style={chip(!!fu.cxl)} onClick={() => setRoomUi(o => ({ ...o, [pid]: { ...fu, cxl: fu.cxl ? "" : "free" } }))}>Free cancellation</button>
+                              </div>
+                              <div style={{ overflowY: "auto", padding: 6 }}>
+                                <button onClick={() => choose("")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !sr ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 700 }}>
+                                  {d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} — {inr(d.rupees)}</button>
+                                {vis.map(r => {
+                                  const cx = r.exactCxl || r.cxl, on = sr?.key === r.key;
+                                  return (
+                                    <button key={r.key} onClick={() => choose(r.key)} title={r.room}
+                                      style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: on ? TINT : "transparent", color: TEXT }}
+                                      onMouseEnter={e => { if (!on) e.currentTarget.style.background = `${ACCENT}14`; }} onMouseLeave={e => { e.currentTarget.style.background = on ? TINT : "transparent"; }}>
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.room}</div>
+                                        <div style={{ marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11, fontWeight: 700 }}>
+                                          <span style={{ ...pill(BG, r.meal === "Room only" ? MUTED : GREEN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{r.meal}</span>
+                                          <span style={{ color: /^free/i.test(cx) ? GREEN : /non-?refundable|no free/i.test(cx) ? WARN : MUTED }}>{cx || "—"}</span>
+                                          {(h.picks || []).some(p => p.site === d.source && p.key === r.key) && <span style={{ color: GREEN }}>✓ In Excel</span>}
+                                        </div>
+                                      </div>
+                                      <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                                        <div style={{ fontSize: 13.5, fontWeight: 800 }}>{r.ccy === "INR" || r.exact ? inr(r.exact || r.total) : `${r.ccy} ${Math.round(r.total).toLocaleString("en-IN")}`}</div>
+                                        <div style={{ fontSize: 10.5, color: r.exact ? GREEN : !r.taxes ? WARN : MUTED, fontWeight: 700 }}>{r.exact ? "✓ exact" : !r.taxes ? "+ taxes" : "room-list"}</div>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                                {vis.length === 0 && <div style={{ padding: 12, fontSize: 12, color: MUTED }}>No room matches these filters.</div>}
+                              </div>
+                            </div>
+                          )}
+                        </>);
+                      })()}
                       {sr && (<>
                         {sr.exact ? <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ exact {clock(sr.exactAt)}</span>
                           : busyR ? <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {ck === "queued" ? "waiting…" : ck === "verifying" ? "verifying…" : `checking on ${d.source}…`}</span>
@@ -796,6 +860,15 @@ export default function PriceCompare() {
                         <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {checks[`${h.id}|${d.source}`] === "queued" ? "waiting…" : checks[`${h.id}|${d.source}`] === "verifying" ? "verifying price…" : `checking on ${d.source}…`}</span>
                       </>) : d.confirmed ? (<>
                         <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ Confirmed on site{h.confirmedAuto?.[d.source] ? " (auto)" : ""}</span>
+                        {(() => {
+                          // the checked room itself can go into the Excel too
+                          const ckKey = `checked:${d.source}`, have = (h.picks || []).find(p => p.site === d.source && p.key === ckKey);
+                          const rm = roomOnly(h.confirmedRoom?.[d.source]) || d.room || "Room";
+                          const match = siteRooms.find(r => r.room && rm.toLowerCase().startsWith(r.room.toLowerCase().slice(0, 20)));
+                          return have ? <button style={lb(GREEN)} title="Click to take it out of the Excel" onClick={() => setPicks(c.id, h.id, ps => ps.filter(x => x.id !== have.id))}>✓ In Excel</button>
+                            : <button style={lb(TEXT)} onClick={() => setPicks(c.id, h.id, ps => [...ps, { id: uid(), site: d.source, key: ckKey, room: rm, meal: match?.meal || MEAL_NAME[h.meal] || "Room only",
+                                cxl: d.cxl ? cxlLine(d.cxl, d.rupees) : d.free ? "Free cancellation" : "", total: d.rupees, taxes: true, exact: d.rupees }])}>+ Add to Excel</button>;
+                        })()}
                         {h.confirmedAuto?.[d.source] && <span style={{ color: MUTED }}>checked {clock(h.confirmedAuto[d.source])}</span>}
                         <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5, padding: 0 }} onClick={() => clearConfirm(c, h, d.source)}>Undo</button>
