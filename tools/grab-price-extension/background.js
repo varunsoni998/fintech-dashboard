@@ -258,7 +258,14 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
             // "Extras": options with a price ("Breakfast for 2  + ₹6,426") are NOT included in the shown total
             // the card's choices: cancellation ("Non-refundable + ₹0", "Fully refundable before 19 Nov + ₹7,347")
             // and extras ("No extras + ₹0", "Breakfast buffet + ₹4,190") – the shown total is for the ticked (+ ₹0) ones
-            const opts = [...b.matchAll(new RegExp("\\n\\s*([^\\n]{3,60}?)\\s*\\n?\\s*\\+\\s?" + R + AMT, "gi"))].map(o => ({ label: o[1].trim(), amt: num(o[2]) }));
+            // each choice: its name, (maybe "More details" lines), then "+ ₹amount" – skip the "More details" lines
+            const opts = []; { const ls = b.split("\n").map(x => x.trim()).filter(Boolean);
+              for (let li = 0; li < ls.length; li++) {
+                const pm = ls[li].match(new RegExp("^(.*?)\\s*\\+\\s?" + R + AMT + "\\.?$", "i")); if (!pm) continue;
+                let lab = pm[1].trim();
+                for (let bk = li - 1; !lab && bk >= 0 && bk >= li - 3; bk--) if (!/^more details|^info|^details$|^ⓘ/i.test(ls[bk])) lab = ls[bk];
+                if (lab && lab.length >= 3 && lab.length <= 80) opts.push({ label: lab, amt: num(pm[2]) });
+              } }
             const plain = opts.reduce((t2, o) => t2.split(o.label).join(" "), b);          // card text without the choices
             const optMeal = (l) => /all[- ]inclusive/i.test(l) ? "All inclusive" : /full board/i.test(l) ? "Full board" : /half board|dinner/i.test(l) ? "Half board" : /breakfast/i.test(l) ? "Breakfast" : "";
             const isCxl = (l) => /refundable|cancel/i.test(l);
