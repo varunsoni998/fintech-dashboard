@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; listsAt?: number; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; listsAt?: number; mealBySite?: Record<string, string>; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
 interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string; full?: string; rate?: string }
@@ -353,6 +353,7 @@ export default function PriceCompare() {
     } catch (e: any) { if (/GEMINI_API_KEY/.test(String(e?.message))) visionOff.current = true; setHotel(c.id, h.id, { typesLoading: false }); }   // word matching stays
   };
   // the chosen room type; a type chosen before it was split ("Suite" → "Suite — …") still works as the whole group
+  const mealFor = (h: Hotel, site: string) => h.mealBySite?.[site] || h.meal;   // each website can have its own meal plan
   const findType = (h: Hotel) => {
     if (!h.room) return null;
     const all = roomGroups(h), g = all.find(x => x.type === h.room); if (g) return { ...g, subs: 0 };
@@ -365,7 +366,7 @@ export default function PriceCompare() {
   const typeFor = (h: Hotel, site: string) => {
     if (!h.room) return null;
     const g = findType(h); if (!g) return null;
-    const meal = MEAL_NAME[h.meal] || "";
+    const meal = MEAL_NAME[mealFor(h, site)] || "";
     const its = g.items.filter(x => x.site === site);
     const cheap = (l: CatItem[]) => l.slice().sort((a, b) => a.total - b.total)[0];
     const near = "";
@@ -374,7 +375,7 @@ export default function PriceCompare() {
     const listed = !!h.roomsBySite?.[site]?.list?.length;
     const notSold = listed && !own.length;
     const item = cheap(own.filter(x => x.meal === meal)) || cheap(its.filter(x => x.src === "google")) || cheap(own);
-    const tk = `${site}|${g.type}|${h.meal}`;
+    const tk = `${site}|${g.type}|${mealFor(h, site)}`;
     // names to look for on the site: this site's own names first, then what the other sites call it
     const cat0 = roomWordKey(g.type).split("|")[0];
     const ex0 = h.typeExact?.[tk], exOk = ex0 && (cat0 === "room" || !ex0.room || roomWordKey(ex0.room).split("|")[0] === cat0);   // an older check that took a different room doesn't count
@@ -521,7 +522,7 @@ export default function PriceCompare() {
         const base = { cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name };
         const t = typeFor(h, p.source);   // a room type is chosen → the exact price of THAT room on every site
         if (t?.notSold) return null;      // the site doesn't sell this room → nothing to check
-        return t ? { ...base, pickWant: { names: t.names, meal: MEAL_NAME[h.meal] || "", cat: t.cat, exact: t.exact }, typeKey: t.tk } : base;
+        return t ? { ...base, pickWant: { names: t.names, meal: MEAL_NAME[mealFor(h, p.source)] || "", cat: t.cat, exact: t.exact }, typeKey: t.tk } : base;
       }).filter(Boolean) as any[]);
   const jobKey = (j: any) => `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}${j.listOnly ? "|list" : ""}`;
   // Google has no room list → read just the room lists on the sites (no checkout)
@@ -570,7 +571,7 @@ export default function PriceCompare() {
     const url = h.roomsBySite?.[site]?.url || (h.online?.prices || []).find(p => p.source === site)?.link;
     if (!url || !extAuto || !sameRooms) { setMsg({ kind: "err", text: url ? "Exact check needs the Grab-price extension (and all rooms with the same guests)." : `No ${site} link for this hotel.` }); return; }
     const job = { cid: c.id, hid: h.id, source: site, url, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name,
-      pickWant: { names: t.names, meal: MEAL_NAME[h.meal] || "", cat: t.cat, exact: t.exact }, typeKey: t.tk };
+      pickWant: { names: t.names, meal: MEAL_NAME[mealFor(h, site)] || "", cat: t.cat, exact: t.exact }, typeKey: t.tk };
     setChecks(o => ({ ...o, [`${h.id}|${site}|type:${t.tk}`]: "queued" }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs: [job] }, location.origin);
   };
@@ -1011,7 +1012,7 @@ export default function PriceCompare() {
                   const nm = MEAL_NAME[code] || code, v = minOf(nm);
                   return v ? `${code} · ${nm} — from ${inr(v)}${base && nm !== "Room only" && v > base ? ` (+${inr(v - base)})` : ""}` : `${code} · ${nm}${its.length ? " — not offered" : ""}`;
                 };
-                return <select title="Meal plan — prices from the sites' room lists" style={{ ...inp, width: 185, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>
+                return <select title="Meal plan — prices from the sites' room lists" style={{ ...inp, width: 185, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value, mealBySite: {} })}>
                   {MEALS.map(m => <option key={m} value={m}>{lab(m)}</option>)}</select>;
               })()}
               <select style={{ ...inp, width: 86, padding: "7px 6px", fontSize: 12.5 }} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "label"}</option>)}</select>
@@ -1143,10 +1144,30 @@ export default function PriceCompare() {
                               // the room this row is showing, inside the selector
                               const rn = sr ? sr.room : tsel ? (tsel.ex?.room || tsel.item?.name || "") : (d.confirmed ? roomOnly(h.confirmedRoom?.[d.source]) : "") || d.room || "";
                               const ml = sr ? sr.meal : tsel ? (tsel.ex?.meal || tsel.item?.meal || "") : "";
-                              return rn ? `${short(rn, 52)}${ml ? " · " + ml : ""}` : `Cheapest room · ${siteRooms.length} on ${d.source}`;
+                              void ml;
+                              return rn ? short(rn, 60) : `Cheapest room · ${siteRooms.length} on ${d.source}`;
                             })()}</span>
                             {open ? <ChevronUp style={{ width: 14, height: 14, flexShrink: 0 }} /> : <ChevronDown style={{ width: 14, height: 14, flexShrink: 0 }} />}
                           </button>
+                          {(() => {
+                            // this website's own meal plans for the room shown, with its prices
+                            const ft = findType(h);
+                            const pool = (ft ? ft.items.filter(x => x.site === d.source && x.src === "site") : siteRooms.map(r => ({ meal: r.meal, total: r.exact || r.total }))) as { meal?: string; total: number }[];
+                            const minOf = (m: string) => { const v = pool.filter(x => x.meal === m).map(x => x.total); return v.length ? Math.min(...v) : 0; };
+                            const base = minOf("Room only"), cur2 = mealFor(h, d.source);
+                            const own = !!h.mealBySite?.[d.source];
+                            return (
+                              <select title={`Meal plan on ${d.source}`} value={cur2} onChange={e => {
+                                const code = e.target.value, nm = MEAL_NAME[code];
+                                // no room type chosen → show this site's cheapest room with that meal
+                                const pickR = !ft ? siteRooms.filter(r => r.meal === nm).sort((x, y) => (x.exact || x.total) - (y.exact || y.total))[0] : undefined;
+                                setHotel(c.id, h.id, { mealBySite: { ...(h.mealBySite || {}), [d.source]: code }, ...(!ft ? { roomSel: { ...(h.roomSel || {}), [d.source]: pickR?.key || "" } } : {}) });
+                              }}
+                                style={{ ...inp, width: "auto", maxWidth: 240, padding: "5px 8px", fontSize: 12, fontWeight: 700, color: own ? ACCENT : TEXT }}>
+                                {MEALS.map(m => { const nm = MEAL_NAME[m] || m, v = minOf(nm); return <option key={m} value={m}>{`${nm}${v ? ` — ${inr(v)}${base && nm !== "Room only" && v > base ? ` (+${inr(v - base)})` : ""}` : pool.length ? " — not offered" : ""}`}</option>; })}
+                              </select>
+                            );
+                          })()}
                           {open && picker && (
                             <div id="pc-room-picker" style={{ position: "fixed", left: picker.left, width: picker.width, zIndex: 70, ...(picker.up ? { bottom: window.innerHeight - picker.top } : { top: picker.top }),
                               maxHeight: picker.maxH, display: "flex", flexDirection: "column", background: BG, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35), " + SHADOW_OUT, overflow: "hidden" }}>
@@ -1210,7 +1231,7 @@ export default function PriceCompare() {
                     </div>
                   )}
                   {tsel && tck && !tBusy && tck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {tck}</div>}
-                  {tsel?.ex?.meal && MEAL_NAME[h.meal] && tsel.ex.meal !== MEAL_NAME[h.meal] && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>{d.source} has no {MEAL_NAME[h.meal].toLowerCase()} option for this room — this is the {tsel.ex.meal.toLowerCase()} price</div>}
+                  {tsel?.ex?.meal && MEAL_NAME[mealFor(h, d.source)] && tsel.ex.meal !== MEAL_NAME[mealFor(h, d.source)] && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>{d.source} has no {MEAL_NAME[mealFor(h, d.source)].toLowerCase()} option for this room — this is the {tsel.ex.meal.toLowerCase()} price</div>}
                   {sr && ck && !busyR && ck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {ck}</div>}
                   {!d.mine && !sr && !tsel && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok", "verifying"].includes(checks[`${h.id}|${d.source}`]) && (
                     <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {checks[`${h.id}|${d.source}`]} — use View deal</div>
