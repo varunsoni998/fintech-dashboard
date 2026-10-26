@@ -931,7 +931,11 @@ export default function PriceCompare() {
                   let hh = h;
                   if (!h.online || h.searchedFor !== key(c, h)) { const o = await fetchOne(c, h, false, !!h.open, false); if (o) hh = { ...h, online: o }; loadStatus(); }
                   groupRooms(c, hh);
-                  if (extAuto && (hh.online?.prices || []).length) loadRoomLists(c, hh, true);   // only sites whose room list isn't read yet (and aren't being checked)
+                  // only for a hotel that was never checked: once "See all prices" / Re-check ran, opening this list never opens windows
+                  // (missing sites can be read with "↻ read again")
+                  const everChecked = !!h.listsAt || Object.keys(h.confirmed || {}).length > 0 || Object.keys(h.roomsBySite || {}).length > 0 || Object.keys(h.listTried || {}).length > 0
+                    || Object.keys(checks).some(kk => kk.startsWith(h.id + "|"));
+                  if (!everChecked && extAuto && (hh.online?.prices || []).length) loadRoomLists(c, hh, true);
                 };
                 return (<>
                   <button data-pc-picker-btn onClick={toggle} title="Room type — the same room is priced on every site" style={{ ...inp, width: 220, padding: "7px 9px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}>
