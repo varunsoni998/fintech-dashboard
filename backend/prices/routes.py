@@ -488,18 +488,67 @@ def _gemini_key() -> str:
     return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
 
 
+def _openrouter_key() -> str:
+    return (os.getenv("OPENROUTER_API_KEY") or "").strip()
+
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+def _json_from(text: str) -> dict:
+    import json as _json
+    return _json.loads(text[text.find("{"): text.rfind("}") + 1])
+
+
+def _ai_json(prompt: str, images: list = None, timeout: int = 60):
+    """Ask Gemini; if it isn't set up, is over its free limit or fails → OpenRouter (backup). Returns (answer dict, model)."""
+    images = images or []            # [(mime, base64)]
+    errors = []
+    gk = _gemini_key()
+    if gk:
+        model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+        payload = {"contents": [{"parts": [{"text": prompt}, *[{"inline_data": {"mime_type": m, "data": d}} for m, d in images]]}],
+                   "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
+        try:
+            r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=timeout,
+                              headers={"x-goog-api-key": gk, "Content-Type": "application/json"})
+            if r.status_code < 400:
+                return _json_from(r.json()["candidates"][0]["content"]["parts"][0]["text"]), model
+            errors.append(f"Gemini {r.status_code}" + (" (free limit reached)" if r.status_code == 429 else ""))
+            logger.warning("Gemini error %s: %s", r.status_code, r.text[:300])
+        except Exception as e:
+            errors.append(f"Gemini: {e}")
+    ok = _openrouter_key()
+    if ok:
+        model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free")
+        content = [{"type": "text", "text": prompt + "\nAnswer with the JSON only."}] + \
+                  [{"type": "image_url", "image_url": {"url": f"data:{m};base64,{d}"}} for m, d in images]
+        try:
+            r = requests.post(OPENROUTER_URL, timeout=timeout + 30,
+                              headers={"Authorization": f"Bearer {ok}", "Content-Type": "application/json",
+                                       "HTTP-Referer": "https://businessos-roan-iota.vercel.app", "X-Title": "BusinessOS Price Compare"},
+                              json={"model": model, "temperature": 0, "messages": [{"role": "user", "content": content}]})
+            if r.status_code < 400:
+                return _json_from(r.json()["choices"][0]["message"]["content"] or ""), "openrouter:" + model
+            errors.append(f"OpenRouter {r.status_code}")
+            logger.warning("OpenRouter error %s: %s", r.status_code, r.text[:300])
+        except Exception as e:
+            errors.append(f"OpenRouter: {e}")
+    if not gk and not ok:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server (and no OPENROUTER_API_KEY backup)")
+    raise HTTPException(status_code=502, detail="AI reading failed: " + "; ".join(errors))
+
+
 @router.get("/vision/status")
 def vision_status(authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
-    return {"configured": bool(_gemini_key()), "model": os.getenv("GEMINI_MODEL", "gemini-flash-latest")}
+    return {"configured": bool(_gemini_key() or _openrouter_key()), "model": os.getenv("GEMINI_MODEL", "gemini-flash-latest"),
+            "backup": os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free") if _openrouter_key() else None}
 
 
 @router.post("/vision")
 def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
-    key = _gemini_key()
-    if not key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
     def _part(img: str):
         mime = "image/jpeg"
         if img.startswith("data:"):
@@ -507,33 +556,19 @@ def vision(body: VisionIn, authorization: Optional[str] = Header(None)):
             mime = head[5:].split(";")[0] or mime
         if len(img) > 6_000_000:
             raise HTTPException(status_code=413, detail="Screenshot too large")
-        return {"inline_data": {"mime_type": mime, "data": img}}
+        return (mime, img)
     images = [_part(body.image)] + ([_part(body.image2)] if body.image2 else [])
     prompt = VISION_PROMPT.format(site=body.site or "a booking site", hotel=body.hotel, check_in=body.check_in or "?",
                                   check_out=body.check_out or "?", nights=body.nights or "?", adults=body.adults, rooms=body.rooms)
-    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
     if body.policy_text:
         prompt += "\nThe page's own cancellation-policy text (use it for the cxl_* fields):\n" + body.policy_text[:1500]
     if len(images) > 1:
         prompt += "\nThere are 2 screenshots of the same page: the price area and the cancellation-policy area."
-    payload = {"contents": [{"parts": [{"text": prompt}, *images]}],
-               "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
     try:
-        r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=45,
-                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Vision service unreachable: {e}")
-    if r.status_code == 429:
-        raise HTTPException(status_code=429, detail="Free vision limit reached for today")
-    if r.status_code >= 400:
-        logger.warning("Gemini error %s: %s", r.status_code, r.text[:300])
-        raise HTTPException(status_code=502, detail=f"Vision service error {r.status_code}")
-    try:
-        import json as _json
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
-    except Exception:
-        raise HTTPException(status_code=502, detail="Vision service gave an unreadable answer")
+        out, model = _ai_json(prompt, images, 45)
+    except HTTPException as e:
+        if e.status_code == 502 and "429" in str(e.detail): raise HTTPException(status_code=429, detail="Free vision limit reached for today")
+        raise
     for k in ("total", "per_night", "cxl_fee", "total_incl_taxes", "total_excl_taxes", "taxes"):
         try:
             out[k] = float(str(out.get(k)).replace(",", "")) if out.get(k) not in (None, "") else None
@@ -567,27 +602,10 @@ Names:
 @router.post("/rooms/group")
 def rooms_group(body: RoomGroupIn, authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
-    key = _gemini_key()
-    if not key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
     rooms = body.rooms[:150]
     names = "\n".join(f"{i}. [{r.site}] {r.name[:160]}" for i, r in enumerate(rooms))
-    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
-    payload = {"contents": [{"parts": [{"text": ROOM_GROUP_PROMPT.format(hotel=body.hotel, names=names)}]}],
-               "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
+    out, model = _ai_json(ROOM_GROUP_PROMPT.format(hotel=body.hotel, names=names), [], 45)
     try:
-        r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=45,
-                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini unreachable: {e}")
-    if r.status_code == 429:
-        raise HTTPException(status_code=429, detail="Free Gemini limit reached for today")
-    if r.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"Gemini error {r.status_code}")
-    try:
-        import json as _json
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
         groups = []
         seen = set()
         for g in out.get("groups") or []:
@@ -631,29 +649,9 @@ Page text:
 @router.post("/rooms/read")
 def rooms_read(body: SiteTextIn, authorization: Optional[str] = Header(None)):
     _get_user_id(authorization)
-    key = _gemini_key()
-    if not key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
-    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
     prompt = SITE_ROOMS_PROMPT.format(hotel=body.hotel, check_in=body.check_in or "?", check_out=body.check_out or "?",
                                       nights=body.nights or "?", adults=body.adults, text=body.text[:40000])
-    payload = {"contents": [{"parts": [{"text": prompt}]}],
-               "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
-    try:
-        r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=60,
-                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini unreachable: {e}")
-    if r.status_code == 429:
-        raise HTTPException(status_code=429, detail="Free Gemini limit reached for today")
-    if r.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"Gemini error {r.status_code}")
-    try:
-        import json as _json
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
-    except Exception:
-        raise HTTPException(status_code=502, detail="Gemini gave an unreadable answer")
+    out, model = _ai_json(prompt, [], 60)
     rooms = []
     for x in out.get("rooms") or []:
         try:
