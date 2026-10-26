@@ -331,10 +331,19 @@ export default function PriceCompare() {
       setHotel(c.id, h.id, { typesLoading: false, roomTypes: (r.groups || []).map((g: any) => ({ type: String(g.type), m: (g.ids || []).map((i: number) => rooms[i]).filter(Boolean) })) });
     } catch (e: any) { if (/GEMINI_API_KEY/.test(String(e?.message))) visionOff.current = true; setHotel(c.id, h.id, { typesLoading: false }); }   // word matching stays
   };
+  // the chosen room type; a type chosen before it was split ("Suite" → "Suite — …") still works as the whole group
+  const findType = (h: Hotel) => {
+    if (!h.room) return null;
+    const all = roomGroups(h), g = all.find(x => x.type === h.room); if (g) return { ...g, subs: 0 };
+    const subs = all.filter(x => x.type.startsWith(h.room + " — "));
+    if (!subs.length) return null;
+    const items = subs.flatMap(x => x.items);
+    return { type: h.room, items, from: Math.min(...items.map(x => x.total)), sites: [...new Set(items.map(x => x.site))], subs: subs.length };
+  };
   // the chosen room type on one site: exact checkout price > site's own list (same meal) > Google's list
   const typeFor = (h: Hotel, site: string) => {
     if (!h.room) return null;
-    const g = roomGroups(h).find(x => x.type === h.room); if (!g) return null;
+    const g = findType(h); if (!g) return null;
     const meal = MEAL_NAME[h.meal] || "";
     const its = g.items.filter(x => x.site === site);
     const cheap = (l: CatItem[]) => l.slice().sort((a, b) => a.total - b.total)[0];
@@ -846,8 +855,10 @@ export default function PriceCompare() {
                   <button data-pc-picker-btn onClick={toggle} title="Room type — the same room is priced on every site" style={{ ...inp, width: 220, padding: "7px 9px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}>
                     <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: h.room ? TEXT : MUTED }}>{h.room || "Room type (any)"}</span>
+                    {h.room && (h.online || h.roomsBySite) && (() => { const f = findType(h); return !f ? <span title="This room type isn't in the hotel's room list any more — pick it again" style={{ color: WARN, fontWeight: 800 }}>!</span> : f.subs > 1 ? <span title={`This hotel has ${f.subs} different rooms called "${h.room}" — pick the exact one`} style={{ color: WARN, fontWeight: 800 }}>{f.subs}</span> : null; })()}
                     {h.loading || h.typesLoading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 13, height: 13 }} />}
                   </button>
+                  {h.room && (() => { const f = findType(h); return f && f.subs > 1 ? <span style={{ fontSize: 11.5, color: WARN, fontWeight: 700 }}>{f.subs} different “{h.room}” rooms — open the list to pick the exact one</span> : null; })()}
                   {open && picker && (
                     <div id="pc-room-picker" style={{ position: "fixed", left: picker.left, width: picker.width, zIndex: 70, ...(picker.up ? { bottom: window.innerHeight - picker.top } : { top: picker.top }),
                       maxHeight: picker.maxH, display: "flex", flexDirection: "column", background: BG, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35), " + SHADOW_OUT, overflow: "hidden" }}>
