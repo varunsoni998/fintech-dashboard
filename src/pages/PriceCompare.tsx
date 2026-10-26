@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; listsAt?: number; mealBySite?: Record<string, string>; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; listsAt?: number; listTried?: Record<string, number>; mealBySite?: Record<string, string>; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
 interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string; full?: string; rate?: string }
@@ -531,7 +531,7 @@ export default function PriceCompare() {
   const siteBusy = (hid: string, site: string) => Object.entries(checks).some(([kk, v]) => kk.startsWith(`${hid}|${site}`) && (v === "queued" || v === "checking" || v === "verifying"));
   const loadRoomLists = (c: City, h: Hotel, missingOnly = false) => {
     if (!extAuto) { setMsg({ kind: "err", text: "Install (or update) the Grab-price extension to read the room lists." }); return; }
-    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source) && !siteBusy(h.id, p.source) && !(missingOnly && h.roomsBySite?.[p.source]?.list?.length))
+    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source) && !siteBusy(h.id, p.source) && !(missingOnly && (h.roomsBySite?.[p.source]?.list?.length || Date.now() - (h.listTried?.[p.source] || 0) < 6 * 3600 * 1000)))
       .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name, listOnly: true }));
     if (!jobs.length) { if (!missingOnly) setMsg({ kind: "err", text: "No Booking.com / Agoda / Expedia / Hotels.com / hotel website link for this hotel (or it's being checked right now)." }); return; }
     setHotel(c.id, h.id, { listsAt: Date.now() });
@@ -590,6 +590,8 @@ export default function PriceCompare() {
       const city = trip.cities.find(c => c.id === j.cid), hotel = city?.hotels.find(h => h.id === j.hid);
       const res = m.result || {};
       if (!city || !hotel) return;
+      // this site was visited (exact check or room list) → opening Room type won't open it again (use "read again" for that)
+      setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => y.id !== hotel.id ? y : { ...y, listTried: { ...(y.listTried || {}), [j.source]: Date.now() } }) }) }));
       // every room + option the site listed → "All rooms" table (room-list prices until "Check exact")
       if (!j.pickKey && Array.isArray(res.rooms) && res.rooms.length && res.roomsUrl) {
         const ccy = String(res.currency || "INR").toUpperCase(), mult = j.mult || 1;
