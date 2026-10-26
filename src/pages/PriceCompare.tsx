@@ -378,7 +378,8 @@ export default function PriceCompare() {
     const tk = `${site}|${g.type}|${mealFor(h, site)}`;
     // names to look for on the site: this site's own names first, then what the other sites call it
     const cat0 = roomWordKey(g.type).split("|")[0];
-    const ex0 = h.typeExact?.[tk], exOk = ex0 && (cat0 === "room" || !ex0.room || roomWordKey(ex0.room).split("|")[0] === cat0);   // an older check that took a different room doesn't count
+    const ex0 = h.typeExact?.[tk], exOk = ex0 && (cat0 === "room" || !ex0.room || roomWordKey(ex0.room).split("|")[0] === cat0)
+      && !(ex0.meal && meal && ex0.meal !== meal && own.some(x => x.meal === meal));   // an older check that got another meal plan doesn't count once the site offers this one   // an older check that took a different room doesn't count
     return { g, item, tk, near, notSold, listed, exact: [...new Set(own.map(x => x.name))], cat: cat0 === "room" ? "" : cat0, ex: exOk ? ex0 : undefined, names: [...new Set([...its.map(x => x.name), ...g.items.map(x => x.name), g.type])].slice(0, 12) };
   };
 

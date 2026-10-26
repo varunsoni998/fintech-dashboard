@@ -264,7 +264,8 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
             const isCxl = (l) => /refundable|cancel/i.test(l);
             const cxlOpts = opts.filter(o => isCxl(o.label)), mealOpts = opts.filter(o => !isCxl(o.label) && (o.amt === 0 || optMeal(o.label)));
             const pn = b.match(new RegExp("current price is\\s*" + R + AMT, "i")), tf = pn && num(pn[1]) > 0 ? num(mm[0][1]) / (num(pn[1]) * (nights || 1)) : 1;   // taxes on top of the per-night extras
-            const defaults = opts.filter(o => o.amt === 0).map(o => o.label).join("\n");
+            // the ticked (+ ₹0) choices are what the shown total includes – e.g. "Breakfast + Special deal" = breakfast included
+            const defaults = opts.filter(o => o.amt === 0).map(o => o.label + (optMeal(o.label) ? "\n" + optMeal(o.label).toLowerCase() + " included" : "")).join("\n");
             const bkey = room + (found.some(f => f.room === room && !f.extra) ? " #" + (found.filter(f => f.room === room && !f.extra).length + 1) : "");
             const base = { total: num(mm[0][1]), room, key: bkey, text: defaults + "\n" + plain, free: /Fully refundable|Free cancellation/i.test(defaults || b) };
             found.push(base);
@@ -299,7 +300,17 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
                 let card = hit.b; while (card && !/View all photos for /i.test(card.innerText || "")) card = card.parentElement;
                 const lab = card && [...card.querySelectorAll("label, [role='radio'], input[type='radio'], input[type='checkbox']")].find(e => clean(e.innerText || e.getAttribute("aria-label") || (e.id && card.querySelector(`label[for="${e.id}"]`)?.innerText) || "").trim().startsWith(ex));
                 if (!lab) return { error: `${site}: couldn't choose "${ex}" for this room` };
-                lab.scrollIntoView({ block: "center" }); await sleep(400); lab.click(); await sleep(1500);
+                const inp = lab.matches("input") ? lab : lab.querySelector("input") || (lab.htmlFor && document.getElementById(lab.htmlFor)) || null;
+                lab.scrollIntoView({ block: "center" }); await sleep(400);
+                (inp || lab).click(); await sleep(1500);
+                if (inp && !inp.checked) { lab.click(); await sleep(1500); }
+                if (inp && !inp.checked) return { error: `${site}: couldn't tick "${ex}" for this room` };
+              }
+              if (hit && c.extras && c.extras.length) {
+                let card = hit.b; while (card && !/View all photos for /i.test(card.innerText || "")) card = card.parentElement;
+                const tm = card && clean(card.innerText).match(new RegExp(R + AMT + "\\s*total\\b", "i"));
+                const now = tm ? num(tm[1]) : 0;
+                if (now && Math.abs(now - (c.base ? c.base.total : now)) < 1 && c.total > now * 1.005) return { error: `${site}: the price didn't change after choosing "${c.extras.join(" + ")}" — use View deal` };
               }
               if (hit) { ss.set("pcRoom", c.room); ss.set("pcPressed", String(Date.now())); hit.b.scrollIntoView({ block: "center" }); await sleep(600); hit.b.click(); clicked = true; return { wait: true }; }
             } else if (await pressCheapest(document.body, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }
