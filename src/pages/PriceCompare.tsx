@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
 interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string }
@@ -60,6 +60,15 @@ const MEAL_NAME: Record<string, string> = { RO: "Room only", BB: "Breakfast", HB
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
 interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string; summary?: string; full?: string; pct?: number; noshow?: string }
+// the fee in a few words: "fee: 1st night", "fee: 50%", "fee: full amount"
+const cxlFee = (full?: string) => {
+  const t = (full || "").replace(/\s+/g, " ");
+  if (/first night|1st night|one night/i.test(t)) return "fee: 1st night";
+  const p = t.match(/(\d{1,3})\s?%/); if (p) return `fee: ${p[1]}%`;
+  if (/full (?:amount|price|stay)|100\s?%|entire stay/i.test(t)) return "fee: full amount";
+  const n = t.match(/(\d+) nights?/i); if (n && /charge|fee|pay/i.test(t)) return `fee: ${n[1]} night${n[1] === "1" ? "" : "s"}`;
+  return "";
+};
 const cxlTerms = (full?: string) => {
   if (!full) return "";
   const sents = full.replace(/\s+/g, " ").split(/(?<=[.!])\s+|\s·\s/).map(x => x.trim())
@@ -70,7 +79,7 @@ const cxlTerms = (full?: string) => {
 // cancellation in numbers only: dates, amounts, percentages
 const cxlLine = (c?: Cxl, total?: number) => {
   if (!c) return "";
-  if (c.summary) return c.summary;
+  if (c.summary && c.summary.length <= 70) return c.summary;   // long wording → the ⓘ
   const d = (iso?: string) => { if (!iso) return ""; const x = new Date(iso + "T00:00:00"); return isNaN(+x) ? iso : x.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); };
   const amt = (n?: number, ccy?: string) => n ? `${!ccy || ccy === "INR" ? "₹" : ccy + " "}${Math.round(n).toLocaleString("en-IN")}` : "";
   if (c.kind === "non-refundable") return `Non-refundable · 100% charged${total ? ` (${amt(total)})` : ""}`;
@@ -81,8 +90,8 @@ const cxlLine = (c?: Cxl, total?: number) => {
   if (c.noshow) parts.push(`no-show: ${c.noshow}`);
   if (parts.length) return parts.join(" · ");
   // no dates / amounts read → the policy's own terms, shortened (only the sentences with dates, amounts or nights)
-  const terms = cxlTerms(c.full || c.text);
-  return c.kind === "partial" ? `Partially refundable${terms ? " · " + terms : ""}` : terms || "";
+  const fee2 = cxlFee(c.full || c.text);
+  return c.kind === "partial" ? `Partially refundable${fee2 ? " · " + fee2 : ""}` : fee2 || "";
 };
 const cxlShort = (c?: Cxl, total?: number) => !c ? "" : c.summary ? c.summary : c.kind === "non-refundable" ? cxlLine(c, total) : c.until ? `Free cxl till ${c.until}${c.fee ? `, then ${Math.round(c.fee)}` : ""}` : c.kind === "free" ? "Free cxl" : c.fee ? `Cxl fee ${Math.round(c.fee)}` : (c.text || "");
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
@@ -185,6 +194,7 @@ export default function PriceCompare() {
   const [cityTab, setCityTab] = useState<string>("");
   const [roomUi, setRoomUi] = useState<Record<string, { open?: boolean; meal?: string; cxl?: string; all?: boolean }>>({});
   const [preview, setPreview] = useState(false);
+  const [cxlInfo, setCxlInfo] = useState<string>("");   // which row's full cancellation policy is open
   // room picker (one open at a time): which hotel|site, and where to draw the list
   const [picker, setPicker] = useState<{ id: string; left: number; top: number; width: number; up: boolean; maxH: number } | null>(null);
   useEffect(() => {
@@ -609,6 +619,7 @@ export default function PriceCompare() {
         let total = 0, cur = "INR", room = "", allRooms = !!res.allRooms;
         if (res.total > 0) {
           total = res.total; cur = (res.currency || "INR").toUpperCase(); room = res.room || (visOk ? v.room || "" : "");
+          if (visOk && res.addOn > 0) total -= res.addOn;     // the screenshot shows the price without the breakfast paid at the hotel
           if (visOk) {
             const vc = (v.currency || cur).toUpperCase();
             // agree if the page total matches the screenshot's total WITH taxes, or before-taxes + taxes (tax lines are not a mismatch)
@@ -621,6 +632,7 @@ export default function PriceCompare() {
         } else if (visOk && (v.page === "checkout" || v.page === "hotel page")) {
           total = v.total_incl_taxes || v.total; cur = (v.currency || "INR").toUpperCase(); room = v.room || ""; allRooms = v.page === "checkout";
         } else return fail(res.error || "Couldn't read the price");
+        if (visOk && res.addOn > 0) total += res.addOn;
         const amount = total * (allRooms ? 1 : (j.mult || 1));   // checkout pages already show all rooms
         // cancellation terms: the screenshot reading (structured) first, else the words found on the page
         const txt = String(res.policyText || res.cxlText || "");
@@ -633,7 +645,7 @@ export default function PriceCompare() {
             const got = res.picked?.room || roomOnly(room) || "", gotCat = roomWordKey(got).split("|")[0];
             if (j.pickWant?.cat && got && gotCat !== j.pickWant.cat) { setChecks(o => ({ ...o, [k]: `${j.source} gave "${got.slice(0, 50)}" — not the room you chose` })); return; }
             const ex = Math.round(amount * rate);
-            setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => y.id !== hotel.id ? y : { ...y, typeExact: { ...(y.typeExact || {}), [j.typeKey]: { total: ex, room: res.picked?.room || roomOnly(room) || "", cxl: cxl ? cxlLine(cxl, ex) : "", meal: res.picked?.meal || "", at: Date.now() } } }) }) }));
+            setTrip(t => ({ ...t, cities: t.cities.map(x => x.id !== city.id ? x : { ...x, hotels: x.hotels.map(y => y.id !== hotel.id ? y : { ...y, typeExact: { ...(y.typeExact || {}), [j.typeKey]: { total: ex, room: res.picked?.room || roomOnly(room) || "", cxl: cxl ? cxlLine(cxl, ex) : "", meal: res.picked?.meal || "", at: Date.now(), full: String(res.policyText || res.cxlText || cxl?.full || cxl?.text || ""), note: res.addOnNote || "" } } }) }) }));
             setChecks(o => ({ ...o, [k]: "ok" }));
             return;
           }
@@ -795,6 +807,25 @@ export default function PriceCompare() {
     </div>
   );
 
+  // cancellation on a row: short line (dates / fees) + ⓘ with the full policy
+  const cxlCell = (id: string, short: string, full?: string, extra?: string) => {
+    const open = cxlInfo === id, terms = (full || "").trim();
+    const col = /^free/i.test(short) ? GREEN : /non-?refundable|no free/i.test(short) ? WARN : MUTED;
+    return (
+      <span style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, color: col }}>
+        <span>{short || "—"}</span>
+        {(terms || extra) && <button title="Full cancellation policy" onClick={() => setCxlInfo(open ? "" : id)}
+          style={{ border: `1.5px solid ${col}`, color: col, background: "transparent", borderRadius: 999, width: 17, height: 17, fontSize: 10.5, fontWeight: 800, lineHeight: "13px", cursor: "pointer", padding: 0, flexShrink: 0 }}>i</button>}
+        {open && (
+          <div style={{ position: "absolute", right: 0, top: 22, zIndex: 40, width: 340, maxHeight: 280, overflowY: "auto", background: BG, color: TEXT, borderRadius: 12, padding: 12, fontSize: 12, fontWeight: 500, lineHeight: 1.45, whiteSpace: "pre-wrap", boxShadow: "0 14px 40px rgba(0,0,0,0.35), " + SHADOW_OUT }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><b>Cancellation policy</b><button onClick={() => setCxlInfo("")} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer" }}>✕</button></div>
+            {extra && <div style={{ color: WARN, marginBottom: 6 }}>{extra}</div>}
+            {terms || "No details given by the site."}
+          </div>
+        )}
+      </span>
+    );
+  };
   const hotelCard = (c: City, h: Hotel, n: number, badges: { cheapest: boolean; best: boolean; rated: boolean }) => {
     const ds0 = deals(h); const mineHotel = isMine(h);
     // rows ranked by the price each row SHOWS (the chosen room / the room picked in its list); rows without it go last
@@ -1157,11 +1188,11 @@ export default function PriceCompare() {
                 </div>
                 {sr ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ color: sr.meal === "Room only" ? MUTED : GREEN, fontWeight: 700 }}>{sr.meal}</span>
-                  <span style={{ color: /^free/i.test(srCx) ? GREEN : /non-?refundable|no free/i.test(srCx) ? WARN : MUTED }}>{srCx || "—"}</span>
+                  {cxlCell(`${h.id}|${d.source}|sr`, srCx, h.confirmedCxl?.[d.source]?.full)}
                 </div> : tsel ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ color: tMeal && tMeal !== "Room only" ? GREEN : MUTED, fontWeight: 700 }}>{tMeal || "Meal: not shown yet"}</span>
-                  <span style={{ color: /^free/i.test(tCx) ? GREEN : /non-?refundable|no free/i.test(tCx) ? WARN : MUTED }}>{tCx || "—"}</span>
-                </div> : <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlLine(d.cxl, d.rupees) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>}
+                  {cxlCell(`${h.id}|${d.source}|t`, tCx, tsel.ex?.full, tsel.ex?.note ? `Includes ${tsel.ex.note}` : "")}
+                </div> : <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlCell(`${h.id}|${d.source}|d`, cxlLine(d.cxl, d.rupees), d.cxl.full || d.cxl.text) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>}
                 {sr ? (sr.exact || sr.ccy === "INR" ? <div>{priceBlock(sr.exact || sr.total, n)}{!sr.exact && !sr.taxes && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div>
                   : <div style={{ textAlign: "right", fontWeight: 800, color: TEXT }}>{sr.ccy} {Math.round(sr.total).toLocaleString("en-IN")}</div>)
                   : tsel ? (tPrice ? <div>{priceBlock(tPrice, n)}{!tsel.ex && tsel.item?.taxes === false && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div> : <div style={{ textAlign: "right", fontSize: 12, color: MUTED }}>{tBusy ? "checking…" : "price on the site"}</div>)

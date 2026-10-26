@@ -154,7 +154,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
       return { x, o, s: o + (pickWant.meal && mealOf(textOf(x) || "") === pickWant.meal ? 0.3 : 0) };
     }).filter(y => y.o >= 0.5);
     sc.sort((a, b) => (Math.abs(b.s - a.s) > 0.05 ? b.s - a.s : priceOf(a.x) - priceOf(b.x)));
-    if (sc[0]) chosenPick = { room: roomOf(sc[0].x) || "", meal: mealOf(textOf(sc[0].x) || "") };
+    if (sc[0]) chosenPick = { room: roomOf(sc[0].x) || "", meal: mealOf(textOf(sc[0].x) || ""), addOn: sc[0].x.addOn || 0, addOnNote: sc[0].x.addOnNote || "" };
     return sc[0] ? sc[0].x : null;
   };
   const setList = (list) => { const seen = new Set(); roomList = list.filter(x => { const d = [x.room, mealOf(x.text || ""), cxlOf(x.text || ""), Math.round(x.total)].join("|"); if (seen.has(d)) return false; seen.add(d); return true; }).map(x => ({ key: x.key, room: x.room, meal: mealOf(x.text || ""), cxl: cxlOf(x.text || ""), total: cents(x.total), taxes: x.taxes !== false })); roomsUrl = location.href; };
@@ -338,7 +338,14 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
           const g = rt.match(/Guests?:\s*(\d+)\s*adult/i) || rt.match(/Max(?:imum)? (?:people|persons|guests):?\s*(\d+)/i);
           const cap = g ? +g[1] : (r.querySelectorAll(".bicon-occupancy, .c-occupancy-icons__adults i, [class*='occupancy'] svg").length || null);
           if (cap !== null && cap < adults) continue;          // e.g. a 1-adult price when we need 2
-          found.push({ total, room, free: /Free cancellation/i.test(rt), row: r, text: rt, key: (r.getAttribute("data-block-id") || "row" + rows.indexOf(r)) });
+          const bk = { total, room, free: /Free cancellation/i.test(rt), row: r, text: rt, key: (r.getAttribute("data-block-id") || "row" + rows.indexOf(r)) };
+          found.push(bk);
+          // "Very good breakfast ₹ 1,395" (optional, per guest per night, paid at the hotel) → also a "with breakfast" option
+          const ob = mealOf(rt) === "Room only" && rt.match(new RegExp("breakfast[^\\n₹$€£]{0,25}?" + R + AMT, "i"));
+          if (ob && num(ob[1]) > 0) {
+            const add = Math.round(num(ob[1]) * adults * (nights || 1));
+            found.push({ ...bk, key: bk.key + "+bf", text: "Breakfast included\n" + rt, total: total + add, addOn: add, addOnNote: `breakfast ${ob[0].match(new RegExp(R + AMT))[0]} per guest per night, paid at the hotel` });
+          }
         }
         if (found.length) setList(found);
         const c = picking ? choose(found, x => x.room, x => x.text, x => x.key, x => x.total) : cheapest(found);
@@ -453,7 +460,7 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
         const usable = offers.filter(x => !skip.includes(keyOf(x)));    // rooms that sold out while checking are skipped
         const one = picking ? choose(usable, x => x.room, x => x.ot, okey, x => x.amt) : null;
         const wanted = picking ? (one ? [one] : []) : usable;
-        if (picking && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : (pickKey ? "That room isn't shown on Agoda any more" : "Agoda doesn't have this room type for these dates") };
+        if (picking && offers.length && !wanted.length) return { error: skip.length ? "That room sold out on Agoda while checking" : (pickKey ? "That room isn't shown on Agoda any more" : "Agoda doesn't have this room type for these dates"), debug: "Agoda rooms: " + [...new Set(offers.map(x => x.room))].slice(0, 12).join(" | ") };
         if (wanted.length) {
           const pick = wanted.sort((x, y) => x.amt - y.amt)[0];
           ss.set("pcRoom", pick.room); ss.set("pcPick", keyOf(pick)); ss.set("pcPressed", String(Date.now())); clicked = true;
@@ -656,9 +663,11 @@ async function checkOne(job, windowId) {
       const out = Object.assign(r || { error: "Couldn't read the page" }, { trail });
       delete out.rooms; delete out.roomsUrl;
       if (rooms) { out.rooms = rooms; out.roomsUrl = roomsUrl; }
-      if (picked && !out.picked) out.picked = picked;      // every room on the hotel page (for the "All rooms" table)
+      if (picked && !out.picked) out.picked = picked;
+      // optional breakfast paid at the hotel isn't in the checkout total → add it (and say so)
+      if (out.total && picked?.addOn) { out.addOn = picked.addOn; out.addOnNote = picked.addOnNote; out.total = Math.round((out.total + picked.addOn) * 100) / 100; }      // every room on the hotel page (for the "All rooms" table)
       if (!job.listOnly && (out.total || (out.error && !out.robot))) {
-        out.shot = await snapPrice(cur, windowId, out.total);   // for the vision check
+        out.shot = await snapPrice(cur, windowId, out.total - (out.addOn || 0));   // for the vision check
         // full cancellation policy: open the site's "cancellation policy" pop-up (Booking.com) or read the written policy
         const pol = await grabPolicy(cur);
         if (pol.text) out.policyText = pol.text;
