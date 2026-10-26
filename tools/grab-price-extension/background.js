@@ -803,40 +803,37 @@ async function logResult(job, result) {
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }
 
-let running = false, runStartedAt = 0;
 const pending = [];
+let workers = 0, slot = 0;
+const replyTabs = new Set();
+const withTimeout = (p, ms) => Promise.race([p, sleep(ms).then(() => null)]);
+const send = (tabId, msg) => chrome.tabs.sendMessage(tabId, msg).catch(() => {});
 
+// Jobs go into one queue; up to WINDOWS checker windows work on it at the same time.
+// New jobs (e.g. another "Check exact" while a check is running) start extra windows straight away.
 async function run(jobs, replyTabId) {
-  // skip a hotel+site that is already waiting in the queue
   const k = (j) => `${j.hid}|${j.source}|${j.url}|${j.pickKey || ""}|${j.pickWant ? JSON.stringify(j.pickWant) : ""}|${j.listOnly ? "list" : ""}`;
   const queued = new Set(pending.map(x => k(x.j)));
   pending.push(...jobs.filter(j => !queued.has(k(j)) && queued.add(k(j))).map(j => ({ j, replyTabId })));
-  const send = (tabId, msg) => chrome.tabs.sendMessage(tabId, msg).catch(() => {});
   for (let i = pending.length - 1; i >= 0; i--) {
     const { j, replyTabId: rt } = pending[i];
     if (SKIP[j.source]) { pending.splice(i, 1); send(rt, { type: "PC_CHECK_RESULT", job: j, result: { error: SKIP[j.source] } }); }
   }
-  if (!pending.length) { if (!running) send(replyTabId, { type: "PC_CHECK_DONE" }); return; }
-  if (running && Date.now() - runStartedAt < 10 * 60 * 1000) return;   // a check is already going (reset if stuck >10 min)
-  running = true; runStartedAt = Date.now();
-  const replyTabs = new Set();
-  // small checker windows, side by side at the top-left of the screen
-  const wins = [];
-  const withTimeout = (p, ms) => Promise.race([p, sleep(ms).then(() => null)]);
-  for (let i = 0; i < Math.min(WINDOWS, pending.length); i++) {
-    const w = await withTimeout(chrome.windows.create({ url: "about:blank", focused: i === 0, type: "normal", width: 1100, height: 800, left: 20 + i * 40, top: 20 }).catch(() => null), 5000);
-    if (w) wins.push(w); else break;
-  }
-  if (!wins.length) {                     // couldn't open a window → use a tab in the current window
-    const t = await chrome.tabs.get(replyTabId).catch(() => null);
-    if (t) wins.push({ id: t.windowId, shared: true });
-  }
-  const worker = async (w) => {
+  if (!pending.length) { if (!workers) send(replyTabId, { type: "PC_CHECK_DONE" }); return; }
+  const add = Math.min(WINDOWS - workers, pending.length);
+  for (let i = 0; i < add; i++) { workers++; worker(slot++ % WINDOWS, replyTabId); }
+}
+
+async function worker(pos, replyTabId) {
+  let w = await withTimeout(chrome.windows.create({ url: "about:blank", focused: pos === 0, type: "normal", width: 1100, height: 800, left: 20 + pos * 320, top: 20 + pos * 30 }).catch(() => null), 5000);
+  if (!w) { const t = await chrome.tabs.get(replyTabId).catch(() => null); if (t) w = { id: t.windowId, shared: true }; }
+  try {
+    if (!w) return;
     for (let item = pending.shift(); item; item = pending.shift()) {
       const { j, replyTabId: rt } = item; replyTabs.add(rt);
       send(rt, { type: "PC_CHECK_STARTED", job: j });
       if (!w.shared && !(await chrome.windows.get(w.id).catch(() => null))) {       // the checker window was closed → open a new one
-        const nw = await withTimeout(chrome.windows.create({ url: "about:blank", focused: false, type: "normal", width: 1100, height: 800, left: 20, top: 20 }).catch(() => null), 5000);
+        const nw = await withTimeout(chrome.windows.create({ url: "about:blank", focused: false, type: "normal", width: 1100, height: 800, left: 20 + pos * 320, top: 20 + pos * 30 }).catch(() => null), 5000);
         if (nw) w.id = nw.id;
       }
       let result;
@@ -845,14 +842,15 @@ async function run(jobs, replyTabId) {
       logResult(j, result);
       send(rt, { type: "PC_CHECK_RESULT", job: j, result });
     }
-  };
-  try { await Promise.all(wins.map(worker)); }
-  finally {
-    for (const w of wins) if (!w.shared) chrome.windows.remove(w.id).catch(() => {});
-    running = false;
-    for (const rt of replyTabs) {
-      send(rt, { type: "PC_CHECK_DONE" });
-      chrome.tabs.get(rt).then(t => { chrome.windows.update(t.windowId, { focused: true }); chrome.tabs.update(rt, { active: true }); }).catch(() => {});
+  } finally {
+    if (w && !w.shared) chrome.windows.remove(w.id).catch(() => {});
+    workers--;
+    if (!workers) {
+      for (const rt of replyTabs) {
+        send(rt, { type: "PC_CHECK_DONE" });
+        chrome.tabs.get(rt).then(t => { chrome.windows.update(t.windowId, { focused: true }); chrome.tabs.update(rt, { active: true }); }).catch(() => {});
+      }
+      replyTabs.clear();
     }
   }
 }
