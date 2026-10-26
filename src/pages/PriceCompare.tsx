@@ -526,11 +526,13 @@ export default function PriceCompare() {
   const jobKey = (j: any) => `${j.hid}|${j.source}${j.pickKey ? "|" + j.pickKey : ""}${j.typeKey ? "|type:" + j.typeKey : ""}${j.listOnly ? "|list" : ""}`;
   // Google has no room list → read just the room lists on the sites (no checkout)
   const LIST_SITES = ["Booking.com", "Agoda", "Expedia", "Hotels.com", "Hotel website"];
-  const loadRoomLists = (c: City, h: Hotel) => {
+  // a site is "being read" while any check for it runs (an exact-price check reads its room list too)
+  const siteBusy = (hid: string, site: string) => Object.entries(checks).some(([kk, v]) => kk.startsWith(`${hid}|${site}`) && (v === "queued" || v === "checking" || v === "verifying"));
+  const loadRoomLists = (c: City, h: Hotel, missingOnly = false) => {
     if (!extAuto) { setMsg({ kind: "err", text: "Install (or update) the Grab-price extension to read the room lists." }); return; }
-    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source))
+    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source) && !siteBusy(h.id, p.source) && !(missingOnly && h.roomsBySite?.[p.source]?.list?.length))
       .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name, listOnly: true }));
-    if (!jobs.length) { setMsg({ kind: "err", text: "No Booking.com / Agoda / Expedia / Hotels.com / hotel website link for this hotel." }); return; }
+    if (!jobs.length) { if (!missingOnly) setMsg({ kind: "err", text: "No Booking.com / Agoda / Expedia / Hotels.com / hotel website link for this hotel (or it's being checked right now)." }); return; }
     setHotel(c.id, h.id, { listsAt: Date.now() });
     setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [jobKey(j), "queued"])) }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
@@ -538,7 +540,14 @@ export default function PriceCompare() {
   const autoCheck = (list: { c: City; h: Hotel }[], silent = false) => {
     if (!extAuto) { if (!silent) setMsg({ kind: "err", text: "Install (or update) the Grab-price Chrome extension to get exact prices automatically." }); return; }
     if (!sameRooms) { if (!silent) setMsg({ kind: "err", text: "Exact-price check works when all rooms have the same guests. Confirm mixed rooms by hand." }); return; }
-    const jobs = autoJobs(list);
+    const jobs: any[] = autoJobs(list);
+    // the same visit reads each site's room list too; the hotel's own website is read for its rooms + rates
+    for (const { c, h } of list) {
+      const hw = (h.online?.prices || []).find(p => p.source === "Hotel website" && p.link);
+      if (hw && !siteBusy(h.id, "Hotel website") && !h.roomsBySite?.["Hotel website"]?.list?.length)
+        jobs.push({ cid: c.id, hid: h.id, source: "Hotel website", url: hw.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name, listOnly: true });
+      setHotel(c.id, h.id, { listsAt: Date.now() });
+    }
     if (!jobs.length) { if (!silent) setMsg({ kind: "err", text: "Nothing to check — open the hotel's prices first (Search / See all prices)." }); return; }
     setChecks(o => ({ ...o, ...Object.fromEntries(jobs.map(j => [jobKey(j), "queued"])) }));
     window.postMessage({ source: "pc-page", type: "PC_CHECK", jobs }, location.origin);
@@ -919,8 +928,7 @@ export default function PriceCompare() {
                   let hh = h;
                   if (!h.online || h.searchedFor !== key(c, h)) { const o = await fetchOne(c, h, false, !!h.open, false); if (o) hh = { ...h, online: o }; loadStatus(); }
                   groupRooms(c, hh);
-                  const fresh = h.listsAt && Date.now() - h.listsAt < 6 * 3600 * 1000;
-                  if (!fresh && extAuto && (hh.online?.prices || []).length) loadRoomLists(c, hh);   // the real room lists from every site (no prices checked)
+                  if (extAuto && (hh.online?.prices || []).length) loadRoomLists(c, hh, true);   // only sites whose room list isn't read yet (and aren't being checked)
                 };
                 return (<>
                   <button data-pc-picker-btn onClick={toggle} title="Room type — the same room is priced on every site" style={{ ...inp, width: 220, padding: "7px 9px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}>
@@ -941,7 +949,7 @@ export default function PriceCompare() {
                         {(() => {
                           const st = LIST_SITES.filter(sx => (h.online?.prices || []).some(p => p.source === sx && p.link)).map(sx => {
                             const v = checks[`${h.id}|${sx}|list`], n2 = h.roomsBySite?.[sx]?.list?.length || 0;
-                            return { sx, v, n2, busy: v === "queued" || v === "checking" };
+                            return { sx, v, n2, busy: siteBusy(h.id, sx) };
                           });
                           if (!st.length) return null;
                           return (
@@ -993,7 +1001,19 @@ export default function PriceCompare() {
                   )}
                 </>);
               })()}
-              <select style={{ ...inp, width: 66, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>{MEALS.map(m => <option key={m}>{m}</option>)}</select>
+              {(() => {
+                // meal plans with the cheapest price for the chosen room (or any room) from the sites' own lists
+                const ft = findType(h);
+                const its = (ft ? ft.items : catalog(h)).filter(x => x.src === "site" && x.meal);
+                const minOf = (m: string) => { const v = its.filter(x => x.meal === m).map(x => x.total); return v.length ? Math.min(...v) : 0; };
+                const base = minOf("Room only");
+                const lab = (code: string) => {
+                  const nm = MEAL_NAME[code] || code, v = minOf(nm);
+                  return v ? `${code} · ${nm} — from ${inr(v)}${base && nm !== "Room only" && v > base ? ` (+${inr(v - base)})` : ""}` : `${code} · ${nm}${its.length ? " — not offered" : ""}`;
+                };
+                return <select title="Meal plan — prices from the sites' room lists" style={{ ...inp, width: 185, padding: "7px 6px", fontSize: 12.5 }} value={h.meal} onChange={e => setHotel(c.id, h.id, { meal: e.target.value })}>
+                  {MEALS.map(m => <option key={m} value={m}>{lab(m)}</option>)}</select>;
+              })()}
               <select style={{ ...inp, width: 86, padding: "7px 6px", fontSize: 12.5 }} value={h.label} onChange={e => setHotel(c.id, h.id, { label: e.target.value })}>{LABELS.map(l => <option key={l} value={l}>{l || "label"}</option>)}</select>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: TEXT, cursor: "pointer" }}>
                 <input type="checkbox" checked={h.inPkg} onChange={e => setHotel(c.id, h.id, { inPkg: e.target.checked })} style={{ accentColor: ACCENT }} /> In package
