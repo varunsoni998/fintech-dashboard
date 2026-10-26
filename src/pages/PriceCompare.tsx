@@ -710,8 +710,13 @@ export default function PriceCompare() {
   };
   const addByName = (c: City) => {
     const name = (c.newName || "").trim(); if (!name) return;
-    const h = newHotel({ name, mine: true });
-    setCity(c.id, { hotels: [h, ...c.hotels], newName: "" });
+    // already in the list (e.g. from Search)? → move that one to the top as your hotel instead of adding it twice
+    const nw = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !["hotel", "the", "and", "by", "resort", "spa"].includes(w));
+    const want = nw(name);
+    const same = c.hotels.find(x => { const have = new Set(nw(x.online?.name || x.name)); return want.length && want.every(w => have.has(w)); });
+    const h = same ? { ...same, mine: true } : newHotel({ name, mine: true });
+    setCity(c.id, { hotels: [h, ...c.hotels.filter(x => x.id !== h.id)], newName: "" });
+    if (same && same.online && same.searchedFor === key(c, same)) { autoCheck([{ c, h }], true); return; }
     if (c.name.trim() && nightsOf(c)) fetchOne(c, h).then(() => loadStatus());   // all sites + exact-price check
   };
 
@@ -1090,7 +1095,7 @@ export default function PriceCompare() {
                   {d.mine && <span style={{ ...pill(ACCENT), marginLeft: 8 }}>your rate</span>}
                   {i === 0 && !h.soldOut?.[d.source] && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
                   {h.soldOut?.[d.source] && <span style={{ ...pill(WARN), marginLeft: 8 }}>sold out for these dates</span>}
-                  {!d.mine && (
+                  {!d.mine && !siteRooms.length && (
                     <div style={{ marginTop: 3, fontSize: 12, fontWeight: 600, color: d.room ? TEXT : MUTED, opacity: d.room ? 0.85 : 1, display: "flex", alignItems: "center", gap: 5 }}>
                       <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
                       {sr ? <span title={sr.room}>{short(sr.room, 90)}</span> : tsel ? <span title={tsel.ex?.room || tsel.item?.name}>{short(tsel.ex?.room || tsel.item?.name || tsel.g.type, 90)}{tsel.near && !tsel.ex ? <span style={{ color: MUTED, fontWeight: 600 }}> ({tsel.near})</span> : null}</span> : d.confirmed && roomOnly(h.confirmedRoom?.[d.source]) ? <>{roomOnly(h.confirmedRoom?.[d.source])} <span style={{ color: GREEN }}>(room priced on {d.source})</span></> : d.room || "Room not shown by Google — check on the site"}
@@ -1114,7 +1119,12 @@ export default function PriceCompare() {
                         return (<>
                           <button data-pc-picker-btn onClick={toggle} style={{ ...btn(), padding: "6px 12px", fontSize: 12, maxWidth: 520, gap: 8, boxShadow: open ? SHADOW_IN : SHADOW_SM }}>
                             <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sr ? `${short(sr.room, 40)} · ${sr.meal}` : h.room && roomGroups(h).some(g => g.type === h.room) ? `Pick another room — ${siteRooms.length} on ${d.source}` : `${d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} — ${siteRooms.length} rooms on ${d.source}`}</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(() => {
+                              // the room this row is showing, inside the selector
+                              const rn = sr ? sr.room : tsel ? (tsel.ex?.room || tsel.item?.name || "") : (d.confirmed ? roomOnly(h.confirmedRoom?.[d.source]) : "") || d.room || "";
+                              const ml = sr ? sr.meal : tsel ? (tsel.ex?.meal || tsel.item?.meal || "") : "";
+                              return rn ? `${short(rn, 52)}${ml ? " · " + ml : ""}` : `Cheapest room · ${siteRooms.length} on ${d.source}`;
+                            })()}</span>
                             {open ? <ChevronUp style={{ width: 14, height: 14, flexShrink: 0 }} /> : <ChevronDown style={{ width: 14, height: 14, flexShrink: 0 }} />}
                           </button>
                           {open && picker && (
@@ -1446,7 +1456,7 @@ export default function PriceCompare() {
         {[trip.cities.find(x => x.id === cityTab) || trip.cities[0]].map((c) => {
           const n = nightsOf(c) || 1;
           const named = c.hotels.filter(h => h.name.trim());
-          const mineList = sortList(named.filter(isMine), c.sort);
+          const mineList = named.filter(isMine);   // your hotels in the order you added them – the one you just typed is first
           // other hotels: only ones that actually have a price
           const others = sortList(named.filter(h => !isMine(h) && (hasPrice(h) || h.fromPrice)), c.sort);
           const visible = [...mineList.filter(hasPrice), ...others];

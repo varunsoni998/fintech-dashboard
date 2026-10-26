@@ -57,7 +57,7 @@ chrome.tabs.onUpdated.addListener((id, info) => {
   if (fixed !== info.url) { fromDashboard.delete(id); chrome.tabs.update(id, { url: fixed }).catch(() => {}); }
 });
 chrome.tabs.onRemoved.addListener((id) => fromDashboard.delete(id));
-const WINDOWS = 1;                 // one checker window, one site at a time (looks less like a robot to the sites)
+const WINDOWS = 3;                 // three checker windows side by side → three sites at the same time (faster)
 // Hotels.com shows a "Bot or Not?" robot test to automatic visits → not checked automatically (same rooms as Expedia).
 // Expedia does the same ("Bot or Not?"), so neither is opened automatically – repeated tries could get your
 // office internet flagged. Check them by hand: View deal → booking step → ₹ icon.
