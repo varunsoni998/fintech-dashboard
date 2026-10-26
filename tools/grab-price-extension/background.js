@@ -3,7 +3,8 @@
 // (Chrome pauses hidden tabs, and sites like Expedia only draw their prices when the page is on screen),
 // read the final total for the stay, close the tab and send the price back. The window closes by itself.
 
-const ALLOWED = /(^|\.)(booking\.com|expedia\.(?:com|co\.in|co\.uk|ca|com\.au|com\.sg|ae|co\.th|com\.my)|hotels\.com|makemytrip\.com|agoda\.com)$/i;
+// any country's Expedia (expedia.mx, .de, …) and Hotels.com (hoteles.com, …) – they are switched to the Indian site (₹)
+const ALLOWED = /(^|\.)(booking\.com|expedia\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})|hotels\.com|hoteles\.com|makemytrip\.com|agoda\.com)$/i;
 const GOOGLE = /(^|\.)google\.[a-z.]+$/i;   // Google's own 'redirecting…' page in between
 // any real website counts (hotel's own site, booking engines, …) – just not Google itself or our dashboard
 const onSite = (host) => !!host && !GOOGLE.test(host) && !/(^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/i.test(host);
@@ -33,7 +34,7 @@ function inrUrl(u, job) {
       if (ci) { q.set("checkin", ci); q.set("checkout", co); if (ad) q.set("group_adults", String(ad)); if (rm) q.set("no_rooms", String(rm)); if (!q.get("group_children")) q.set("group_children", "0"); }
     } else if (INDIA_SITES.expedia && /(^|\.)expedia\.[a-z.]+$/i.test(h) && !/^www\.expedia\.co\.in$/i.test(h)) {
       x.hostname = "www.expedia.co.in"; q.delete("currency");          // any country's Expedia → the Indian site (₹)
-    } else if (INDIA_SITES.hotels && /(^|\.)hotels\.com$/i.test(h) && !/^in\.hotels\.com$/i.test(h)) {
+    } else if (INDIA_SITES.hotels && /(^|\.)hotele?s\.com$/i.test(h) && !/^in\.hotels\.com$/i.test(h)) {
       x.hostname = "in.hotels.com"; q.delete("currency"); q.delete("pos");   // uk./au./www.hotels.com → India site (₹)
     }
     if (/^in\.hotels\.com$/i.test(x.hostname)) { q.set("locale", "en_IN"); q.set("siteid", "300000036"); }
@@ -796,6 +797,8 @@ async function snapCancel(tabId, windowId) {
 async function logResult(job, result) {
   const { pcLog = [] } = await chrome.storage.local.get("pcLog");
   const { shot, shot2, siteText, rooms, ...rest } = result || {};
+  if (rooms) rest.roomCount = rooms.length;
+  if (siteText) rest.pageChars = siteText.length;
   pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...rest, hadShot: !!shot, version: chrome.runtime.getManifest().version, dates: job.checkIn ? job.checkIn + " → " + job.checkOut : "" });
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }

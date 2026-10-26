@@ -945,6 +945,7 @@ export default function PriceCompare() {
                               {st.map(x => <span key={x.sx} title={x.v && !["ok", "queued", "checking"].includes(x.v) ? x.v : ""} style={{ ...pill(BG, x.busy ? ACCENT : x.n2 ? GREEN : x.v && x.v !== "ok" ? WARN : MUTED), boxShadow: SHADOW_IN, fontSize: 10, display: "inline-flex", gap: 3, alignItems: "center" }}>
                                 {x.busy ? <Loader2 className="animate-spin" style={{ width: 10, height: 10 }} /> : x.n2 ? "✓" : x.v && x.v !== "ok" ? "✗" : "–"} {x.sx}{x.n2 ? ` (${x.n2})` : ""}</span>)}
                               {!st.some(x => x.busy) && <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 10.5, fontWeight: 800, padding: 0 }} onClick={() => loadRoomLists(c, h)}>↻ read again</button>}
+                              {st.filter(x => !x.busy && !x.n2 && x.v && x.v !== "ok").map(x => <div key={x.sx + "e"} style={{ width: "100%", color: WARN, fontWeight: 600 }}>✗ {x.sx}: {x.v}</div>)}
                             </div>
                           );
                         })()}

@@ -129,7 +129,7 @@ chrome.storage.local.get("pcLog", ({ pcLog = [] }) => {
     const when = new Date(r.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
     d.innerHTML = `<b></b> <span style="color:var(--muted)">${when}</span><div class="res"></div><div class="dbg" style="color:var(--muted);margin-top:3px;word-break:break-word"></div>`;
     d.querySelector("b").textContent = r.site;
-    d.querySelector(".res").textContent = r.total ? `✓ ${r.currency && r.currency !== "INR" ? r.currency + " " : "₹"}${Number(r.total).toLocaleString("en-IN")}${r.currency && r.currency !== "INR" ? " (converted to ₹ in Price Compare)" : ""}` : `✗ ${r.error || "failed"}`;
+    d.querySelector(".res").textContent = r.listOnly && !r.error ? (r.roomCount ? `✓ room list read (${r.roomCount} rooms)` : r.pageChars ? `✓ hotel website page read (${r.pageChars} characters) — rooms are read by Gemini` : "✓ room list read") : r.total ? `✓ ${r.currency && r.currency !== "INR" ? r.currency + " " : "₹"}${Number(r.total).toLocaleString("en-IN")}${r.currency && r.currency !== "INR" ? " (converted to ₹ in Price Compare)" : ""}` : `✗ ${r.error || "failed"}`;
     d.querySelector(".res").style.color = r.total ? "#2FA37A" : "#D1435B";
     const where = (r.trail && r.trail.length ? r.trail.join(" → ") : (r.url || "").replace(/^https?:\/\//, "").slice(0, 90));
     d.querySelector(".dbg").textContent = (where ? "Pages: " + where : "") + (!r.total && r.debug ? " · Page showed: " + r.debug : "") + (r.room ? " · Room: " + r.room : "") + (r.version ? " · v" + r.version : "");
