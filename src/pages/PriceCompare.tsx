@@ -301,7 +301,24 @@ export default function PriceCompare() {
     const byWord = new Map<string, string>(); items.forEach((x, i) => { const t = gm.get(x.site + "|" + x.name); if (t && !byWord.has(fixed[i])) byWord.set(fixed[i], t); });
     const groups = new Map<string, { type: string; items: CatItem[] }>();
     items.forEach((x, i) => { const t = gm.get(x.site + "|" + x.name) || byWord.get(fixed[i]) || prettyRoomKey(fixed[i]); if (!groups.has(t)) groups.set(t, { type: t, items: [] }); groups.get(t)!.items.push(x); });
-    return [...groups.values()].map(g => ({ ...g, from: Math.min(...g.items.map(x => x.total)), sites: [...new Set(g.items.map(x => x.site))] })).sort((a, b) => a.from - b.from);
+    // one site never lists the SAME room under two names → a group where a site has several names is several rooms
+    // (e.g. "Suite (The Brompton)" and "Suite (The Kensington)") → split it by that site's names
+    const wds = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !["room", "with", "and", "the", "bed", "beds"].includes(w));
+    const sim = (a: string, b: string) => { const A = wds(a), B = new Set(wds(b)); return A.length ? A.filter(w => B.has(w)).length / A.length : 0; };
+    const out: { type: string; items: CatItem[] }[] = [];
+    for (const g of groups.values()) {
+      const per = new Map<string, Set<string>>(); g.items.forEach(x => { if (!per.has(x.site)) per.set(x.site, new Set()); per.get(x.site)!.add(x.name); });
+      const [lead, names] = [...per.entries()].sort((a, b) => b[1].size - a[1].size)[0] || ["", new Set<string>()];
+      if (names.size <= 1) { out.push(g); continue; }
+      const subs = [...names].map(nm => ({ type: `${g.type} — ${nm.length > 48 ? nm.slice(0, 47) + "…" : nm}`, items: [] as CatItem[], nm }));
+      g.items.forEach(x => {
+        const exact = x.site === lead ? subs.find(sb => sb.nm === x.name) : null;
+        const best = exact || subs.map(sb => ({ sb, v: sim(sb.nm, x.name) + sim(x.name, sb.nm) })).sort((a, b) => b.v - a.v)[0].sb;
+        best.items.push(x);
+      });
+      out.push(...subs.map(({ type, items }) => ({ type, items })));
+    }
+    return out.map(g => ({ ...g, from: Math.min(...g.items.map(x => x.total)), sites: [...new Set(g.items.map(x => x.site))] })).sort((a, b) => a.from - b.from);
   };
   const groupRooms = async (c: City, h: Hotel) => {
     const seen = new Set<string>();

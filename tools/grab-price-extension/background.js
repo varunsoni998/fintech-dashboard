@@ -516,7 +516,7 @@ async function waitForSite(tabRef, ms, known) {
   // Some sites (Expedia) never report "finished" because adverts keep loading.
   // If Google's redirect page stays on screen, follow its link to the booking site ourselves.
   const end = Date.now() + ms;
-  let onSiteSince = 0, onGoogleSince = 0, host = "", nudged = 0;
+  let onSiteSince = 0, onGoogleSince = 0, host = "", nudged = 0, googleStart = 0;
   while (Date.now() < end) {
     const tabId = typeof tabRef === "function" ? tabRef() : tabRef;
     const t = await chrome.tabs.get(tabId).catch(() => null);
@@ -530,6 +530,8 @@ async function waitForSite(tabRef, ms, known) {
       onSiteSince = 0;
       if (GOOGLE.test(host)) {
         if (!onGoogleSince) onGoogleSince = Date.now();
+        if (!googleStart) googleStart = Date.now();
+        if (known && Date.now() - googleStart > 25000) return "google";      // Google's ad link is stuck → search the site directly
         if (Date.now() - onGoogleSince > 5000 && nudged < 2) {
           nudged++; onGoogleSince = Date.now();
           try {
@@ -591,10 +593,10 @@ async function checkOne(job, windowId) {
     let robotDone = false; const fixedHosts = new Map(); const trail = []; let usedDirect = false; let rooms = null, roomsUrl = "", picked = null;
     for (let hop = 0; hop < 10; hop++) {
       const ws = await waitForSite(() => cur, 45000, !other);
-      if (ws === "compare") {
+      if (ws === "compare" || ws === "google") {
         const d = !usedDirect && directSearch(job);
-        if (!d) return { error: "Google's link opened a price-comparison site, not " + job.source + " — use View deal", trail };
-        usedDirect = true; trail.push("comparison site → " + job.source + " search");
+        if (!d) return { error: ws === "google" ? "Google's link didn't open " + job.source + " — use View deal" : "Google's link opened a price-comparison site, not " + job.source + " — use View deal", trail };
+        usedDirect = true; trail.push((ws === "google" ? "Google link stuck" : "comparison site") + " → " + job.source + " search");
         await chrome.tabs.update(cur, { url: d }); await sleep(1500); continue;
       }
       try { const u = new URL((await chrome.tabs.get(cur)).url), d = u.searchParams.get("checkin") || u.searchParams.get("chkin") || u.searchParams.get("startDate") || u.searchParams.get("checkIn"); trail.push(u.hostname + u.pathname.slice(0, 40) + (d ? " (" + d + ")" : "")); } catch {}
