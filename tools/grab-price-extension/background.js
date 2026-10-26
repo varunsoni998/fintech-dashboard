@@ -148,9 +148,12 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
     const CATS = ["presidential suite", "royal suite", "penthouse", "villa", "cottage", "apartment", "studio", "family room", "junior suite", "executive suite", "deluxe suite", "premier suite", "club suite", "suite", "club", "executive", "premier", "premium", "luxury", "deluxe", "superior", "classic", "standard"];
     const catOf = (n) => { const t = " " + clean(n).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " "; return CATS.find(c => t.includes(" " + c + " ")) || ""; };
     if (pickWant.cat) list = list.filter(x => catOf(roomOf(x) || "") === pickWant.cat);
+    // the room names THIS site uses for the chosen room (from its own room list) → only those rooms, never a look-alike
+    const nk = (n) => clean(n).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    if (pickWant.exact && pickWant.exact.length) { const ex = pickWant.exact.map(nk); list = list.filter(x => ex.includes(nk(roomOf(x) || ""))); }
     const sc = list.map(x => {
       const nm = roomOf(x) || "";
-      const o = Math.max(...pickWant.names.map(n => Math.max(overlap(n, nm), overlap(nm, n))));
+      const o = pickWant.exact && pickWant.exact.length ? 1 : Math.max(...pickWant.names.map(n => Math.max(overlap(n, nm), overlap(nm, n))));
       return { x, o, s: o + (pickWant.meal && mealOf(textOf(x) || "") === pickWant.meal ? 0.3 : 0) };
     }).filter(y => y.o >= 0.5);
     sc.sort((a, b) => (Math.abs(b.s - a.s) > 0.05 ? b.s - a.s : priceOf(a.x) - priceOf(b.x)));
@@ -378,7 +381,8 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
         }
       }
       // checkout page (older layout): "Price ₹ 36,029.60  +₹ 6,485.33 taxes and charges"
-      const p = [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];
+      const onCheckout = /^secure\./i.test(location.hostname) || /book\.html/i.test(location.pathname);
+      const p = onCheckout && [...txt.matchAll(rx("\\bPrice\\s*" + R + AMT + "[^₹]{0,30}?\\+\\s?" + R + AMT + "\\s*taxes and (?:charges|fees)"))][0];   // only on the checkout page – never a room-list row
       if (p) { const rm = txt.match(/\n\s*1\s*x\s*([^\n]+)/i); return { total: cents(num(p[1]) + num(p[2])), room: rm ? rm[1].trim() : "", url: location.href, allRooms: true }; }
     } else if (site === "MakeMyTrip") {
       // "₹ 4,999  + ₹ 600 taxes & fees  Per Night"
@@ -599,9 +603,40 @@ async function waitForPerson(tabId, windowId, job) {
   return false;
 }
 
+// Hotel's own website (any booking engine): only READ the page text – rooms, rates, meals, cancellation – nothing is clicked or typed.
+async function readHotelSite(job, windowId) {
+  const tab = await chrome.tabs.create({ url: job.url, active: true, windowId });
+  let cur = tab.id; const onSwap = (a, r) => { if (r === cur) cur = a; };
+  chrome.tabs.onReplaced.addListener(onSwap);
+  try {
+    await waitForSite(() => cur, 45000, false);
+    await sleep(6000);
+    let best = { text: "", url: "" };
+    for (let pass = 0; pass < 3; pass++) {
+      const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: true }, func: async () => {
+        const sl = (ms) => new Promise(r => setTimeout(r, ms));
+        if (window === window.top) { for (let i = 0; i < 12; i++) { window.scrollBy(0, 900); await sl(500); } window.scrollTo(0, 0); }
+        const t = (document.body?.innerText || "").replace(/[\u00a0\u202f\u2009]/g, " ").replace(/\n{2,}/g, "\n");
+        return { text: t.slice(0, 40000), url: location.href, robot: /captcha|are you a robot|verify you are human|press (and|&) hold/i.test(t) && t.length < 6000 };
+      } }).catch(() => []);
+      const rs = res.map(x => x?.result).filter(Boolean);
+      if (rs.some(x => x.robot)) { const ok = await waitForPerson(cur, windowId, job); if (!ok) return { error: "Robot test not completed on the hotel website" }; continue; }
+      const top = rs.sort((a, b) => (b.text.match(/₹|INR|Rs\.?|\$|€|£/g) || []).length - (a.text.match(/₹|INR|Rs\.?|\$|€|£/g) || []).length)[0];
+      if (top && top.text.length > best.text.length) best = top;
+      if (best.text && /(₹|INR|Rs\.?)\s?[0-9]/.test(best.text)) break;
+      await sleep(4000);
+    }
+    if (!best.text) return { error: "The hotel website didn't load" };
+    return { listOnly: true, siteText: best.text, roomsUrl: best.url || job.url };
+  } finally {
+    chrome.tabs.onReplaced.removeListener(onSwap);
+    chrome.tabs.remove(cur).catch(() => {});
+  }
+}
+
 async function checkOne(job, windowId) {
   if (SKIP[job.source]) return { error: SKIP[job.source] };
-  if (!KNOWN.includes(job.source)) return { error: "Hotel websites aren't checked automatically" };
+  if (!KNOWN.includes(job.source)) return job.listOnly ? readHotelSite(job, windowId) : { error: "Hotel websites aren't checked automatically" };
   const tab = await chrome.tabs.create({ url: job.url, active: true, windowId });
   let cur = tab.id;
   const opened = [];                                             // a site may open its booking form in a NEW tab
@@ -760,7 +795,7 @@ async function snapCancel(tabId, windowId) {
 
 async function logResult(job, result) {
   const { pcLog = [] } = await chrome.storage.local.get("pcLog");
-  const { shot, shot2, ...rest } = result || {};
+  const { shot, shot2, siteText, rooms, ...rest } = result || {};
   pcLog.unshift({ at: Date.now(), site: job.source, url: job.url, ...rest, hadShot: !!shot, version: chrome.runtime.getManifest().version, dates: job.checkIn ? job.checkIn + " → " + job.checkOut : "" });
   await chrome.storage.local.set({ pcLog: pcLog.slice(0, 30) });
 }

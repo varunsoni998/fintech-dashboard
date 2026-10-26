@@ -599,3 +599,69 @@ def rooms_group(body: RoomGroupIn, authorization: Optional[str] = Header(None)):
     except Exception:
         raise HTTPException(status_code=502, detail="Gemini gave an unreadable answer")
     return {"groups": groups, "model": model}
+
+
+# ── Hotel website: read its rooms and rates from the page text (every booking engine looks different) ──
+class SiteTextIn(BaseModel):
+    hotel: str
+    text: str
+    check_in: str = ""
+    check_out: str = ""
+    nights: int = 0
+    adults: int = 2
+
+
+SITE_ROOMS_PROMPT = """This is the text of the booking page of the hotel "{hotel}" on its own website.
+The stay: check-in {check_in}, check-out {check_out} ({nights} nights), {adults} adults, 1 room.
+List EVERY bookable rate shown (each room type x each rate plan). For each:
+- "room": the room name exactly as written
+- "rate": the rate plan name as written (e.g. "Flexible rate - breakfast included")
+- "meal": one of "Room only", "Breakfast", "Half board", "Full board", "All inclusive"
+- "cxl": short cancellation in numbers only, e.g. "Non-refundable", "Free till 2026-10-25", "Free till 24h before arrival", "" if not shown
+- "cxl_full": the cancellation / pricing conditions text if shown, else ""
+- "total": the price for the WHOLE stay INCLUDING taxes and fees if the page gives it (add the taxes if they are shown separately), as a number
+- "taxes_included": true if "total" includes taxes, false if the page only gave a price before taxes
+- "currency": ISO code (INR, EUR, ...)
+Use the public / non-member price when both are shown. Do not invent rooms or prices that aren't on the page.
+Return JSON only: {{"rooms": [...], "dates_on_page": "<check-in to check-out as shown, or empty>"}}
+Page text:
+{text}"""
+
+
+@router.post("/rooms/read")
+def rooms_read(body: SiteTextIn, authorization: Optional[str] = Header(None)):
+    _get_user_id(authorization)
+    key = _gemini_key()
+    if not key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY isn't set on the server")
+    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+    prompt = SITE_ROOMS_PROMPT.format(hotel=body.hotel, check_in=body.check_in or "?", check_out=body.check_out or "?",
+                                      nights=body.nights or "?", adults=body.adults, text=body.text[:40000])
+    payload = {"contents": [{"parts": [{"text": prompt}]}],
+               "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
+    try:
+        r = requests.post(GEMINI_URL.format(model=model), json=payload, timeout=60,
+                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gemini unreachable: {e}")
+    if r.status_code == 429:
+        raise HTTPException(status_code=429, detail="Free Gemini limit reached for today")
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Gemini error {r.status_code}")
+    try:
+        import json as _json
+        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        out = _json.loads(text[text.find("{"): text.rfind("}") + 1])
+    except Exception:
+        raise HTTPException(status_code=502, detail="Gemini gave an unreadable answer")
+    rooms = []
+    for x in out.get("rooms") or []:
+        try:
+            t = float(str(x.get("total")).replace(",", ""))
+        except Exception:
+            continue
+        if t <= 0 or not x.get("room"): continue
+        rooms.append({"room": str(x.get("room"))[:120], "rate": str(x.get("rate") or "")[:80], "meal": str(x.get("meal") or "Room only"),
+                      "cxl": str(x.get("cxl") or "")[:60], "cxl_full": str(x.get("cxl_full") or "")[:1200], "total": round(t, 2),
+                      "taxes_included": bool(x.get("taxes_included", True)), "currency": str(x.get("currency") or "INR").upper()[:3]})
+    return {"rooms": rooms, "dates_on_page": out.get("dates_on_page") or "", "model": model}
