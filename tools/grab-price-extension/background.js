@@ -252,13 +252,27 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
             const mm = [...b.matchAll(rx(R + AMT + "\\s*total\\b"))];
             if (!mm.length) continue;
             // "Extras": options with a price ("Breakfast for 2  + ₹6,426") are NOT included in the shown total
+            // the card's choices: cancellation ("Non-refundable + ₹0", "Fully refundable before 19 Nov + ₹7,347")
+            // and extras ("No extras + ₹0", "Breakfast buffet + ₹4,190") – the shown total is for the ticked (+ ₹0) ones
             const opts = [...b.matchAll(new RegExp("\\n\\s*([^\\n]{3,60}?)\\s*\\n?\\s*\\+\\s?" + R + AMT, "gi"))].map(o => ({ label: o[1].trim(), amt: num(o[2]) }));
-            const plain = opts.reduce((t2, o) => t2.split(o.label).join(" "), b);          // card text without the paid options
-            const base = { total: num(mm[0][1]), room, key: room + (found.some(f => f.room === room && !f.extra) ? " #" + (found.filter(f => f.room === room && !f.extra).length + 1) : ""), text: plain, free: /Fully refundable|Free cancellation/i.test(b) };
+            const plain = opts.reduce((t2, o) => t2.split(o.label).join(" "), b);          // card text without the choices
+            const optMeal = (l) => /all[- ]inclusive/i.test(l) ? "All inclusive" : /full board/i.test(l) ? "Full board" : /half board|dinner/i.test(l) ? "Half board" : /breakfast/i.test(l) ? "Breakfast" : "";
+            const isCxl = (l) => /refundable|cancel/i.test(l);
+            const cxlOpts = opts.filter(o => isCxl(o.label)), mealOpts = opts.filter(o => !isCxl(o.label) && (o.amt === 0 || optMeal(o.label)));
+            const pn = b.match(new RegExp("current price is\\s*" + R + AMT, "i")), tf = pn && num(pn[1]) > 0 ? num(mm[0][1]) / (num(pn[1]) * (nights || 1)) : 1;   // taxes on top of the per-night extras
+            const defaults = opts.filter(o => o.amt === 0).map(o => o.label).join("\n");
+            const bkey = room + (found.some(f => f.room === room && !f.extra) ? " #" + (found.filter(f => f.room === room && !f.extra).length + 1) : "");
+            const base = { total: num(mm[0][1]), room, key: bkey, text: defaults + "\n" + plain, free: /Fully refundable|Free cancellation/i.test(defaults || b) };
             found.push(base);
-            // the same room WITH a paid meal (e.g. breakfast) = another option; its price is read at checkout
-            for (const o of opts) if (o.amt > 0 && mealOf(o.label) !== "Room only")
-              found.push({ ...base, key: base.key + " + " + o.label, text: o.label + "\n" + plain, extra: o.label, base, total: base.total + o.amt * (nights || 1), taxes: false });
+            // every other combination = its own option (its exact price is read at checkout, with those choices ticked)
+            const cs = cxlOpts.length ? cxlOpts : [{ label: "", amt: 0 }], ms = mealOpts.length ? mealOpts : [{ label: "", amt: 0 }];
+            for (const c2 of cs) for (const m2 of ms) {
+              if (c2.amt === 0 && m2.amt === 0) continue;
+              const picks = [c2, m2].filter(o => o.amt > 0).map(o => o.label);
+              const txt2 = [c2.label, m2.amt > 0 ? m2.label + "\nbreakfast included".replace("breakfast", optMeal(m2.label).toLowerCase()) : (ms[0].label || ""), plain].join("\n");
+              found.push({ ...base, key: bkey + " + " + picks.join(" + "), text: txt2, extra: picks[0], extras: picks, base,
+                total: Math.round(base.total + (c2.amt + m2.amt) * (nights || 1) * tf), taxes: true, free: /fully refundable|free cancel/i.test(c2.label) || base.free });
+            }
           }
           if (found.length && found[0].key) setList(found);
           if (!found.length) for (const mm of sec.matchAll(rx(R + AMT + "\\s*total\\b"))) found.push({ total: num(mm[1]), room: "" });
@@ -276,12 +290,12 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
               }).filter(x => x.nm === c.room);
               const same = found.filter(x => x.room === c.room && !x.extra), idx = same.indexOf(c.base || c);
               const hit = cards[idx] || cards[0];
-              if (hit && c.extra) {
-                // tick the paid option (e.g. "Breakfast for 2") inside this room's card, so the checkout total includes it
+              for (const ex of (hit ? c.extras || (c.extra ? [c.extra] : []) : [])) {
+                // tick the chosen option (e.g. "Breakfast buffet", "Fully refundable before 19 Nov") inside this room's card
                 let card = hit.b; while (card && !/View all photos for /i.test(card.innerText || "")) card = card.parentElement;
-                const lab = card && [...card.querySelectorAll("label, [role='radio'], input[type='radio'], input[type='checkbox']")].find(e => clean(e.innerText || e.getAttribute("aria-label") || (e.id && card.querySelector(`label[for="${e.id}"]`)?.innerText) || "").trim().startsWith(c.extra));
-                if (!lab) return { error: `${site}: couldn't choose "${c.extra}" for this room` };
-                lab.scrollIntoView({ block: "center" }); await sleep(400); lab.click(); await sleep(1800);
+                const lab = card && [...card.querySelectorAll("label, [role='radio'], input[type='radio'], input[type='checkbox']")].find(e => clean(e.innerText || e.getAttribute("aria-label") || (e.id && card.querySelector(`label[for="${e.id}"]`)?.innerText) || "").trim().startsWith(ex));
+                if (!lab) return { error: `${site}: couldn't choose "${ex}" for this room` };
+                lab.scrollIntoView({ block: "center" }); await sleep(400); lab.click(); await sleep(1500);
               }
               if (hit) { ss.set("pcRoom", c.room); ss.set("pcPressed", String(Date.now())); hit.b.scrollIntoView({ block: "center" }); await sleep(600); hit.b.click(); clicked = true; return { wait: true }; }
             } else if (await pressCheapest(document.body, /^(reserve|select|book now)$/i, c.room)) { clicked = true; return { wait: true }; }

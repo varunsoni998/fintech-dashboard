@@ -60,6 +60,13 @@ const MEAL_NAME: Record<string, string> = { RO: "Room only", BB: "Breakfast", HB
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
 interface Cxl { kind?: "free" | "partial" | "non-refundable"; until?: string; fee?: number; feeCcy?: string; feeFrom?: string; note?: string; text?: string; summary?: string; full?: string; pct?: number; noshow?: string }
+const cxlTerms = (full?: string) => {
+  if (!full) return "";
+  const sents = full.replace(/\s+/g, " ").split(/(?<=[.!])\s+|\s·\s/).map(x => x.trim())
+    .filter(x => /\d|night|%|first|full amount|refund/i.test(x) && !/^(cancellation polic|change or cancel your|refund process|how much will it cost)/i.test(x) && x.length > 12);
+  const t = sents.slice(0, 2).join(" ");
+  return t.length > 170 ? t.slice(0, 168) + "…" : t;
+};
 // cancellation in numbers only: dates, amounts, percentages
 const cxlLine = (c?: Cxl, total?: number) => {
   if (!c) return "";
@@ -72,7 +79,10 @@ const cxlLine = (c?: Cxl, total?: number) => {
   const fee = c.fee ? amt(c.fee, c.feeCcy) : c.pct && total ? amt(total * c.pct / 100) : "";
   if (fee || c.pct) parts.push(`${c.until ? "after: " : ""}${c.pct ? `${c.pct}% ` : ""}fee${fee ? ` ${fee}` : ""}${c.feeFrom && !c.until ? ` from ${d(c.feeFrom)}` : ""}${c.note ? ` (${c.note})` : ""}`);
   if (c.noshow) parts.push(`no-show: ${c.noshow}`);
-  return parts.length ? parts.join(" · ") : c.kind === "partial" ? "Partially refundable" : "";
+  if (parts.length) return parts.join(" · ");
+  // no dates / amounts read → the policy's own terms, shortened (only the sentences with dates, amounts or nights)
+  const terms = cxlTerms(c.full || c.text);
+  return c.kind === "partial" ? `Partially refundable${terms ? " · " + terms : ""}` : terms || "";
 };
 const cxlShort = (c?: Cxl, total?: number) => !c ? "" : c.summary ? c.summary : c.kind === "non-refundable" ? cxlLine(c, total) : c.until ? `Free cxl till ${c.until}${c.fee ? `, then ${Math.round(c.fee)}` : ""}` : c.kind === "free" ? "Free cxl" : c.fee ? `Cxl fee ${Math.round(c.fee)}` : (c.text || "");
 interface City { id: string; name: string; checkIn: string; checkOut: string; stars: number; hotels: Hotel[]; sort: SortKey; finding?: boolean; foundFor?: string; newName?: string }
@@ -1096,6 +1106,7 @@ export default function PriceCompare() {
                     </div>
                   )}
                   {tsel && tck && !tBusy && tck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {tck}</div>}
+                  {tsel?.ex?.meal && MEAL_NAME[h.meal] && tsel.ex.meal !== MEAL_NAME[h.meal] && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>{d.source} has no {MEAL_NAME[h.meal].toLowerCase()} option for this room — this is the {tsel.ex.meal.toLowerCase()} price</div>}
                   {sr && ck && !busyR && ck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {ck}</div>}
                   {!d.mine && !sr && !tsel && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok", "verifying"].includes(checks[`${h.id}|${d.source}`]) && (
                     <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {checks[`${h.id}|${d.source}`]} — use View deal</div>
