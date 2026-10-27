@@ -357,8 +357,11 @@ async function readSitePrice(site, nights, adults, hotelName, strict, pickKey, p
           const inc = !p && [...rt.matchAll(rx(R + AMT + "[^₹$€£]{0,40}?includes taxes and (?:charges|fees)"))][0];
           const total = p ? num(p[1]) + num(p[2]) : inc ? num(inc[1]) : 0;
           if (!total) continue;
-          const g = rt.match(/Guests?:\s*(\d+)\s*adult/i) || rt.match(/Max(?:imum)? (?:people|persons|guests):?\s*(\d+)/i);
-          const cap = g ? +g[1] : (r.querySelectorAll(".bicon-occupancy, .c-occupancy-icons__adults i, [class*='occupancy'] svg").length || null);
+          const g = rt.match(/Guests?:\s*(\d+)\s*adult/i) || rt.match(/Sleeps:?\s*(\d+)/i) || rt.match(/Max(?:imum)? (?:people|persons|guests):?\s*(\d+)/i);
+          // occupancy icons: a "couple" icon = 2 people, a "group" icon = 3+ → only count single-person icons as 1
+          const icons = [...r.querySelectorAll(".bicon-occupancy, .c-occupancy-icons__adults i, [class*='occupancy'] svg")];
+          const iconCap = icons.reduce((n, e) => n + (/couple/i.test(e.getAttribute("class") || "") ? 2 : /group|family/i.test(e.getAttribute("class") || "") ? 3 : 1), 0);
+          const cap = g ? +g[1] : (iconCap || null);
           if (cap !== null && cap < adults) continue;          // e.g. a 1-adult price when we need 2
           const bk = { total, room, free: /Free cancellation/i.test(rt), row: r, text: rt, key: (r.getAttribute("data-block-id") || "row" + rows.indexOf(r)) };
           found.push(bk);
@@ -629,21 +632,20 @@ async function readHotelSite(job, windowId) {
   chrome.tabs.onReplaced.addListener(onSwap);
   try {
     await waitForSite(() => cur, 45000, false);
-    await sleep(6000);
+    // no scrolling: wait (max ~30 s) until the page shows prices, then read the text once – in every frame (booking engines use iframes)
     let best = { text: "", url: "" };
-    for (let pass = 0; pass < 3; pass++) {
-      const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: true }, func: async () => {
-        const sl = (ms) => new Promise(r => setTimeout(r, ms));
-        if (window === window.top) { for (let i = 0; i < 12; i++) { window.scrollBy(0, 900); await sl(500); } window.scrollTo(0, 0); }
+    const PRICE = /(₹|INR|Rs\.?|€|EUR|\$|£)\s?[0-9]|[0-9][0-9.,]*\s?(€|EUR|INR)/;
+    for (let t = 0; t < 20; t++) {
+      await sleep(1500);
+      const res = await chrome.scripting.executeScript({ target: { tabId: cur, allFrames: true }, func: () => {
         const t = (document.body?.innerText || "").replace(/[\u00a0\u202f\u2009]/g, " ").replace(/\n{2,}/g, "\n");
         return { text: t.slice(0, 40000), url: location.href, robot: /captcha|are you a robot|verify you are human|press (and|&) hold/i.test(t) && t.length < 6000 };
       } }).catch(() => []);
       const rs = res.map(x => x?.result).filter(Boolean);
       if (rs.some(x => x.robot)) { const ok = await waitForPerson(cur, windowId, job); if (!ok) return { error: "Robot test not completed on the hotel website" }; continue; }
-      const top = rs.sort((a, b) => (b.text.match(/₹|INR|Rs\.?|\$|€|£/g) || []).length - (a.text.match(/₹|INR|Rs\.?|\$|€|£/g) || []).length)[0];
-      if (top && top.text.length > best.text.length) best = top;
-      if (best.text && /(₹|INR|Rs\.?)\s?[0-9]/.test(best.text)) break;
-      await sleep(4000);
+      const priced = rs.filter(x => PRICE.test(x.text)).sort((a2, b2) => b2.text.length - a2.text.length)[0];
+      if (priced) { best = priced; if (t >= 3) break; }          // a few seconds more so all rates have drawn
+      else if (!best.text) best = rs.sort((a2, b2) => b2.text.length - a2.text.length)[0] || best;
     }
     if (!best.text) return { error: "The hotel website didn't load" };
     return { listOnly: true, siteText: best.text, roomsUrl: best.url || job.url };
