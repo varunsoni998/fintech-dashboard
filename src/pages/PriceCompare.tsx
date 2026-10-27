@@ -543,9 +543,9 @@ export default function PriceCompare() {
   const LIST_SITES = ["Booking.com", "Agoda", "Expedia", "Hotels.com", "Hotel website"];
   // a site is "being read" while any check for it runs (an exact-price check reads its room list too)
   const siteBusy = (hid: string, site: string) => Object.entries(checks).some(([kk, v]) => kk.startsWith(`${hid}|${site}`) && (v === "queued" || v === "checking" || v === "verifying"));
-  const loadRoomLists = (c: City, h: Hotel, missingOnly = false) => {
+  const loadRoomLists = (c: City, h: Hotel, missingOnly = false, onlySite = "") => {
     if (!extAuto) { setMsg({ kind: "err", text: "Install (or update) the Grab-price extension to read the room lists." }); return; }
-    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source) && !siteBusy(h.id, p.source) && !(missingOnly && (h.roomsBySite?.[p.source]?.list?.length || Date.now() - (h.listTried?.[p.source] || 0) < 6 * 3600 * 1000)))
+    const jobs = (h.online?.prices || []).filter(p => p.link && LIST_SITES.includes(p.source) && (!onlySite || p.source === onlySite) && !siteBusy(h.id, p.source) && !(missingOnly && (h.roomsBySite?.[p.source]?.list?.length || Date.now() - (h.listTried?.[p.source] || 0) < 6 * 3600 * 1000)))
       .map(p => ({ cid: c.id, hid: h.id, source: p.source, url: p.link as string, nights: nightsOf(c) || 1, checkIn: c.checkIn, checkOut: c.checkOut, city: c.name, rooms: nRooms, mult: sameRooms ? nRooms : 1, adults: rooms[0].adults, hotel: h.online?.name || h.name, listOnly: true }));
     if (!jobs.length) { if (!missingOnly) setMsg({ kind: "err", text: "No Booking.com / Agoda / Expedia / Hotels.com / hotel website link for this hotel (or it's being checked right now)." }); return; }
     setHotel(c.id, h.id, { listsAt: Date.now() });
@@ -626,6 +626,7 @@ export default function PriceCompare() {
               const cc = String(x.currency || "INR").toUpperCase();
               const rt = cc === "INR" ? 1 : fx.current[cc] || (cc === trip.currency && roe ? roe : 0);
               if (!rt) continue;
+              if ((j.adults || 2) >= 2 && /single use|single occupancy|1 adult|one adult/i.test(`${x.room} ${x.rate}`)) continue;   // rate for 1 guest
               list.push({ key: `${x.room}|${x.rate}`, room: String(x.room), rate: String(x.rate || ""), shown: String(x.price_shown || ""), meal: String(x.meal || "Room only"), cxl: String(x.cxl || ""), full: String(x.cxl_full || ""), taxes: x.taxes_included !== false, total: Math.round(x.total * rt * (j.mult || 1)), ccy: "INR" });
             }
             if (list.length) { patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list })); regroupSoon(city.id, hotel.id); }
@@ -1263,6 +1264,8 @@ export default function PriceCompare() {
                         : tsel.item ? <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{tsel.item.src === "google" ? "Google room price" : "room-list price"}</span>
                         : <span style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>{d.source === "Hotel website" ? "Google didn't give the hotel website's price for this room — check on the site (View deal)" : `Google didn't give ${d.source}'s price for this room — Check exact reads it on the site`}</span>}
                       {!tBusy && d.source !== "Hotel website" && <button style={lb(ACCENT)} onClick={() => checkType(c, h, d.source, tsel)}>{tsel.ex ? "Re-check" : "Check exact"}</button>}
+                      {d.source === "Hotel website" && (siteBusy(h.id, d.source) ? <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> reading the hotel website…</span>
+                        : <button style={lb(ACCENT)} title="Opens the hotel's booking page again and reads its rates (nothing is clicked or typed)" onClick={() => loadRoomLists(c, h, false, "Hotel website")}>Re-read prices</button>)}
                       {tPrice ? (tPk ? <button style={lb(GREEN)} title="Click to take it out of the Excel" onClick={() => setPicks(c.id, h.id, ps => ps.filter(x => x.id !== tPk.id))}>✓ In Excel</button>
                         : <button style={lb(TEXT)} onClick={() => setPicks(c.id, h.id, ps => [...ps, { id: uid(), site: d.source, key: tKey, room: tsel.ex?.room || tsel.item?.name || tsel.g.type, meal: tMeal || MEAL_NAME[h.meal] || "Room only", cxl: tCx, total: tPrice, taxes: tsel.ex ? true : tsel.item?.taxes !== false, exact: tsel.ex?.total }])}>+ Add to Excel</button>) : null}
                     </div>

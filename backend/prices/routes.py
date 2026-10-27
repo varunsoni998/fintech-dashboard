@@ -643,7 +643,7 @@ List EVERY bookable rate shown (each room type x each rate plan). For each:
 - "taxes_included": true if "total" includes the taxes, false if the page only gave a price before taxes
 - "price_shown": the exact price text you used, as written on the page (e.g. "€1,482.00 total, local tax €32 extra")
 - "currency": ISO code (INR, EUR, ...)
-Use the public / non-member price when both are shown. Do not invent rooms or prices that aren't on the page.
+Use the public / non-member price when both are shown. Only rates for {adults} adults: skip "single use" / 1-guest rates. Do not invent rooms or prices that aren't on the page.
 Return JSON only: {{"rooms": [...], "dates_on_page": "<check-in to check-out as shown, or empty>"}}
 Page text:
 {text}"""
