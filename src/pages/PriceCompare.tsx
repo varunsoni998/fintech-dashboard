@@ -33,7 +33,7 @@ interface Hotel {
   id: string; name: string; room: string; meal: string; label: string; inPkg: boolean;
   ottila: string; tbo: string; otherSource: string; other: string; cancel: string;
   mine?: boolean; token?: string; image?: string; stars?: number; rating?: number; reviews?: number; fromPrice?: number; fromSource?: string; fromLink?: string;
-  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; listsAt?: number; listTried?: Record<string, number>; mealBySite?: Record<string, string>; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
+  online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; excelHide?: string[]; listsAt?: number; listTried?: Record<string, number>; mealBySite?: Record<string, string>; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
 interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string; full?: string; rate?: string; shown?: string }
@@ -784,34 +784,51 @@ export default function PriceCompare() {
           continue;
         }
         const ds = deals(h);
-        // checked prices first: a site price we confirmed beats Google's estimate
-        const online = [...ds.filter(d => !d.mine && d.confirmed), ...ds.filter(d => !d.mine && !d.confirmed)];
-        const bcom = online.find(d => /booking\.com/i.test(d.source));
-        const cmpP = bcom || online[0];
-        const compare = cmpP ? { source: bcom ? "B.com" : cmpP.source, ...asCost(cmpP), meal: h.meal, cancel: cxlShort(cmpP.cxl, cmpP.rupees / perRoom(cmpP)) || (cmpP.free ? "Free cxl" : undefined) } : undefined;
-        const checked = online.filter(d => d.confirmed);
-        const remark = checked.length ? checked.slice(0, 6).map(d => `${d.source} ${money(d.rupees / perRoom(d), "INR")}`).join(" · ") + " (checked on the sites)" : undefined;
-        const desc = `${h.name}${h.stars ? ` ${h.stars}*` : ""} x${nRooms} ${h.room || deals(h).find(d => !d.mine && d.room)?.room || "Room"}`;
-        if (!ds.length) {
-          rows.push(h.fromPrice ? { bid: h.label || undefined, description: desc, source: "Google (from)", currency: "INR", amount: h.fromPrice, meal: h.meal, markup: 0, pkg: h.inPkg ? ["A"] : [], _ref: { cid: c.id, hid: h.id } }
-            : { bid: h.label || undefined, description: desc, source: "", meal: h.meal, notes: "Not available online", _ref: { cid: c.id, hid: h.id } });
-          continue;
+        const nm0 = `${h.online?.name || h.name}${h.stars ? ` ${h.stars}*` : ""}`;
+        const ref = (site?: string) => ({ cid: c.id, hid: h.id, site });
+        const hide = new Set(h.excelHide || []);
+        const R = nRooms || 1;
+        // every website's price for the room you quote (chosen room type, else the site's checked / cheapest room)
+        type SiteRow = { site: string; v: number; room: string; meal: string; cxl: string; exact: boolean };
+        const sites: SiteRow[] = [];
+        for (const d of ds.filter(x => !x.mine && !hide.has(x.source) && !h.soldOut?.[x.source])) {
+          const t = h.room ? typeFor(h, d.source) : null;
+          if (h.room && t) {
+            if (t.notSold) continue;
+            const v = t.ex?.total || t.item?.total; if (!v) continue;
+            sites.push({ site: d.source, v, room: t.ex?.room || t.item?.name || t.g.type, meal: MEAL_CODE[t.ex?.meal || t.item?.meal || ""] || mealFor(h, d.source),
+              cxl: t.ex?.cxl || t.item?.cxl || (t.item?.free ? "Free cxl" : ""), exact: !!t.ex });
+          } else {
+            sites.push({ site: d.source, v: d.rupees, room: (d.confirmed ? roomOnly(h.confirmedRoom?.[d.source]) : "") || d.room || h.room || "Room",
+              meal: mealFor(h, d.source), cxl: cxlShort(d.cxl, d.rupees) || (d.free ? "Free cxl" : ""), exact: !!d.confirmed });
+          }
         }
+        sites.sort((x, y) => x.v - y.v);
+        const siteSrc = (x: string) => /booking/i.test(x) ? "B.com" : x === "Hotel website" ? "Website" : x;
+        const cmpOf = (x: SiteRow) => ({ source: siteSrc(x.site), currency: "INR", amount: Math.round(x.v / R), meal: x.meal, cancel: x.cxl || undefined });
         const mine = ds.filter(d => d.mine);
-        // a room type is chosen → that room's price on each site (exact checkout price first)
-        const tRows = online.map(d => { const t = typeFor(h, d.source); const v = t?.ex?.total || t?.item?.total; return t && v ? { d, v, exact: !!t.ex, t } : null; }).filter(Boolean)
-          .sort((a, b) => (b!.exact ? 1 : 0) - (a!.exact ? 1 : 0) || a!.v - b!.v) as { d: Deal; v: number; exact: boolean; t: NonNullable<ReturnType<typeof typeFor>> }[];
-        if (!mine.length && tRows.length) {
-          const top = tRows[0];
-          rows.push({ bid: h.label || undefined, description: desc, source: top.d.source, currency: "INR", amount: Math.round(top.v / (nRooms || 1)), meal: h.meal,
-            cancel: top.t.ex?.cxl || top.t.item?.cxl || undefined, markup: 0, pkg: h.inPkg ? ["A"] : [],
-            remark: tRows.slice(0, 6).map(x => `${x.d.source} ${money(x.v / (nRooms || 1), "INR")}${x.exact ? " ✓" : ""}`).join(" · ") + ` (${h.room}; ✓ = exact)`, _ref: { cid: c.id, hid: h.id } });
+        const room0 = h.room || sites[0]?.room || "Room";
+        if (!mine.length && !sites.length) {
+          rows.push(h.fromPrice ? { bid: h.label || undefined, description: `${nm0} x${R} ${room0}`, source: "Google (from)", currency: "INR", amount: Math.round(h.fromPrice / R), meal: h.meal, markup: 0, pkg: h.inPkg ? ["A"] : [], hotel_start: true, _ref: ref() }
+            : { bid: h.label || undefined, description: `${nm0} x${R} ${room0}`, source: "", meal: h.meal, notes: "Not available online", hotel_start: true, _ref: ref() });
           continue;
         }
-        const main = mine.length ? mine : [online[0] || ds[0]];
-        main.forEach((d, i) => rows.push({ bid: h.label || undefined, description: desc, source: d.source, ...asCost(d), meal: h.meal,
-          cancel: d.mine ? h.cancel || undefined : cxlShort(d.cxl, d.rupees / perRoom(d)) || (d.free ? "Free cxl" : undefined), markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [],
-          compare: d.mine || (bcom && d.source !== bcom.source) ? compare : undefined, remark: i === 0 ? remark : undefined, _ref: { cid: c.id, hid: h.id } }));
+        // row 1: your supplier rate (Ottila / TBO / DMC) with the cheapest website in the yellow compare block;
+        // no supplier rate → the cheapest website is the cost, the other websites follow in the compare block
+        const rest = [...sites];
+        if (mine.length) {
+          mine.forEach((d, i) => rows.push({ bid: i === 0 ? h.label || undefined : undefined, description: i === 0 ? `${nm0} x${R} ${room0}` : `x${R} ${room0}`, source: d.source, ...asCost(d), meal: h.meal,
+            cancel: h.cancel || undefined, markup: 0, pkg: h.inPkg && i === 0 ? ["A"] : [], hotel_start: i === 0,
+            compare: i === 0 && rest.length ? cmpOf(rest.shift()!) : undefined, diff_to_hotel: i > 0, _ref: ref(i === 0 ? undefined : d.source) }));
+        } else {
+          const top = rest.shift()!;
+          rows.push({ bid: h.label || undefined, description: `${nm0} x${R} ${top.room}`, source: siteSrc(top.site), currency: "INR", amount: Math.round(top.v / R), meal: top.meal,
+            cancel: top.cxl || undefined, markup: 0, pkg: h.inPkg ? ["A"] : [], hotel_start: true,
+            remark: top.exact ? `${top.site} exact at checkout` : `${top.site} not checked at checkout`, _ref: ref(top.site) });
+        }
+        // the other websites: one "x1 room" line each, in the compare block (Difference against row 1)
+        for (const x of rest) rows.push({ description: `x${R} ${x.room}`, compare: cmpOf(x), diff_to_hotel: true,
+          remark: x.exact ? `${x.site} exact at checkout` : `${x.site} not checked at checkout`, _ref: ref(x.site) });
       }
       return { title: `${c.name} ${nice(c.checkIn)} to ${nice(c.checkOut)} ${nightsOf(c)}N`, rows };
     });
@@ -1353,7 +1370,9 @@ export default function PriceCompare() {
         const out = trip.cities.flatMap(c => c.hotels.filter(h => h.noExcel).map(h => ({ c, h })));
         const cell: React.CSSProperties = { padding: "7px 8px", fontSize: 12.5, color: TEXT, borderBottom: `1px solid ${MUTED}22`, verticalAlign: "top" };
         const amt = (r: any) => r.amount ? (r.currency === "INR" ? inr(r.amount) : `${r.currency} ${Number(r.amount).toLocaleString("en-IN")}`) : "—";
-        const remove = (r: any) => { const f = r._ref; if (!f) return; if (f.pid) setPicks(f.cid, f.hid, ps => ps.filter(x => x.id !== f.pid)); else setHotel(f.cid, f.hid, { noExcel: true }); };
+        const remove = (r: any) => { const f = r._ref; if (!f) return; if (f.pid) setPicks(f.cid, f.hid, ps => ps.filter(x => x.id !== f.pid));
+          else if (f.site) { const hh = trip.cities.find(x => x.id === f.cid)?.hotels.find(x => x.id === f.hid); setHotel(f.cid, f.hid, { excelHide: [...(hh?.excelHide || []), f.site] }); }
+          else setHotel(f.cid, f.hid, { noExcel: true }); };
         return (
           <div onClick={() => setPreview(false)} style={{ position: "fixed", inset: 0, background: "rgba(10,10,25,0.55)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ ...card, width: "min(1000px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: 18, gap: 12 }}>
@@ -1367,7 +1386,7 @@ export default function PriceCompare() {
                   <div key={si} style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 800, color: ACCENT, margin: "4px 0 6px" }}>{s2.title}</div>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead><tr>{["Hotel & room", "Source", "Meal", "Cancellation", "Per room (stay)", "Note", ""].map(t => <th key={t} style={{ ...cell, fontSize: 10.5, color: MUTED, textTransform: "uppercase", textAlign: "left" }}>{t}</th>)}</tr></thead>
+                      <thead><tr>{["Hotel & room", "Source", "Meal", "Cancellation", "Per room (stay)", "Website (yellow block)", "Note", ""].map(t => <th key={t} style={{ ...cell, fontSize: 10.5, color: MUTED, textTransform: "uppercase", textAlign: "left" }}>{t}</th>)}</tr></thead>
                       <tbody>{s2.rows.map((r: any, ri: number) => (
                         <tr key={ri}>
                           <td style={{ ...cell, fontWeight: 700 }}>{r.description}{r.bid ? <span style={{ ...pill(ACCENT), marginLeft: 6, fontSize: 10 }}>{r.bid}</span> : null}</td>
@@ -1375,6 +1394,7 @@ export default function PriceCompare() {
                           <td style={cell}>{r.meal || "—"}</td>
                           <td style={cell}>{r.cancel || "—"}</td>
                           <td style={{ ...cell, fontWeight: 800, whiteSpace: "nowrap" }}>{amt(r)}</td>
+                          <td style={{ ...cell, whiteSpace: "nowrap" }}>{r.compare ? <><b>{r.compare.source}</b> {amt(r.compare)} · {r.compare.meal || "—"}{r.compare.cancel ? ` · ${r.compare.cancel}` : ""}</> : "—"}</td>
                           <td style={{ ...cell, color: MUTED, fontSize: 11.5 }}>{r.remark || r.notes || ""}</td>
                           <td style={cell}><button title="Remove from the Excel" style={{ background: "none", border: "none", cursor: "pointer", color: ERR }} onClick={() => remove(r)}><X style={{ width: 15, height: 15 }} /></button></td>
                         </tr>))}</tbody>

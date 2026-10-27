@@ -111,7 +111,7 @@ def build(data, out):
     # ── rows 6–7: column headers ────────────────────────────────────────────
     for rng in ("A6:A7", "C6:C7", "D6:D7", "E6:E7", "F6:L6"): ws.merge_cells(rng)
     hdr6 = {"A": "Status ", "C": "Booked for Which Date ", "D": "BID", "E": "Description ", "F": "Costing From Supplier / Online Portals "}
-    hdr7 = {"B": "Notes", "F": "Source", "G": "Rate Per Room", "H": "Cost to us", "I": "GST & Other charges",
+    hdr7 = {"B": "Notes", "F": "Source", "G": "Total Cost of 1 Room", "H": "Cost to us", "I": "GST & Other charges",
             "J": "Total Rate  (With GST)", "K": "Meal Plan", "L": "Cancel. Policy", "M": "Due date",
             "O": "Source", "P": "Cost to us", "Q": "Difference", "R": "Meal Plan", "S": "Cancel. Policy"}
     for col in "ABCDE":
@@ -166,6 +166,7 @@ def build(data, out):
         return f"=({e})*{ROE(cur)}/{ROE(cc)}"
 
     selected = {p["key"]: [] for p in pkgs}
+    hotel_g = None        # row of the hotel's first cost (Difference of its extra website rows is measured against it)
     # pass 2 — write
     for kind, r, obj in layout:
         if kind == "title":
@@ -177,6 +178,7 @@ def build(data, out):
             ws[f"A{r}"] = row.get("status"); ws[f"B{r}"] = row.get("notes"); ws[f"C{r}"] = row.get("booked_for")
             ws[f"D{r}"] = row.get("bid"); ws[f"E{r}"] = row.get("description"); ws[f"F{r}"] = row.get("source")
             g = conv(row.get("amount"), row.get("currency")); ws[f"G{r}"] = g
+            if row.get("hotel_start"): hotel_g = r if g is not None else None
             mk = row.get("markup")
             if mk is None and row.get("pkg"): mk = T.get("markup", 0.15)
             if mk is not None and g is not None: ws[f"H{r}"] = f"=G{r}*{round(mk*100, 2):g}%"
@@ -190,6 +192,7 @@ def build(data, out):
                 p = conv(cmp_.get("amount"), cmp_.get("currency"))
                 ws[f"P{r}"] = p if p is not None else cmp_.get("text")
                 if p is not None and g is not None: ws[f"Q{r}"] = f"=P{r}-G{r}"
+                elif p is not None and row.get("diff_to_hotel") and hotel_g: ws[f"Q{r}"] = f"=P{r}-G{hotel_g}"
                 ws[f"R{r}"] = cmp_.get("meal"); ws[f"S{r}"] = as_date(cmp_.get("cancel"))
             if row.get("remark"): ws[f"T{r}"] = row["remark"]
             for col in "GHIJPQ": ws[f"{col}{r}"].number_format = money
