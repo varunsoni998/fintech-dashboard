@@ -194,6 +194,8 @@ export default function PriceCompare() {
   const [cityTab, setCityTab] = useState<string>("");
   const [roomUi, setRoomUi] = useState<Record<string, { open?: boolean; meal?: string; cxl?: string; all?: boolean }>>({});
   const [preview, setPreview] = useState(false);
+  // Excel only: its own costing currency + rate (the page itself stays as it is)
+  const [xl, setXl] = useState<{ ccy: string; roe: string; busy?: boolean; note?: string }>({ ccy: "", roe: "" });
   const [cxlInfo, setCxlInfo] = useState<string>("");   // which row's full cancellation policy is open
   // room picker (one open at a time): which hotel|site, and where to draw the list
   const [picker, setPicker] = useState<{ id: string; left: number; top: number; width: number; up: boolean; maxH: number } | null>(null);
@@ -763,15 +765,23 @@ export default function PriceCompare() {
   };
 
   // ── Excel (standard costing layout, no markup) ─────────────────────────────
+  const xlRate = async (ccy: string) => {
+    if (ccy === "INR") return setXl({ ccy, roe: "1", note: "" });
+    if (ccy === cc && roe) return setXl({ ccy, roe: String(roe), note: trip.roeNote ? `Auto · ${trip.roeNote}` : "" });
+    setXl({ ccy, roe: "", busy: true });
+    try { const r = await (await authFetch(`/roe?ccy=${ccy}`)).json(); setXl(o => (o.ccy !== ccy ? o : { ccy, roe: String(r.roe), note: `Auto · ${r.source} · ${r.date}` })); }
+    catch (e: any) { setXl(o => (o.ccy !== ccy ? o : { ccy, roe: "", note: "Couldn't fetch the rate — type it" })); }
+  };
   const openPreview = () => {
     setMsg(null);
-    if (cc !== "INR" && !roe) { fetchRoe(); return setMsg({ kind: "err", text: `Getting today's ${cc} rate — try again in a moment.` }); }
+    if (!xl.ccy) xlRate(cc);
     setPreview(true);
   };
+  const xcc = xl.ccy || cc, xroe = num(xl.roe) || (xcc === cc ? roe : 0);
   const buildSections = () => {
     // the sheet wants ONE room for the whole stay; site prices are for all rooms → divide by the rooms
     const perRoom = (d: Deal) => (d.mine ? 1 : (nRooms || 1));
-    const asCost = (d: Deal) => (d.ccy === cc && cc !== "INR" ? { currency: cc, amount: Math.round((d.amt / perRoom(d)) * 100) / 100 } : { currency: "INR", amount: Math.round(d.rupees / perRoom(d)) });
+    const asCost = (d: Deal) => (d.ccy === xcc && xcc !== "INR" ? { currency: xcc, amount: Math.round((d.amt / perRoom(d)) * 100) / 100 } : { currency: "INR", amount: Math.round(d.rupees / perRoom(d)) });
     const sections = trip.cities.filter(c => c.hotels.some(h => h.name.trim())).map(c => {
       const rows: any[] = [];
       const pick = c.hotels.filter(h => h.name.trim() && !h.noExcel && (isMine(h) || h.inPkg || h.label || h.picks?.length));   // your hotels (+ labelled / in package / rooms added)
@@ -835,12 +845,13 @@ export default function PriceCompare() {
     return sections;
   };
   const downloadExcel = async () => {
+    if (xcc !== "INR" && !xroe) return setMsg({ kind: "err", text: `Enter the ${xcc} rate (₹ per 1 ${xcc}) in the preview first.` });
     // _ref only links a preview row back to its hotel – not sent
     const sections = buildSections().map(sc => ({ ...sc, rows: sc.rows.map(({ _ref, ...r }: any) => r) }));
     const body = {
       sheet_name: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).replace(" ", ""),
-      trip: { name: trip.name || "Trip", rooms: roomsForExcel(rooms), pax: paxForExcel(rooms), notes: trip.notes, costing_currency: cc,
-              rates: cc === "INR" ? {} : { [cc]: roe }, markup: 0, gst: 0.05, tcs: 0.02 },   // standard GST 5% / TCS 2% rows in the sheet
+      trip: { name: trip.name || "Trip", rooms: roomsForExcel(rooms), pax: paxForExcel(rooms), notes: trip.notes, costing_currency: xcc,
+              rates: xcc === "INR" ? {} : { [xcc]: xroe }, markup: 0, gst: 0.05, tcs: 0.02 },   // standard GST 5% / TCS 2% rows in the sheet
       sections, packages: [{ key: "A", name: "Per package" }],
     };
     try {
@@ -1369,7 +1380,12 @@ export default function PriceCompare() {
         const secs = buildSections();
         const out = trip.cities.flatMap(c => c.hotels.filter(h => h.noExcel).map(h => ({ c, h })));
         const cell: React.CSSProperties = { padding: "7px 8px", fontSize: 12.5, color: TEXT, borderBottom: `1px solid ${MUTED}22`, verticalAlign: "top" };
-        const amt = (r: any) => r.amount ? (r.currency === "INR" ? inr(r.amount) : `${r.currency} ${Number(r.amount).toLocaleString("en-IN")}`) : "—";
+        const amt = (r: any) => {
+          if (!r.amount) return "—";
+          if (r.currency === xcc) return xcc === "INR" ? inr(r.amount) : `${xcc} ${Number(r.amount).toLocaleString("en-IN")}`;
+          const rupees = r.currency === "INR" ? r.amount : 0;
+          return xcc !== "INR" && xroe && rupees ? `${xcc} ${Math.round(rupees / xroe).toLocaleString("en-IN")}` : r.currency === "INR" ? inr(r.amount) : `${r.currency} ${Number(r.amount).toLocaleString("en-IN")}`;
+        };
         const remove = (r: any) => { const f = r._ref; if (!f) return; if (f.pid) setPicks(f.cid, f.hid, ps => ps.filter(x => x.id !== f.pid));
           else if (f.site) { const hh = trip.cities.find(x => x.id === f.cid)?.hotels.find(x => x.id === f.hid); setHotel(f.cid, f.hid, { excelHide: [...(hh?.excelHide || []), f.site] }); }
           else setHotel(f.cid, f.hid, { noExcel: true }); };
@@ -1378,8 +1394,13 @@ export default function PriceCompare() {
             <div onClick={e => e.stopPropagation()} style={{ ...card, width: "min(1000px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: 18, gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 18, fontWeight: 800, color: TEXT, flex: 1 }}>Excel preview — {plural(secs.reduce((a, s2) => a + s2.rows.length, 0), "row", "rows")}</span>
+                <label style={{ ...lbl, flexDirection: "row", alignItems: "center", gap: 6 }} title="Only for the Excel — the page keeps its own currency">Excel currency
+                  <select style={{ ...inp, width: 90, padding: "6px 8px" }} value={xcc} onChange={e => xlRate(e.target.value)}>{CCYS.map(c2 => <option key={c2}>{c2}</option>)}</select></label>
+                {xcc !== "INR" && <label style={{ ...lbl, flexDirection: "row", alignItems: "center", gap: 6 }}>₹ per 1 {xcc}
+                  <input style={{ ...inp, width: 90, padding: "6px 8px" }} value={xl.busy ? "…" : xl.roe || (xcc === cc && roe ? String(roe) : "")} onChange={e => setXl({ ...xl, ccy: xcc, roe: e.target.value, note: "typed" })} /></label>}
                 <button style={{ background: "none", border: "none", cursor: "pointer", color: MUTED }} onClick={() => setPreview(false)}><X style={{ width: 18, height: 18 }} /></button>
               </div>
+              {xcc !== "INR" && <div style={{ fontSize: 11.5, color: xroe ? MUTED : WARN }}>{xroe ? `All prices in the Excel in ${xcc} at ₹${xroe} = 1 ${xcc}${xl.note ? ` (${xl.note})` : ""} — only for this Excel` : `Enter the ${xcc} rate`}</div>}
               <div style={{ overflow: "auto", flex: 1 }}>
                 {secs.filter(s2 => s2.rows.length).length === 0 && <div style={{ color: MUTED, fontSize: 13, padding: 12 }}>Nothing to put in the Excel yet — add hotels to your list, or add rooms with <b>+ Add to Excel</b>.</div>}
                 {secs.filter(s2 => s2.rows.length).map((s2, si) => (
