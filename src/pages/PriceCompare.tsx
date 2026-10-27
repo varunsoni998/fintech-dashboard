@@ -356,11 +356,24 @@ export default function PriceCompare() {
   const mealFor = (h: Hotel, site: string) => h.mealBySite?.[site] || h.meal;   // each website can have its own meal plan
   const findType = (h: Hotel) => {
     if (!h.room) return null;
-    const all = roomGroups(h), g = all.find(x => x.type === h.room); if (g) return { ...g, subs: 0 };
+    const all = roomGroups(h), g = all.find(x => x.type === h.room); if (g) return { ...g, subs: 0, remapped: false };
     const subs = all.filter(x => x.type.startsWith(h.room + " — "));
-    if (!subs.length) return null;
+    if (!subs.length) {
+      // the room list was re-read and names changed (e.g. Google's list → the sites' own lists):
+      // use the group with the same room type / bed / view, else the most similar name – never a different category
+      const wk = roomWordKey(h.room), [c0] = wk.split("|");
+      const ws = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !["room", "with", "and", "the", "bed", "beds"].includes(w));
+      const want = ws(h.room);
+      const sc = all.map(g => {
+        const keys = g.items.map(x => roomWordKey(x.name)); const [gc] = (keys[0] || roomWordKey(g.type)).split("|");
+        if (c0 !== "room" && gc !== c0 && !keys.some(k => k.split("|")[0] === c0)) return { g, v: -1 };
+        const have = new Set(g.items.flatMap(x => ws(x.name)).concat(ws(g.type)));
+        return { g, v: (keys.includes(wk) ? 1 : 0) + (want.length ? want.filter(w => have.has(w)).length / want.length : 0) };
+      }).filter(x => x.v >= 0.6).sort((a, b) => b.v - a.v || a.g.from - b.g.from);
+      return sc[0] ? { ...sc[0].g, subs: 0, remapped: true } : null;
+    }
     const items = subs.flatMap(x => x.items);
-    return { type: h.room, items, from: Math.min(...items.map(x => x.total)), sites: [...new Set(items.map(x => x.site))], subs: subs.length };
+    return { type: h.room, items, from: Math.min(...items.map(x => x.total)), sites: [...new Set(items.map(x => x.site))], subs: subs.length, remapped: false };
   };
   // the chosen room type on one site: exact checkout price > site's own list (same meal) > Google's list
   const typeFor = (h: Hotel, site: string) => {
@@ -941,7 +954,7 @@ export default function PriceCompare() {
                 return (<>
                   <button data-pc-picker-btn onClick={toggle} title="Room type — the same room is priced on every site" style={{ ...inp, width: 220, padding: "7px 9px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}>
                     <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: h.room ? TEXT : MUTED }}>{h.room || "Room type (any)"}</span>
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: h.room ? TEXT : MUTED }}>{(() => { const f = h.room ? findType(h) : null; return f?.remapped ? f.type : h.room || "Room type (any)"; })()}</span>
                     {h.room && (h.online || h.roomsBySite) && (() => { const f = findType(h); return !f ? <span title="This room type isn't in the hotel's room list any more — pick it again" style={{ color: WARN, fontWeight: 800 }}>!</span> : f.subs > 1 ? <span title={`This hotel has ${f.subs} different rooms called "${h.room}" — pick the exact one`} style={{ color: WARN, fontWeight: 800 }}>{f.subs}</span> : null; })()}
                     {h.loading || h.typesLoading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 13, height: 13 }} />}
                   </button>
@@ -1092,6 +1105,23 @@ export default function PriceCompare() {
         {/* every site — no limit */}
         {showDeals && (
           <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+            {(() => {
+              // a room type is chosen but the sites haven't been checked for it yet → say so, one click to check
+              if (!h.room || !extAuto) return null;
+              const f = findType(h);
+              if (!f) return <div style={{ ...card, padding: "9px 12px", fontSize: 12.5, color: WARN, fontWeight: 700 }}>“{h.room}” isn't in this hotel's room list any more — open Room type and pick the room again.</div>;
+              const sites = ds.filter(d => !d.mine && d.source !== "Hotel website").map(d => ({ d, t: typeFor(h, d.source) })).filter(x => x.t && !x.t.notSold);
+              const missing = sites.filter(x => !x.t!.ex && !siteBusy(h.id, x.d.source));
+              if (!missing.length) return null;
+              return (
+                <div style={{ ...card, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
+                  <Zap style={{ width: 14, height: 14, color: ACCENT }} />
+                  <span style={{ color: TEXT, fontWeight: 700 }}>Not checked yet for {f.type}{MEAL_NAME[h.meal] ? ` · ${MEAL_NAME[h.meal]}` : ""}</span>
+                  <span style={{ color: MUTED }}>— {missing.map(x => x.d.source).join(", ")} show room-list / Google prices</span>
+                  <button style={{ ...btn("primary"), padding: "6px 12px", fontSize: 12.5 }} onClick={() => autoCheck([{ c, h }])}><Zap style={{ width: 13, height: 13 }} /> Get exact prices for this room</button>
+                </div>
+              );
+            })()}
             <div style={{ display: "grid", gridTemplateColumns: "34px 1fr auto 170px 120px", gap: 12, padding: "2px 12px", fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.3 }} className="max-md:!hidden">
               <span /> <span>Website ({ds.length})</span> <span /> <span style={{ textAlign: "right" }}>Total · per night</span> <span />
             </div>
