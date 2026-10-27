@@ -1046,7 +1046,13 @@ export default function PriceCompare() {
               {h.online && autoJobs([{ c, h }]).length > 0 && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: GREEN }} onClick={() => autoCheck([{ c, h }])} title="Opens each site in a background tab and reads the exact total">
                 <Zap style={{ width: 12, height: 12 }} /> Re-check exact prices
               </button>}
-              {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => { setHotel(c.id, h.id, { mine: true }); if (h.online && h.searchedFor === key(c, h)) { setHotel(c.id, h.id, { open: true }); autoCheck([{ c, h }], true); } else fetchOne(c, { ...h, mine: true }).then(() => loadStatus()); }} title="Move to Your hotels — gets every site's price">
+              {!mineHotel && <button style={{ ...btn(), padding: "6px 11px", fontSize: 12, color: ACCENT }} onClick={() => {
+                // already has its prices → just move it to your hotels (no new checker windows; use Re-check for fresh prices)
+                const checked = Object.keys(h.confirmed || {}).length > 0 || Object.keys(h.roomsBySite || {}).length > 0 || Object.keys(checks).some(kk => kk.startsWith(h.id + "|"));
+                setHotel(c.id, h.id, { mine: true, open: true });
+                if (h.online && h.searchedFor === key(c, h)) { if (!checked) autoCheck([{ c, h }], true); }
+                else fetchOne(c, { ...h, mine: true }).then(() => loadStatus());
+              }} title="Move to Your hotels — gets every site's price">
                 <Pin style={{ width: 12, height: 12 }} /> Add to my hotels
               </button>}
             </div>
