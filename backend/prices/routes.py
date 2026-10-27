@@ -637,8 +637,11 @@ List EVERY bookable rate shown (each room type x each rate plan). For each:
 - "meal": one of "Room only", "Breakfast", "Half board", "Full board", "All inclusive"
 - "cxl": short cancellation in numbers only, e.g. "Non-refundable", "Free till 2026-10-25", "Free till 24h before arrival", "" if not shown
 - "cxl_full": the cancellation / pricing conditions text if shown, else ""
-- "total": the price for the WHOLE stay INCLUDING taxes and fees if the page gives it (add the taxes if they are shown separately), as a number
-- "taxes_included": true if "total" includes taxes, false if the page only gave a price before taxes
+- "per_night": the price per night if the page shows one, else null
+- "total": the price for the WHOLE stay of {nights} nights INCLUDING VAT, taxes, fees and local / city tax (add them if shown separately).
+  If the page only shows a per-night price, total = per-night price x {nights}. Never return a per-night or "from" price as the total.
+- "taxes_included": true if "total" includes the taxes, false if the page only gave a price before taxes
+- "price_shown": the exact price text you used, as written on the page (e.g. "€1,482.00 total, local tax €32 extra")
 - "currency": ISO code (INR, EUR, ...)
 Use the public / non-member price when both are shown. Do not invent rooms or prices that aren't on the page.
 Return JSON only: {{"rooms": [...], "dates_on_page": "<check-in to check-out as shown, or empty>"}}
@@ -659,7 +662,14 @@ def rooms_read(body: SiteTextIn, authorization: Optional[str] = Header(None)):
         except Exception:
             continue
         if t <= 0 or not x.get("room"): continue
-        rooms.append({"room": str(x.get("room"))[:120], "rate": str(x.get("rate") or "")[:80], "meal": str(x.get("meal") or "Room only"),
+        pn = None
+        try:
+            pn = float(str(x.get("per_night")).replace(",", "")) if x.get("per_night") not in (None, "") else None
+        except Exception:
+            pn = None
+        if pn and body.nights and t < pn * body.nights * 0.9:      # a per-night price was given as the total
+            t = round(pn * body.nights, 2)
+        rooms.append({"price_shown": str(x.get("price_shown") or "")[:120], "room": str(x.get("room"))[:120], "rate": str(x.get("rate") or "")[:80], "meal": str(x.get("meal") or "Room only"),
                       "cxl": str(x.get("cxl") or "")[:60], "cxl_full": str(x.get("cxl_full") or "")[:1200], "total": round(t, 2),
                       "taxes_included": bool(x.get("taxes_included", True)), "currency": str(x.get("currency") or "INR").upper()[:3]})
     return {"rooms": rooms, "dates_on_page": out.get("dates_on_page") or "", "model": model}

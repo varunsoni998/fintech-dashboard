@@ -36,7 +36,7 @@ interface Hotel {
   online?: Online; confirmed?: Record<string, number>; confirmedAuto?: Record<string, number>; confirmedRoom?: Record<string, string>; confirmedSite?: Record<string, { amt: number; ccy: string }>; confirmedCxl?: Record<string, Cxl>; roomsBySite?: Record<string, { url: string; at: number; list: RoomRow[] }>; picks?: RoomPick[]; roomSel?: Record<string, string>; noExcel?: boolean; listsAt?: number; listTried?: Record<string, number>; mealBySite?: Record<string, string>; soldOut?: Record<string, number>; roomTypes?: { type: string; m: { site: string; name: string }[] }[]; roomTypesSig?: string; typeExact?: Record<string, { total: number; room: string; cxl: string; meal?: string; at: number; full?: string; note?: string }>; typesLoading?: boolean; loading?: boolean; error?: string; searchedFor?: string; open?: boolean; showRates?: boolean; checkedAt?: number;
 }
 // one room + option read from a site's room list; "exact" = the checkout total after Check exact
-interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string; full?: string; rate?: string }
+interface RoomRow { key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; ccy: string; exact?: number; exactAt?: number; exactCxl?: string; full?: string; rate?: string; shown?: string }
 // a room + meal + cancellation option added to the Excel from the "All rooms" list
 interface RoomPick { id: string; site: string; key: string; room: string; meal: string; cxl: string; total: number; taxes: boolean; exact?: number }
 const MEAL_CODE: Record<string, string> = { "Room only": "RO", Breakfast: "BB", "Half board": "HB", "Full board": "FB", "All inclusive": "AI" };
@@ -55,7 +55,7 @@ const prettyRoomKey = (k: string) => {
   const C = cat === "room" ? "Room" : cat.replace(/\b\w/g, m => m.toUpperCase()) + (/(suite|villa|cottage|apartment|studio|penthouse|room)$/.test(cat) ? "" : " Room");
   return [C, bed === "twin" ? "Twin beds" : bed === "double" ? "Double / King bed" : "", view ? view[0].toUpperCase() + view.slice(1) + " view" : ""].filter(Boolean).join(", ");
 };
-interface CatItem { site: string; name: string; total: number; src: "google" | "site"; key?: string; meal?: string; cxl?: string; taxes?: boolean; exact?: number; free?: boolean; full?: string }
+interface CatItem { site: string; name: string; total: number; src: "google" | "site"; key?: string; meal?: string; cxl?: string; taxes?: boolean; exact?: number; free?: boolean; full?: string; rate?: string; shown?: string }
 const MEAL_NAME: Record<string, string> = { RO: "Room only", BB: "Breakfast", HB: "Half board", FB: "Full board", AI: "All inclusive" };
 type SortKey = "cheapest" | "best" | "rated";
 // cancellation terms read from the site: free until a date, then a fee (or non-refundable)
@@ -300,7 +300,7 @@ export default function PriceCompare() {
   const catalog = (h: Hotel): CatItem[] => {
     const rate = h.online?.roeAt || 1;
     const g: CatItem[] = Object.entries(h.online?.site_rooms || {}).flatMap(([site, l]) => l.map(r => ({ site, name: r.name, total: Math.round(r.total * rate * (nRooms || 1)), src: "google" as const, free: r.free_cancellation })));
-    const st: CatItem[] = Object.entries(h.roomsBySite || {}).flatMap(([site, rb]) => rb.list.filter(r => r.ccy === "INR" || r.exact).map(r => ({ site, name: r.room, total: r.exact || r.total, src: "site" as const, key: r.key, meal: r.meal, cxl: r.exactCxl || r.cxl, taxes: r.taxes, exact: r.exact, full: r.full })));
+    const st: CatItem[] = Object.entries(h.roomsBySite || {}).flatMap(([site, rb]) => rb.list.filter(r => r.ccy === "INR" || r.exact).map(r => ({ site, name: r.room, total: r.exact || r.total, src: "site" as const, key: r.key, meal: r.meal, cxl: r.exactCxl || r.cxl, taxes: r.taxes, exact: r.exact, full: r.full, rate: r.rate, shown: r.shown })));
     // once the sites' own room lists are read, use ONLY those – Google's list mixes in rooms the sites don't sell
     return (st.length ? st : g).filter(x => x.name && x.total > 0);
   };
@@ -626,7 +626,7 @@ export default function PriceCompare() {
               const cc = String(x.currency || "INR").toUpperCase();
               const rt = cc === "INR" ? 1 : fx.current[cc] || (cc === trip.currency && roe ? roe : 0);
               if (!rt) continue;
-              list.push({ key: `${x.room}|${x.rate}`, room: String(x.room), rate: String(x.rate || ""), meal: String(x.meal || "Room only"), cxl: String(x.cxl || ""), full: String(x.cxl_full || ""), taxes: x.taxes_included !== false, total: Math.round(x.total * rt * (j.mult || 1)), ccy: "INR" });
+              list.push({ key: `${x.room}|${x.rate}`, room: String(x.room), rate: String(x.rate || ""), shown: String(x.price_shown || ""), meal: String(x.meal || "Room only"), cxl: String(x.cxl || ""), full: String(x.cxl_full || ""), taxes: x.taxes_included !== false, total: Math.round(x.total * rt * (j.mult || 1)), ccy: "INR" });
             }
             if (list.length) { patchRooms(city.id, hotel.id, j.source, () => ({ url: res.roomsUrl, at: Date.now(), list })); regroupSoon(city.id, hotel.id); }
             setChecks(o => ({ ...o, [k]: list.length ? "ok" : "The hotel website didn't show rooms for these dates" }));
@@ -1259,7 +1259,7 @@ export default function PriceCompare() {
                     <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {tsel.ex ? <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ exact {clock(tsel.ex.at)}</span>
                         : tBusy ? <span style={{ ...pill(BG, ACCENT), boxShadow: SHADOW_IN, fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> {tck === "queued" ? "waiting…" : tck === "verifying" ? "verifying…" : `checking ${tsel.g.type} on ${d.source}…`}</span>
-                        : tsel.item && d.source === "Hotel website" && tsel.item.src === "site" ? <span style={{ ...pill(BG, GREEN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>read from the hotel website</span>
+                        : tsel.item && d.source === "Hotel website" && tsel.item.src === "site" ? <span title={`Rate: ${tsel.item.rate || "—"}\nThe page said: ${tsel.item.shown || "—"}`} style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>read by AI from the hotel website — check before quoting</span>
                         : tsel.item ? <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{tsel.item.src === "google" ? "Google room price" : "room-list price"}</span>
                         : <span style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>{d.source === "Hotel website" ? "Google didn't give the hotel website's price for this room — check on the site (View deal)" : `Google didn't give ${d.source}'s price for this room — Check exact reads it on the site`}</span>}
                       {!tBusy && d.source !== "Hotel website" && <button style={lb(ACCENT)} onClick={() => checkType(c, h, d.source, tsel)}>{tsel.ex ? "Re-check" : "Check exact"}</button>}
@@ -1268,6 +1268,7 @@ export default function PriceCompare() {
                     </div>
                   )}
                   {tsel && tck && !tBusy && tck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {tck}</div>}
+                  {tsel?.item && d.source === "Hotel website" && tsel.item.src === "site" && (tsel.item.rate || tsel.item.shown) && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: MUTED }}>Rate: {tsel.item.rate || "—"}{tsel.item.shown ? ` · page said: ${tsel.item.shown}` : ""}</div>}
                   {tsel?.ex?.meal && MEAL_NAME[mealFor(h, d.source)] && tsel.ex.meal !== MEAL_NAME[mealFor(h, d.source)] && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>{d.source} has no {MEAL_NAME[mealFor(h, d.source)].toLowerCase()} option for this room — this is the {tsel.ex.meal.toLowerCase()} price</div>}
                   {sr && ck && !busyR && ck !== "ok" && <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 600, color: WARN }}>⚡ {ck}</div>}
                   {!d.mine && !sr && !tsel && !d.confirmed && checks[`${h.id}|${d.source}`] && !["checking", "queued", "ok", "verifying"].includes(checks[`${h.id}|${d.source}`]) && (
