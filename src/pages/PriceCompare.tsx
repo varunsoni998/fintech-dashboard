@@ -907,9 +907,6 @@ export default function PriceCompare() {
               : <div style={{ height: "100%", minHeight: 140, borderRadius: 14, boxShadow: SHADOW_IN, display: "flex", alignItems: "center", justifyContent: "center", color: MUTED }}><BedDouble style={{ width: 34, height: 34 }} /></div>}
             <div style={{ position: "absolute", top: 18, left: 18, display: "flex", flexDirection: "column", gap: 4 }}>
               {mineHotel && <span style={pill(GRAD)}>Your hotel</span>}
-              {badges.cheapest && <span style={pill(GREEN)}>Cheapest</span>}
-              {badges.best && <span style={pill(ACCENT)}>Best</span>}
-              {badges.rated && <span style={pill(PURPLE)}>Top rated</span>}
             </div>
           </div>
 
@@ -1544,9 +1541,9 @@ export default function PriceCompare() {
         {[trip.cities.find(x => x.id === cityTab) || trip.cities[0]].map((c) => {
           const n = nightsOf(c) || 1;
           const named = c.hotels.filter(h => h.name.trim());
-          const mineList = named.filter(isMine);   // your hotels in the order you added them – the one you just typed is first
+          const mineList = sortList(named.filter(isMine), "rated");   // ranked by guest rating (highest first)
           // other hotels: only ones that actually have a price
-          const others = sortList(named.filter(h => !isMine(h) && (hasPrice(h) || h.fromPrice)), c.sort);
+          const others = sortList(named.filter(h => !isMine(h) && (hasPrice(h) || h.fromPrice)), "rated");
           const visible = [...mineList.filter(hasPrice), ...others];
           const tabs: { k: SortKey; label: string }[] = [{ k: "best", label: "Best" }, { k: "cheapest", label: "Cheapest" }, { k: "rated", label: "Top rated" }];
           const top = (k: SortKey) => sortList(visible, k)[0];
@@ -1593,21 +1590,6 @@ export default function PriceCompare() {
               {msg && <div style={{ fontSize: 13, color: msg.kind === "ok" ? GREEN : ERR, display: "flex", gap: 6, alignItems: "center" }}>{msg.kind === "ok" ? <CheckCircle2 style={{ width: 15, height: 15 }} /> : <AlertTriangle style={{ width: 15, height: 15 }} />} {msg.text}</div>}
               </>)}
 
-              {/* Sort tabs */}
-              {visible.length > 0 && (
-                <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", padding: 6, gap: 6 }}>
-                  {tabs.map(t => {
-                    const h = top(t.k); const active = c.sort === t.k; const p = h ? bestOf(h) : undefined;
-                    return (
-                      <button key={t.k} onClick={() => setCity(c.id, { sort: t.k })}
-                        style={{ padding: "10px 14px", textAlign: "left", border: "none", borderRadius: 13, background: active ? GRAD : "transparent", boxShadow: active ? SHADOW_SM : "none", cursor: "pointer" }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: active ? "#fff" : TEXT }}>{t.label}</div>
-                        <div style={{ fontSize: 13, color: active ? "rgba(255,255,255,0.85)" : MUTED }}>{p ? `${inr(p)} · ${inr(p / n)}/night` : "—"}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
 
               {named.length === 0 && !c.finding && (
                 <div style={{ ...card, padding: 26, textAlign: "center", color: MUTED, fontSize: 14 }}>
