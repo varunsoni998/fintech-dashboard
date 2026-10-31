@@ -31,7 +31,7 @@ function saveModuleState(state: Record<string, boolean>) {
 
 type ModuleKey = "webAnalytics" | "leadAnalytics" | "supplierAnalytics" | "houseAutomation" | "mxai";
 type Item = { title: string; url: string; icon: React.ElementType };
-type Theme = { BG: string; SHADOW_IN: string; TEXT_MAIN: string; TEXT_MUTED: string; ACCENT: string; HAIRLINE: string };
+type Theme = { BG: string; SHADOW_IN: string; SHADOW_OUT: string; TEXT_MAIN: string; TEXT_MUTED: string; ACCENT: string; HAIRLINE: string };
 
 // One nav row: 36px tall, icon column 16px, label on one line
 function NavRow({ item, t }: { item: Item; t: Theme }) {
@@ -63,11 +63,11 @@ function ModuleSection({ label, icon: Icon, items, moduleKey, moduleState, setMo
   };
 
   return (
-    <SidebarGroup className="p-0 mt-3 pt-3" style={{ borderTop: `1px solid ${t.HAIRLINE}` }}>
+    <SidebarGroup className="p-0 mt-4">
       {/* Section heading: full-width, clearly clickable */}
       <button onClick={toggle} aria-expanded={open}
-        className="group flex items-center gap-3 w-full h-9 px-3 rounded-[10px] text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
-        style={{ color: t.TEXT_MAIN, background: "none", border: "none", cursor: "pointer" }}>
+        className="flex items-center gap-3 w-full h-10 px-3 rounded-2xl text-left transition-shadow duration-200"
+        style={{ color: t.TEXT_MAIN, background: t.BG, boxShadow: open ? t.SHADOW_IN : t.SHADOW_OUT, border: "none", cursor: "pointer" }}>
         <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color: open ? t.ACCENT : t.TEXT_MUTED }} />
         <span className="flex-1 text-[13px] font-semibold">{label}</span>
         <span className="text-[11px] tabular-nums" style={{ color: t.TEXT_MUTED }}>{open ? "" : items.length}</span>
@@ -75,7 +75,7 @@ function ModuleSection({ label, icon: Icon, items, moduleKey, moduleState, setMo
           style={{ color: t.TEXT_MUTED, transform: open ? "rotate(0deg)" : "rotate(-90deg)" }} />
       </button>
       {open && (
-        <SidebarGroupContent className="mt-1 ml-[19px] pl-2" style={{ borderLeft: `1px solid ${t.HAIRLINE}` }}>
+        <SidebarGroupContent className="mt-2 ml-[19px] pl-2" style={{ borderLeft: `1px solid ${t.HAIRLINE}` }}>
           <SidebarMenu className="gap-0.5">
             {items.map(item => <NavRow key={item.url} item={item} t={t} />)}
           </SidebarMenu>
@@ -96,6 +96,9 @@ export function DashboardSidebar() {
     SHADOW_IN:  dark
       ? "inset 2px 2px 5px #120A0C, inset -2px -2px 5px #352027"
       : "inset 2px 2px 5px #D9C6C8, inset -2px -2px 5px #FFFFFF",
+    SHADOW_OUT: dark
+      ? "3px 3px 7px #120A0C, -3px -3px 7px #352027"
+      : "3px 3px 7px #D9C6C8, -3px -3px 7px #FFFFFF",
     TEXT_MAIN:  dark ? "#F0D8DC" : "#3A2428",
     TEXT_MUTED: dark ? "#A07A82" : "#8A7275",
     ACCENT:     dark ? "#E8A0AC" : "#9B2C3F",
