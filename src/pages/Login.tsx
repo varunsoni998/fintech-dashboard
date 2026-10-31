@@ -17,7 +17,7 @@ const N = {
     color: "var(--foreground, #3A2428)",
   },
   btn: {
-    background: "linear-gradient(135deg, #B23A4E, #8A2436)",
+    background: "#9B2C3F",
     boxShadow: "3px 3px 8px #C4ACAF, -2px -2px 6px #FFFFFF",
     borderRadius: "0.75rem",
     border: "none",
@@ -81,13 +81,13 @@ export default function Login() {
           <div
             className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
             style={{
-              background: "linear-gradient(135deg, #B23A4E, #8A2436)",
+              background: "#9B2C3F",
               boxShadow: "6px 6px 14px var(--neu-dark), -6px -6px 14px #FFFFFF",
             }}
           >
             <Sparkles className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold" style={{ color: "var(--foreground, #3A2428)" }}>
+          <h1 className="text-3xl font-semibold" style={{ color: "var(--foreground, #3A2428)" }}>
             BusinessOS
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted-foreground, #9A8285)" }}>

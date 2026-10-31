@@ -378,7 +378,7 @@ export function GlobalSearch() {
           )}
 
           {!query.trim() && (
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: TEXT_MUTED, padding: "4px 16px 8px", textTransform: "uppercase" }}>
+            <p style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, padding: "4px 16px 8px", textTransform: "" }}>
               {recent.length ? "Recent" : "Quick Actions"}
             </p>
           )}
@@ -387,7 +387,7 @@ export function GlobalSearch() {
             ? /* Grouped results */
               Object.entries(grouped).map(([cat, items]) => (
                 <div key={cat}>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: TEXT_MUTED, padding: "8px 16px 4px", textTransform: "uppercase" }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, padding: "8px 16px 4px", textTransform: "" }}>
                     {CATEGORY_LABELS[cat as ResultCategory]}
                   </p>
                   {items.map(item => {

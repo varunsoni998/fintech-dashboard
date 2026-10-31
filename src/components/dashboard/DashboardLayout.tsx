@@ -159,11 +159,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   justifyContent: "space-between", borderBottom: `1px solid ${BORDER}`,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14, color: TEXT_MAIN }}>Notifications</span>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: TEXT_MAIN }}>Notifications</span>
                     {unreadCount > 0 && (
                       <span style={{
-                        background: "linear-gradient(135deg,#B23A4E,#8A2436)",
-                        color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px",
+                        background: "#9B2C3F",
+                        color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 600, padding: "1px 7px",
                       }}>{unreadCount}</span>
                     )}
                   </div>
@@ -178,7 +178,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div style={{ maxHeight: 360, overflowY: "auto", padding: "8px 0" }}>
                   {notifications.length === 0 ? (
                     <div style={{ padding: "32px 16px", textAlign: "center", color: TEXT_MUTED, fontSize: 13 }}>
-                      You're all caught up 🎉
+                      You're all caught up
                     </div>
                   ) : notifications.map(n => {
                     const ts = typeStyles[n.type];
@@ -222,10 +222,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             title={displayName}
             onClick={() => navigate("/profile")}
             style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: "linear-gradient(135deg, #B23A4E, #8A2436)",
-              boxShadow: SHADOW_OUT, display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff",
+              width: 36, height: 36, borderRadius: 999,
+              background: dark ? "#352027" : "#E6D5D7",
+              display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 12, fontWeight: 500, color: TEXT_MAIN,
               cursor: "pointer", flexShrink: 0, userSelect: "none", transition: "opacity 0.15s",
             }}
             onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}

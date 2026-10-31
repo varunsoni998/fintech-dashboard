@@ -40,8 +40,8 @@ const models = [
 const MXMarkdown = ({ content }: { content: string }) => (
   <ReactMarkdown components={{
     p: ({ children }) => <p className="mb-3 last:mb-0 leading-7">{children}</p>,
-    h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-4">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-lg font-bold mb-2 mt-3">{children}</h2>,
+    h1: ({ children }) => <h1 className="text-xl font-semibold mb-3 mt-4">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 mt-3">{children}</h2>,
     h3: ({ children }) => <h3 className="text-base font-semibold mb-2 mt-3">{children}</h3>,
     ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
     ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
@@ -418,15 +418,15 @@ export default function MXAI() {
         <div className="w-64 shrink-0 flex flex-col border-r border-border bg-card">
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2 mb-3">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-fuchsia-500 to-rose-600 flex items-center justify-center">
+              <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
-              <span className="font-bold text-card-foreground tracking-wide">Zeno AI</span>
-              <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[80px]">{userName}</span>
+              <span className="font-semibold text-card-foreground ">Zeno AI</span>
+              <span className="ml-auto text-[11px] text-muted-foreground truncate max-w-[80px]">{userName}</span>
             </div>
             <Button
               onClick={createConversation}
-              className="w-full h-8 text-xs bg-gradient-to-r from-fuchsia-500 to-rose-600 hover:opacity-90 text-white gap-1.5"
+              className="w-full h-8 text-xs bg-primary hover:opacity-90 text-white gap-1.5"
             >
               <Plus className="h-3.5 w-3.5" /> New Chat
             </Button>
@@ -468,7 +468,7 @@ export default function MXAI() {
                   ) : (
                     <>
                       <p className="text-xs font-medium truncate">{conv.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{formatDate(conv.updated_at)}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatDate(conv.updated_at)}</p>
                     </>
                   )}
                 </div>
@@ -495,18 +495,18 @@ export default function MXAI() {
         <div className="flex-1 flex flex-col min-w-0 bg-background">
           {!activeId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-rose-600 flex items-center justify-center shadow-lg">
+              <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center shadow-lg">
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-card-foreground mb-2">Welcome to Zeno AI</h2>
+                <h2 className="text-2xl font-semibold text-card-foreground mb-2">Welcome to Zeno AI</h2>
                 <p className="text-muted-foreground text-sm max-w-sm">
                   Your AI assistant. Start a new chat to get help with itineraries, clients, suppliers, campaigns and more.
                 </p>
               </div>
               <Button
                 onClick={createConversation}
-                className="bg-gradient-to-r from-fuchsia-500 to-rose-600 hover:opacity-90 text-white gap-2"
+                className="bg-primary hover:opacity-90 text-white gap-2"
               >
                 <Plus className="h-4 w-4" /> Start New Chat
               </Button>
@@ -535,7 +535,7 @@ export default function MXAI() {
             <>
               {/* Chat header */}
               <div className="h-12 border-b border-border flex items-center px-4 gap-3 shrink-0">
-                <div className="h-6 w-6 rounded-md bg-gradient-to-br from-fuchsia-500 to-rose-600 flex items-center justify-center">
+                <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center">
                   <Sparkles className="h-3.5 w-3.5 text-white" />
                 </div>
                 <span className="text-sm font-medium text-card-foreground truncate">
@@ -543,10 +543,10 @@ export default function MXAI() {
                 </span>
                 {loading && (
                   <div className="ml-auto flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground animate-pulse">Generating...</span>
+                    <span className="text-[11px] text-muted-foreground animate-pulse">Generating...</span>
                     <button
                       onClick={stopGeneration}
-                      className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-500 border border-red-400/30 hover:border-red-400 rounded-md px-2 py-1 transition-colors"
+                      className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-500 border border-red-400/30 hover:border-red-400 rounded-md px-2 py-1 transition-colors"
                     >
                       <Square className="h-2.5 w-2.5 fill-current" /> Stop
                     </button>
@@ -574,7 +574,7 @@ export default function MXAI() {
                       <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-1 ${
                         msg.error
                           ? "bg-red-500/20 border border-red-500/30"
-                          : "bg-gradient-to-br from-fuchsia-500 to-rose-600"
+                          : "bg-primary"
                       }`}>
                         {msg.error
                           ? <AlertCircle className="h-3.5 w-3.5 text-red-400" />
@@ -586,7 +586,7 @@ export default function MXAI() {
                     <div className={`${msg.role === "user" ? "max-w-[70%]" : "max-w-[80%] w-full"}`}>
                       <div className={`rounded-2xl px-4 py-3 text-sm ${
                         msg.role === "user"
-                          ? "bg-gradient-to-br from-fuchsia-500 to-rose-600 text-white rounded-br-sm"
+                          ? "bg-primary text-white rounded-br-sm"
                           : msg.error
                           ? "bg-red-500/10 border border-red-500/20 text-red-400 rounded-bl-sm"
                           : msg.content === ""
@@ -600,7 +600,7 @@ export default function MXAI() {
                           : <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                         }
                       </div>
-                      <p className={`text-[10px] text-muted-foreground mt-1 ${msg.role === "user" ? "text-right" : ""}`}>
+                      <p className={`text-[11px] text-muted-foreground mt-1 ${msg.role === "user" ? "text-right" : ""}`}>
                         {formatDate(msg.created_at)}
                       </p>
                       {msg.role === "assistant" &&
@@ -618,7 +618,7 @@ export default function MXAI() {
                     </div>
 
                     {msg.role === "user" && (
-                      <div className="h-7 w-7 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-1 text-[11px] font-bold text-card-foreground">
+                      <div className="h-7 w-7 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-1 text-[11px] font-semibold text-card-foreground">
                         {userName.slice(0, 2).toUpperCase()}
                       </div>
                     )}
@@ -636,7 +636,7 @@ export default function MXAI() {
                   >
                     <Sparkles className="h-3 w-3 text-fuchsia-400" />
                     <span className="font-medium">{models.find(m => m.id === selectedModel)?.label}</span>
-                    <span className="text-[10px] text-muted-foreground/60">
+                    <span className="text-[11px] text-muted-foreground/60">
                       · {models.find(m => m.id === selectedModel)?.desc}
                     </span>
                     <ChevronDown className={`h-3 w-3 transition-transform ${modelOpen ? "rotate-180" : ""}`} />
@@ -661,7 +661,7 @@ export default function MXAI() {
                           >
                             <div>
                               <p className="text-xs font-semibold text-card-foreground">{m.label}</p>
-                              <p className="text-[10px] text-muted-foreground">{m.desc}</p>
+                              <p className="text-[11px] text-muted-foreground">{m.desc}</p>
                             </div>
                             {selectedModel === m.id && (
                               <Check className="h-3.5 w-3.5 text-fuchsia-500 shrink-0" />
@@ -691,7 +691,7 @@ export default function MXAI() {
                     className={`h-8 w-8 rounded-xl flex items-center justify-center text-white transition-all shrink-0 ${
                       loading
                         ? "bg-red-500 hover:bg-red-600"
-                        : "bg-gradient-to-br from-fuchsia-500 to-rose-600 hover:opacity-90 disabled:opacity-30"
+                        : "bg-primary hover:opacity-90 disabled:opacity-30"
                     }`}
                   >
                     {loading
@@ -702,7 +702,7 @@ export default function MXAI() {
                     }
                   </button>
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center mt-2">
+                <p className="text-[11px] text-muted-foreground text-center mt-2">
                   Zeno · Powered by BusinessOS AI
                 </p>
               </div>

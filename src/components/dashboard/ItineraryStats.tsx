@@ -32,12 +32,12 @@ export function ItineraryStats() {
               <span className="text-xs text-muted-foreground">{s.label}</span>
             </div>
             <p className="text-lg font-semibold text-card-foreground">{s.value}</p>
-            <p className="text-[10px] text-muted-foreground">{s.sub}</p>
+            <p className="text-[11px] text-muted-foreground">{s.sub}</p>
           </div>
         ))}
       </div>
 
-      <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">Recent</p>
+      <p className="text-xs text-muted-foreground mb-2 font-medium ">Recent</p>
       <div className="space-y-2">
         {recent.map((r, i) => (
           <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">

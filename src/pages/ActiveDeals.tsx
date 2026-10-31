@@ -140,7 +140,7 @@ function DealModal({ deal, suppliers, onClose, onSave, saving }: ModalProps) {
   };
 
   const field = "w-full px-3 py-2 rounded-lg border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-400/40 focus:border-rose-400 transition";
-  const label = "block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide";
+  const label = "block text-xs font-medium text-muted-foreground mb-1  ";
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
@@ -303,7 +303,7 @@ function DealModal({ deal, suppliers, onClose, onSave, saving }: ModalProps) {
             <Button
               type="submit"
               disabled={saving || !form.supplier_name.trim()}
-              className="flex-1 gap-2 bg-gradient-to-r from-rose-600 to-rose-600 text-white hover:opacity-90"
+              className="flex-1 gap-2 bg-primary text-white hover:opacity-90"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {deal?.id ? "Save changes" : "Create deal"}
@@ -464,7 +464,7 @@ function ActiveDeals() {
           </div>
           <Button
             size="sm"
-            className="gap-2 bg-gradient-to-r from-rose-600 to-rose-600 text-white hover:opacity-90"
+            className="gap-2 bg-primary text-white hover:opacity-90"
             onClick={() => setEditingDeal("new")}
           >
             <Plus className="h-3.5 w-3.5" /> New Deal
@@ -605,7 +605,7 @@ function ActiveDeals() {
             {deals.length === 0 && (
               <Button
                 size="sm"
-                className="gap-2 bg-gradient-to-r from-rose-600 to-rose-600 text-white hover:opacity-90 mt-1"
+                className="gap-2 bg-primary text-white hover:opacity-90 mt-1"
                 onClick={() => setEditingDeal("new")}
               >
                 <Plus className="h-3.5 w-3.5" /> New Deal

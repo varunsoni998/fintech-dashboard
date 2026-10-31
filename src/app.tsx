@@ -49,7 +49,7 @@ function AppRoutes() {
         style={{ background: "var(--neu-base, #F3EAEA)" }}>
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 rounded-2xl flex items-center justify-center animate-pulse"
-            style={{ background: "linear-gradient(135deg, #B23A4E, #8A2436)" }} />
+            style={{ background: "#9B2C3F" }} />
           <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>

@@ -446,7 +446,7 @@ const RagPage = () => {
 
               {/* Query */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <label className="text-xs font-medium text-muted-foreground ">
                   What do you need?
                 </label>
                 <textarea
@@ -473,7 +473,7 @@ const RagPage = () => {
 
               {/* Additional context */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <label className="text-xs font-medium text-muted-foreground ">
                   Additional context <span className="normal-case text-muted-foreground/60">(optional)</span>
                 </label>
                 <textarea
@@ -558,7 +558,7 @@ const RagPage = () => {
                         {meta.icon}
                       </span>
                       <span className="flex-1 text-left">{meta.label}</span>
-                      {comingSoon && <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Soon</span>}
+                      {comingSoon && <span className="text-[11px] text-muted-foreground/60">Soon</span>}
                       {!comingSoon && (
                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition ${active ? "border-accent bg-accent" : "border-muted-foreground/40"}`}>
                           {active && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
@@ -635,7 +635,7 @@ const RagPage = () => {
 
               {/* Citations panel */}
               <div className="lg:col-span-1 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+                <p className="text-xs font-medium text-muted-foreground px-1">
                   Sources cited
                 </p>
                 {loading && !result ? (
@@ -658,7 +658,7 @@ const RagPage = () => {
                           <div className="min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{c.title}</p>
                             {c.page && c.page > 0 && (
-                              <p className="text-[10px] text-muted-foreground">Page {c.page}</p>
+                              <p className="text-[11px] text-muted-foreground">Page {c.page}</p>
                             )}
                           </div>
                         </div>

@@ -1,8 +1,8 @@
 import {
   LayoutDashboard, Users, Map, MessageSquare, FileText,
   IndianRupee, TrendingUp, CalendarClock, Megaphone,
-  UserCircle2, Globe, Truck, ChevronDown, ChevronRight,
-  Bot, Handshake, UserCheck, Home, Sparkles, ImagePlus,
+  UserCircle2, Truck, ChevronDown, ChevronRight,
+  Bot, Handshake, UserCheck, Sparkles, ImagePlus, ListTodo,
   Zap, LogOut, Database, FileSpreadsheet, FolderTree, Scale,
 } from "lucide-react";
 import { NavLink } from "../../components/Navlink";
@@ -30,59 +30,51 @@ function saveModuleState(state: Record<string, boolean>) {
 }
 
 type ModuleKey = "webAnalytics" | "leadAnalytics" | "supplierAnalytics" | "houseAutomation" | "mxai";
+type Item = { title: string; url: string; icon: React.ElementType };
+type Theme = { BG: string; SHADOW_IN: string; TEXT_MAIN: string; TEXT_MUTED: string; ACCENT: string };
 
-function ModuleSection({
-  label, icon: Icon, accentColor, items, moduleKey, moduleState, setModuleState,
-  BG, SHADOW_OUT, SHADOW_IN, TEXT_MUTED,
-}: {
-  label: string; icon: React.ElementType; accentColor: string;
-  items: { title: string; url: string; icon: React.ElementType }[];
-  moduleKey: ModuleKey;
-  moduleState: Record<string, boolean>;
-  setModuleState: (s: Record<string, boolean>) => void;
-  BG: string; SHADOW_OUT: string; SHADOW_IN: string; TEXT_MUTED: string;
+// One nav row: 36px tall, icon column 16px, label on one line
+function NavRow({ item, t }: { item: Item; t: Theme }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild>
+        <NavLink to={item.url} end
+          className="flex items-center gap-3 h-9 px-3 rounded-[10px] text-sm transition-colors"
+          style={{ color: t.TEXT_MUTED }}
+          activeClassName=""
+          activeStyle={{ color: t.ACCENT, background: t.BG, boxShadow: t.SHADOW_IN, fontWeight: 500 }}>
+          <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+          <span className="truncate">{item.title}</span>
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function ModuleSection({ label, items, moduleKey, moduleState, setModuleState, t }: {
+  label: string; items: Item[]; moduleKey: ModuleKey;
+  moduleState: Record<string, boolean>; setModuleState: (s: Record<string, boolean>) => void; t: Theme;
 }) {
   const open = moduleState[moduleKey];
-
   const toggle = () => {
     const next = { ...moduleState, [moduleKey]: !open };
     setModuleState(next);
     saveModuleState(next);
   };
+  const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
-    <SidebarGroup className="mt-4">
+    <SidebarGroup className="p-0 mt-6">
       <button onClick={toggle}
-        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-2xl transition-all"
-        style={{ background: BG, boxShadow: open ? SHADOW_IN : SHADOW_OUT }}>
-        <div className={`h-6 w-6 rounded-xl flex items-center justify-center shrink-0 ${accentColor}`}
-          style={{ boxShadow: "2px 2px 5px rgba(0,0,0,0.2)" }}>
-          <Icon className="h-3 w-3 text-white" />
-        </div>
-        <span className="text-[10px] uppercase tracking-widest font-semibold flex-1 text-left"
-          style={{ color: TEXT_MUTED }}>{label}</span>
-        {open
-          ? <ChevronDown  className="h-3 w-3" style={{ color: TEXT_MUTED }} />
-          : <ChevronRight className="h-3 w-3" style={{ color: TEXT_MUTED }} />}
+        className="flex items-center w-full h-6 px-3 mb-1 text-xs font-medium text-left transition-colors"
+        style={{ color: t.TEXT_MUTED, background: "none", border: "none" }}>
+        <span className="flex-1">{label}</span>
+        <Chevron className="h-3.5 w-3.5" strokeWidth={1.5} />
       </button>
-
       {open && (
-        <SidebarGroupContent className="mt-1">
-          <SidebarMenu>
-            {items.map(item => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild>
-                  <NavLink to={item.url} end
-                    className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ml-1 mt-0.5"
-                    style={{ color: TEXT_MUTED }}
-                    activeClassName=""
-                    activeStyle={{ color: "#9B2C3F", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
-                    <item.icon className="h-3.5 w-3.5 shrink-0" />
-                    <span>{item.title}</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
+        <SidebarGroupContent>
+          <SidebarMenu className="gap-0.5">
+            {items.map(item => <NavRow key={item.url} item={item} t={t} />)}
           </SidebarMenu>
         </SidebarGroupContent>
       )}
@@ -96,182 +88,116 @@ export function DashboardSidebar() {
   const { dark } = useDarkMode();
 
   // ── Theme tokens ──────────────────────────────────────────────────────────
-  const BG         = dark ? "#241418" : "#F3EAEA";
-  const SHADOW_OUT = dark
-    ? "3px 3px 7px #120A0C, -3px -3px 7px #352027"
-    : "3px 3px 7px #D9C6C8, -3px -3px 7px #FFFFFF";
-  const SHADOW_IN  = dark
-    ? "inset 2px 2px 5px #120A0C, inset -2px -2px 5px #352027"
-    : "inset 2px 2px 5px #D9C6C8, inset -2px -2px 5px #FFFFFF";
-  const TEXT_MAIN  = dark ? "#F0D8DC" : "#3A2428";
-  const TEXT_MUTED = dark ? "#A07A82" : "#9A8285";
-  const TEXT_FAINT = dark ? "#3A2428" : "#D9C6C8";
+  const t: Theme = {
+    BG:         dark ? "#241418" : "#F3EAEA",
+    SHADOW_IN:  dark
+      ? "inset 2px 2px 5px #120A0C, inset -2px -2px 5px #352027"
+      : "inset 2px 2px 5px #D9C6C8, inset -2px -2px 5px #FFFFFF",
+    TEXT_MAIN:  dark ? "#F0D8DC" : "#3A2428",
+    TEXT_MUTED: dark ? "#A07A82" : "#8A7275",
+    ACCENT:     dark ? "#E8A0AC" : "#9B2C3F",
+  };
+  const HAIRLINE = dark ? "rgba(240,216,220,0.08)" : "rgba(58,36,40,0.08)";
 
-  const sectionProps = { moduleState, setModuleState, BG, SHADOW_OUT, SHADOW_IN, TEXT_MUTED };
-
+  const sectionProps = { moduleState, setModuleState, t };
   const handleSignOut = async () => { await supabase.auth.signOut(); };
 
   return (
-    <Sidebar className="border-r-0" style={{ background: BG }}>
+    <Sidebar className="border-r-0" style={{ background: t.BG }}>
 
       {/* Logo */}
-      <SidebarHeader className="px-4 py-5 border-b-0" style={{ background: BG }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, #B23A4E, #8A2436)", boxShadow: SHADOW_OUT }}>
-            <Sparkles className="h-5 w-5 text-white" />
+      <SidebarHeader className="px-4 pt-5 pb-4 border-b-0" style={{ background: t.BG }}>
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-[10px] flex items-center justify-center shrink-0 font-serif text-base text-white"
+            style={{ background: "#9B2C3F" }}>
+            B
           </div>
-          <div>
-            <h2 className="text-lg font-bold tracking-tight leading-none" style={{ color: TEXT_MAIN }}>BusinessOS</h2>
-            <p className="text-[10px] mt-0.5 tracking-widest uppercase" style={{ color: TEXT_MUTED }}>Dashboard</p>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold leading-tight" style={{ color: t.TEXT_MAIN }}>BusinessOS</h2>
+            <p className="text-xs leading-tight" style={{ color: t.TEXT_MUTED }}>Dashboard</p>
           </div>
         </div>
       </SidebarHeader>
 
       {/* Nav */}
       <SidebarContent
-        className="px-3 py-2 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ background: BG }}>
+        className="px-3 pt-1 pb-4 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ background: t.BG }}>
 
-        {/* Overview */}
-        <SidebarGroup>
+        <SidebarGroup className="p-0">
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink to="/" end
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm transition-all"
-                    style={{ color: TEXT_MUTED }} activeClassName=""
-                    activeStyle={{ color: "#9B2C3F", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
-                    <LayoutDashboard className="h-4 w-4" />
-                    <span>Overview</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <NavRow item={{ title: "Overview", url: "/", icon: LayoutDashboard }} t={t} />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Analytics & Content */}
-        <ModuleSection {...sectionProps}
-          label="Analytics & Content" icon={Globe} accentColor="bg-sky-400" moduleKey="webAnalytics"
+        <ModuleSection {...sectionProps} label="Analytics & Content" moduleKey="webAnalytics"
           items={[
             { title: "Web Analytics", url: "/web-analytics", icon: TrendingUp },
             { title: "Content",       url: "/content",       icon: FileText   },
           ]} />
 
-        {/* Lead Analytics */}
-        <ModuleSection {...sectionProps}
-          label="Lead Analytics" icon={Users} accentColor="bg-emerald-400" moduleKey="leadAnalytics"
+        <ModuleSection {...sectionProps} label="Lead Analytics" moduleKey="leadAnalytics"
           items={[
             { title: "Leads",           url: "/leads",           icon: UserCheck   },
             { title: "Campaign Design", url: "/campaign-design", icon: Megaphone   },
             { title: "Itineraries",     url: "/itineraries",     icon: Map         },
             { title: "Knowledge Base",  url: "/knowledge-base",  icon: Database    },
-            { title: "Clients & PMS",   url: "/client-pms",      icon: UserCircle2 },
+            { title: "Clients & PMS", url: "/client-pms",      icon: UserCircle2 },
           ]} />
 
-        {/* Suppliers */}
-        <ModuleSection {...sectionProps}
-          label="Suppliers" icon={Truck} accentColor="bg-rose-400" moduleKey="supplierAnalytics"
+        <ModuleSection {...sectionProps} label="Suppliers" moduleKey="supplierAnalytics"
           items={[
             { title: "Suppliers",         url: "/suppliers",         icon: Truck     },
             { title: "Supplier Reachout", url: "/supplier-reachout", icon: Bot       },
             { title: "Active Deals",      url: "/active-deals",      icon: Handshake },
           ]} />
 
-        {/* Operations */}
-        <ModuleSection {...sectionProps}
-          label="Operations" icon={Home} accentColor="bg-orange-400" moduleKey="houseAutomation"
+        <ModuleSection {...sectionProps} label="Operations" moduleKey="houseAutomation"
           items={[
-            { title: "Scheduling",       url: "/scheduling",  icon: CalendarClock      },
-            { title: "Todo",             url: "/todo",         icon: CalendarClock      },
-            { title: "Finance KPIs",     url: "/finance-kpis", icon: IndianRupee        },
-            { title: "Quote Generator",  url: "/quotes",       icon: FileSpreadsheet    },
-            { title: "Trip Documents",   url: "/trip-documents", icon: FolderTree       },
-            { title: "Price Compare",    url: "/price-compare",  icon: Scale            },
-            { title: "Team Chat",        url: "/chat",         icon: MessageSquare      },
-            { title: "Creatives",        url: "/creatives",    icon: ImagePlus          },
-            { title: "Automations",      url: "/automations",  icon: Zap                },
+            { title: "Scheduling",      url: "/scheduling",     icon: CalendarClock   },
+            { title: "Todo",           url: "/todo",           icon: ListTodo        },
+            { title: "Finance KPIs",       url: "/finance-kpis",   icon: IndianRupee     },
+            { title: "Quote Generator", url: "/quotes",         icon: FileSpreadsheet },
+            { title: "Trip Documents",  url: "/trip-documents", icon: FolderTree      },
+            { title: "Price Compare",   url: "/price-compare",  icon: Scale           },
+            { title: "Team Chat",       url: "/chat",           icon: MessageSquare   },
+            { title: "Creatives",       url: "/creatives",      icon: ImagePlus       },
+            { title: "Automations",     url: "/automations",    icon: Zap             },
           ]} />
 
-        {/* Zeno AI */}
-        <SidebarGroup className="mt-4">
-          <button
-            onClick={() => {
-              const next = { ...moduleState, mxai: !moduleState.mxai };
-              setModuleState(next);
-              saveModuleState(next);
-            }}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-2xl transition-all"
-            style={{ background: BG, boxShadow: moduleState.mxai ? SHADOW_IN : SHADOW_OUT }}>
-            <div className="h-6 w-6 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: "linear-gradient(135deg, #B85C6E, #9B2C3F)", boxShadow: "2px 2px 5px rgba(0,0,0,0.2)" }}>
-              <Sparkles className="h-3 w-3 text-white" />
-            </div>
-            <span className="text-[10px] uppercase tracking-widest font-semibold flex-1 text-left"
-              style={{ color: TEXT_MUTED }}>Zeno AI</span>
-            {moduleState.mxai
-              ? <ChevronDown  className="h-3 w-3" style={{ color: TEXT_MUTED }} />
-              : <ChevronRight className="h-3 w-3" style={{ color: TEXT_MUTED }} />}
-          </button>
-
-          {moduleState.mxai && (
-            <SidebarGroupContent className="mt-1">
-              <SidebarMenu>
-                {[
-                  { title: "Zeno",      url: "/mxai", icon: Sparkles },
-                  { title: "RAG Model", url: "/rag",  icon: Database },
-                ].map(item => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink to={item.url} end
-                        className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ml-1 mt-0.5"
-                        style={{ color: TEXT_MUTED }} activeClassName=""
-                        activeStyle={{ color: "#9B2C3F", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
-                        <item.icon className="h-3.5 w-3.5 shrink-0" style={{ color: "#9B2C3F" }} />
-                        <span>{item.title}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          )}
-        </SidebarGroup>
+        <ModuleSection {...sectionProps} label="Zeno AI" moduleKey="mxai"
+          items={[
+            { title: "Zeno",      url: "/mxai", icon: Sparkles },
+            { title: "RAG Model", url: "/rag",  icon: Database },
+          ]} />
       </SidebarContent>
 
       {/* User footer */}
-      <div className="p-4 mt-auto" style={{ background: BG }}>
+      <div className="px-4 py-3 mt-auto flex items-center gap-3"
+        style={{ background: t.BG, borderTop: `1px solid ${HAIRLINE}` }}>
         {user && (
-          <div className="mb-3 px-2">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold text-white"
-                style={{ background: "linear-gradient(135deg, #B23A4E, #8A2436)", boxShadow: SHADOW_OUT }}>
-                {(profile?.full_name || user.email || "U")[0].toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium truncate" style={{ color: TEXT_MAIN }}>
-                  {profile?.full_name || user.email?.split("@")[0]}
-                </p>
-                <p className="text-[10px] truncate" style={{ color: TEXT_MUTED }}>
-                  {profile?.role || "member"}
-                </p>
-              </div>
+          <>
+            <div className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-xs font-medium"
+              style={{ background: dark ? "#352027" : "#E6D5D7", color: t.TEXT_MAIN }}>
+              {(profile?.full_name || user.email || "U")[0].toUpperCase()}
             </div>
-          </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium truncate" style={{ color: t.TEXT_MAIN }}>
+                {profile?.full_name || user.email?.split("@")[0]}
+              </p>
+              <p className="text-xs truncate" style={{ color: t.TEXT_MUTED }}>
+                {profile?.role || "member"}
+              </p>
+            </div>
+          </>
         )}
-
-        <button onClick={handleSignOut}
-          className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-xs transition-all"
-          style={{ background: BG, boxShadow: SHADOW_OUT, color: "#E05A5A", border: "none", cursor: "pointer" }}>
-          <LogOut className="h-3.5 w-3.5" />
-          Sign out
+        <button onClick={handleSignOut} title="Sign out"
+          className="h-8 w-8 flex items-center justify-center rounded-[10px] shrink-0 transition-colors hover:bg-black/5"
+          style={{ color: t.TEXT_MUTED, background: "none", border: "none", cursor: "pointer" }}>
+          <LogOut className="h-4 w-4" strokeWidth={1.5} />
         </button>
-
-        <p className="text-[10px] text-center tracking-widest uppercase mt-3" style={{ color: TEXT_FAINT }}>
-          Powered by <span style={{ color: TEXT_MUTED }}>BusinessOS</span>
-        </p>
       </div>
     </Sidebar>
   );

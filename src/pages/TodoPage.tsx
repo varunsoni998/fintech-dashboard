@@ -89,17 +89,17 @@ const TodoItem = ({
           {/* Priority dot */}
           <div className="flex items-center gap-1">
             <div className={`h-1.5 w-1.5 rounded-full ${p.dot}`} />
-            <span className={`text-[10px] font-medium ${p.color}`}>{p.label}</span>
+            <span className={`text-[11px] font-medium ${p.color}`}>{p.label}</span>
           </div>
 
           {/* Category */}
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${categoryColors[todo.category]}`}>
+          <span className={`text-[11px] px-1.5 py-0.5 rounded-full border font-medium ${categoryColors[todo.category]}`}>
             {todo.category}
           </span>
 
           {/* Due date */}
           {todo.due && (
-            <span className={`text-[10px] flex items-center gap-0.5 ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
+            <span className={`text-[11px] flex items-center gap-0.5 ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
               <Calendar className="h-2.5 w-2.5" />
               {new Date(todo.due).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
               {isOverdue && " · Overdue"}
@@ -219,7 +219,7 @@ export default function TodoPage() {
             )}
             <Button
               size="sm"
-              className="h-8 text-xs bg-gradient-to-r from-fuchsia-500 to-rose-600 hover:opacity-90 text-white gap-1.5"
+              className="h-8 text-xs bg-primary hover:opacity-90 text-white gap-1.5"
               onClick={() => setShowForm(v => !v)}
             >
               {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -386,7 +386,7 @@ export default function TodoPage() {
                 <button
                   key={cat}
                   onClick={() => setFilterCategory(cat)}
-                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                  className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
                     filterCategory === cat
                       ? "border-fuchsia-400 text-fuchsia-400 bg-fuchsia-400/10"
                       : "border-border text-muted-foreground hover:border-border/80"

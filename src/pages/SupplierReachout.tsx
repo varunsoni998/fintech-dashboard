@@ -337,7 +337,7 @@ function DealCard({ deal, onAccept, onCounter }: { deal: DealOffer; onAccept: ()
   return (
     <div className="mt-2 border-2 border-amber-200 rounded-2xl overflow-hidden bg-white shadow-md max-w-xs">
       <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-100">
-        <span>🤝</span><span className="text-sm font-bold text-amber-800">Deal Offer</span>
+        <span className="text-sm font-semibold text-amber-800">Deal Offer</span>
       </div>
       <div className="px-4 py-3 space-y-2">
         {([["Room", deal.roomType], ["Nights", String(deal.nights)], ["Rate", deal.rate], ["Inclusions", deal.inclusions], ["Saving", deal.saving]] as [string, string][]).map(([k, v]) => (
@@ -349,11 +349,11 @@ function DealCard({ deal, onAccept, onCounter }: { deal: DealOffer; onAccept: ()
       </div>
       {!accepted ? (
         <div className="flex gap-2 px-4 pb-4 pt-1">
-          <button onClick={() => { setAccepted(true); onAccept(); }} className="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm font-bold py-2 rounded-xl transition-colors">✓ Accept Deal</button>
+          <button onClick={() => { setAccepted(true); onAccept(); }} className="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 rounded-xl transition-colors">✓ Accept Deal</button>
           <button onClick={onCounter} className="flex-1 border border-border bg-muted/40 hover:bg-muted text-card-foreground text-sm font-semibold py-2 rounded-xl transition-colors">↩ Counter</button>
         </div>
       ) : (
-        <div className="px-4 pb-4 pt-1 text-center text-green-600 text-sm font-bold">✓ Deal Accepted!</div>
+        <div className="px-4 pb-4 pt-1 text-center text-green-600 text-sm font-semibold">Deal Accepted</div>
       )}
     </div>
   );
@@ -412,8 +412,8 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
     return (
       <div className="mb-6">
         <div className={`flex items-center gap-2 mb-3 px-1`}>
-          <span className={`text-[10px] font-bold uppercase tracking-widest ${accent}`}>{title}</span>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted`}>{items.length}</span>
+          <span className={`text-[11px] font-semibold   ${accent}`}>{title}</span>
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted`}>{items.length}</span>
         </div>
         <div className="space-y-2">
           {items.map(log => {
@@ -424,39 +424,39 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
               <div key={log.id} className={`rounded-2xl border overflow-hidden transition-all ${overdue ? "border-red-300 bg-red-50/50" : "border-border bg-card"}`}>
                 <div className="flex items-start gap-3 px-4 py-3">
                   {/* avatar */}
-                  <div className={`h-9 w-9 rounded-full bg-gradient-to-br ${grad(log.supplier_name)} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
+                  <div className={`h-9 w-9 rounded-full bg-[#8A5A63] flex items-center justify-center text-[11px] font-semibold text-white shrink-0`}>
                     {initials(log.supplier_name)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-card-foreground truncate">{log.supplier_name}</p>
                       {overdue && (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-500 shrink-0 bg-red-100 px-2 py-0.5 rounded-full">
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-red-500 shrink-0 bg-red-100 px-2 py-0.5 rounded-full">
                           <AlertTriangle className="h-2.5 w-2.5" /> Overdue
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate mt-0.5">{log.supplier_email}</p>
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Clock className="h-2.5 w-2.5" />
                         Quote sent {timeAgo(log.quote_requested_at)}
                       </span>
                       {log.followup_sent_at && (
-                        <span className="flex items-center gap-1 text-[10px] text-blue-600">
+                        <span className="flex items-center gap-1 text-[11px] text-blue-600">
                           <Send className="h-2.5 w-2.5" />
                           Follow-up {timeAgo(log.followup_sent_at)}
                         </span>
                       )}
                       {log.reply_received_at && (
-                        <span className="flex items-center gap-1 text-[10px] text-green-600">
+                        <span className="flex items-center gap-1 text-[11px] text-green-600">
                           <CheckCheck className="h-2.5 w-2.5" />
                           Replied {timeAgo(log.reply_received_at)}
                         </span>
                       )}
                     </div>
                     {log.followup_message && (
-                      <p className="text-[10px] text-muted-foreground mt-1.5 italic line-clamp-2 bg-muted/40 px-2 py-1.5 rounded-lg">
+                      <p className="text-[11px] text-muted-foreground mt-1.5 italic line-clamp-2 bg-muted/40 px-2 py-1.5 rounded-lg">
                         "{log.followup_message}"
                       </p>
                     )}
@@ -470,7 +470,7 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
                       <button
                         onClick={() => handleTrigger(log)}
                         disabled={triggeringId === log.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                       >
                         {triggeringId === log.id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -482,7 +482,7 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
                       <button
                         onClick={() => handleMarkReplied(log)}
                         disabled={markingId === log.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                       >
                         {markingId === log.id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -490,7 +490,7 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
                         Mark as Replied
                       </button>
                     )}
-                    <span className={`flex items-center gap-1 text-[10px] font-semibold ml-auto ${meta.color}`}>
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold ml-auto ${meta.color}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                       {meta.label}
                     </span>
@@ -527,8 +527,8 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
           { label: "Failed",   val: failed.length,   color: "text-red-500",    bg: "bg-red-50    border-red-200"    },
         ].map(s => (
           <div key={s.label} className={`rounded-xl border p-2.5 text-center ${s.bg}`}>
-            <p className={`text-xl font-bold ${s.color}`}>{s.val}</p>
-            <p className={`text-[10px] font-semibold ${s.color}`}>{s.label}</p>
+            <p className={`text-xl font-semibold ${s.color}`}>{s.val}</p>
+            <p className={`text-[11px] font-semibold ${s.color}`}>{s.label}</p>
           </div>
         ))}
       </div>
@@ -536,7 +536,7 @@ function ChasesPanel({ logs, onRefresh }: { logs: FollowUpLog[]; onRefresh: () =
       <Section title="Overdue / Pending"  items={[...pending.filter(l => (Date.now()-new Date(l.quote_requested_at).getTime())>=86400000), ...pending.filter(l => (Date.now()-new Date(l.quote_requested_at).getTime())<86400000)]} accent="text-amber-600" />
       <Section title="Follow-up Sent"     items={sent}    accent="text-blue-600" />
       <Section title="Failed"             items={failed}  accent="text-red-500"  />
-      <Section title="Replied ✓"          items={replied} accent="text-green-600" />
+      <Section title="Replied"          items={replied} accent="text-green-600" />
     </div>
   );
 }
@@ -610,11 +610,11 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
       <motion.div initial={{ opacity:0, scale:0.95, y:16 }} animate={{ opacity:1, scale:1, y:0 }} exit={{ opacity:0, scale:0.95 }}
         className="bg-card rounded-2xl border shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
 
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-amber-50 to-orange-50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-amber-50">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-amber-500 flex items-center justify-center"><Megaphone className="h-5 w-5 text-white" /></div>
             <div>
-              <h2 className="font-bold text-card-foreground text-base">Bulk Broadcast</h2>
+              <h2 className="font-semibold text-card-foreground text-base">Bulk Broadcast</h2>
               <p className="text-xs text-muted-foreground">Personalised messages to multiple suppliers at once</p>
             </div>
           </div>
@@ -624,7 +624,7 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
         <div className="flex items-center px-6 py-3 border-b border-border gap-2 bg-muted/20">
           {(["compose","preview","sending","done"] as const).map((s, i) => (
             <div key={s} className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step===s?"bg-amber-500 text-white":(["compose","preview","sending","done"].indexOf(step)>i)?"bg-green-500 text-white":"bg-muted text-muted-foreground"}`}>{i+1}</div>
+              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${step===s?"bg-amber-500 text-white":(["compose","preview","sending","done"].indexOf(step)>i)?"bg-green-500 text-white":"bg-muted text-muted-foreground"}`}>{i+1}</div>
               <span className={`text-xs font-medium capitalize ${step===s?"text-amber-600":"text-muted-foreground"}`}>{s}</span>
               {i < 3 && <div className="w-8 h-px bg-border mx-1" />}
             </div>
@@ -637,7 +637,7 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
               <div className="w-80 shrink-0 border-r border-border flex flex-col">
                 <div className="p-4 space-y-2 border-b border-border">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Recipients</p>
+                    <p className="text-xs font-semibold text-muted-foreground ">Select Recipients</p>
                     <button onClick={toggleAll} className="text-xs text-amber-600 hover:underline font-medium">{selectedIds.size===filteredS.length?"Deselect All":"Select All"}</button>
                   </div>
                   <div className="relative">
@@ -649,19 +649,19 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
                     className="w-full h-8 rounded-lg border border-border bg-background text-xs px-2 focus:outline-none focus:border-amber-400">
                     {SUPPLIER_TYPES.map(t => <option key={t}>{t}</option>)}
                   </select>
-                  <p className="text-[10px] text-muted-foreground">{selectedIds.size} of {filteredS.length} selected</p>
+                  <p className="text-[11px] text-muted-foreground">{selectedIds.size} of {filteredS.length} selected</p>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {filteredS.map(s => (
                     <label key={s.id} className={`flex items-start gap-3 px-4 py-3 border-b border-border/40 cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(s.id)?"bg-amber-50":""}`}>
                       <input type="checkbox" checked={selectedIds.has(s.id)} onChange={() => toggle(s.id)} className="mt-1 rounded accent-amber-500 h-3.5 w-3.5 shrink-0" />
-                      <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${grad(s.name)} flex items-center justify-center shrink-0 text-[10px] font-bold text-white`}>{initials(s.name)}</div>
+                      <div className={`h-8 w-8 rounded-full bg-[#8A5A63] flex items-center justify-center shrink-0 text-[11px] font-semibold text-white`}>{initials(s.name)}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-card-foreground truncate">{s.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{s.supplier_type||"Supplier"}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{s.supplier_type||"Supplier"}</p>
                         <div className="flex gap-2 mt-0.5">
-                          {s.phone && <span className="text-[9px] text-green-600 flex items-center gap-0.5"><Phone className="h-2.5 w-2.5" />WA</span>}
-                          {s.email && <span className="text-[9px] text-blue-600 flex items-center gap-0.5"><Mail className="h-2.5 w-2.5" />Email</span>}
+                          {s.phone && <span className="text-[11px] text-green-600 flex items-center gap-0.5"><Phone className="h-2.5 w-2.5" />WA</span>}
+                          {s.email && <span className="text-[11px] text-blue-600 flex items-center gap-0.5"><Mail className="h-2.5 w-2.5" />Email</span>}
                         </div>
                       </div>
                     </label>
@@ -671,13 +671,13 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
 
               <div className="flex-1 p-5 space-y-4 overflow-y-auto">
                 <div>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Choose Template</p>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Choose Template</p>
                   <div className="grid grid-cols-2 gap-2">
                     {BULK_TEMPLATES.map(t => (
                       <button key={t.id} onClick={() => { setSelectedTemplate(t); setUseCustom(false); }}
                         className={`text-left rounded-xl border p-3 transition-all ${!useCustom&&selectedTemplate.id===t.id?"border-amber-400 bg-amber-50":"border-border hover:border-amber-300 hover:bg-amber-50/50"}`}>
-                        <div className="flex items-center gap-2 mb-1"><span className="text-base">{t.icon}</span><span className="text-xs font-semibold text-card-foreground">{t.label}</span></div>
-                        <p className="text-[10px] text-muted-foreground leading-relaxed line-clamp-2">{t.prompt.slice(0,60)}…</p>
+                        <div className="flex items-center gap-2 mb-1"><span className="text-xs font-semibold text-card-foreground">{t.label}</span></div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{t.prompt.slice(0,60)}…</p>
                       </button>
                     ))}
                   </div>
@@ -685,7 +685,7 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <input type="checkbox" id="custom-cb" checked={useCustom} onChange={e => setUseCustom(e.target.checked)} className="accent-amber-500" />
-                    <label htmlFor="custom-cb" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer">Custom Message</label>
+                    <label htmlFor="custom-cb" className="text-xs font-semibold text-muted-foreground cursor-pointer">Custom Message</label>
                   </div>
                   <textarea placeholder="Write your own message prompt…" rows={4} value={customMessage}
                     onChange={e => { setCustomMessage(e.target.value); setUseCustom(true); }}
@@ -695,13 +695,13 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
                   <input type="checkbox" id="personalise-cb" checked={personalise} onChange={e => setPersonalise(e.target.checked)} className="accent-rose-500 h-4 w-4" />
                   <div>
                     <label htmlFor="personalise-cb" className="text-xs font-semibold text-rose-800 cursor-pointer">AI Personalisation</label>
-                    <p className="text-[10px] text-rose-600">Each message uniquely tailored to the supplier's profile</p>
+                    <p className="text-[11px] text-rose-600">Each message uniquely tailored to the supplier's profile</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <div className="text-xs text-muted-foreground">{selectedIds.size===0?"No recipients selected":`${selectedIds.size} recipient${selectedIds.size>1?"s":""} · via WhatsApp or Email`}</div>
                   <button onClick={generatePreview} disabled={selectedIds.size===0||(!useCustom?false:!customMessage.trim())}
-                    className="flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold transition-colors disabled:opacity-40 shadow-sm">
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors disabled:opacity-40 shadow-sm">
                     {generatingPreview?<Loader2 className="h-4 w-4 animate-spin"/>:<Sparkles className="h-4 w-4"/>} Preview Messages →
                   </button>
                 </div>
@@ -722,10 +722,10 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
                 {selectedSuppliers.slice(0, 3).map(s => (
                   <div key={s.id} className="rounded-xl border border-border overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/30 border-b border-border">
-                      <div className={`h-7 w-7 rounded-full bg-gradient-to-br ${grad(s.name)} flex items-center justify-center text-[10px] font-bold text-white`}>{initials(s.name)}</div>
+                      <div className={`h-7 w-7 rounded-full bg-[#8A5A63] flex items-center justify-center text-[11px] font-semibold text-white`}>{initials(s.name)}</div>
                       <div>
                         <p className="text-xs font-semibold text-card-foreground">{s.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{s.supplier_type} · {s.phone?"via WhatsApp":"via Email"}</p>
+                        <p className="text-[11px] text-muted-foreground">{s.supplier_type} · {s.phone?"via WhatsApp":"via Email"}</p>
                       </div>
                     </div>
                     <div className="px-4 py-3 bg-[#dcf8c6] text-gray-800 text-sm leading-relaxed whitespace-pre-wrap rounded-b-xl min-h-[60px]">
@@ -739,7 +739,7 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
               </div>
               <div className="flex gap-3 pt-2 border-t border-border">
                 <button onClick={() => setStep("compose")} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-card-foreground hover:bg-muted transition-colors">← Back</button>
-                <button onClick={runBulkSend} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-bold transition-colors shadow-sm">
+                <button onClick={runBulkSend} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors shadow-sm">
                   <Send className="h-4 w-4" /> Send to {selectedIds.size} Supplier{selectedIds.size>1?"s":""}
                 </button>
               </div>
@@ -750,7 +750,7 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
             <div className="flex flex-col items-center justify-center py-16 px-6 gap-5">
               <div className="h-16 w-16 rounded-2xl bg-green-500 flex items-center justify-center shadow-lg"><Send className="h-8 w-8 text-white" /></div>
               <div className="text-center">
-                <p className="text-lg font-bold text-card-foreground">Sending Messages…</p>
+                <p className="text-lg font-semibold text-card-foreground">Sending Messages…</p>
                 <p className="text-sm text-muted-foreground mt-1">{currentIdx} of {selectedSuppliers.length} sent</p>
               </div>
               <div className="w-full max-w-sm bg-muted rounded-full h-2.5 overflow-hidden">
@@ -765,14 +765,14 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
               <div className="flex items-center gap-4">
                 <div className="h-14 w-14 rounded-2xl bg-green-500 flex items-center justify-center shadow-md shrink-0"><CheckCircle2 className="h-8 w-8 text-white" /></div>
                 <div>
-                  <p className="text-lg font-bold text-card-foreground">Broadcast Complete!</p>
+                  <p className="text-lg font-semibold text-card-foreground">Broadcast Complete!</p>
                   <p className="text-sm text-muted-foreground">{sentCount} sent · {failedCount} failed</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {[{val:sentCount,label:"Sent",cls:"bg-green-50 border-green-200 text-green-600"},{val:failedCount,label:"Failed",cls:"bg-red-50 border-red-200 text-red-500"},{val:selectedSuppliers.length,label:"Total",cls:"bg-blue-50 border-blue-200 text-blue-600"}].map(s=>(
                   <div key={s.label} className={`rounded-xl border p-3 text-center ${s.cls}`}>
-                    <p className="text-2xl font-bold">{s.val}</p>
+                    <p className="text-2xl font-semibold">{s.val}</p>
                     <p className="text-[11px] font-medium">{s.label}</p>
                   </div>
                 ))}
@@ -780,16 +780,16 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
               <div className="rounded-xl border border-border overflow-hidden max-h-60 overflow-y-auto">
                 {results.map((r, i) => (
                   <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-border/40 last:border-0">
-                    <div className={`h-7 w-7 rounded-full bg-gradient-to-br ${grad(r.supplier.name)} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>{initials(r.supplier.name)}</div>
+                    <div className={`h-7 w-7 rounded-full bg-[#8A5A63] flex items-center justify-center text-[11px] font-semibold text-white shrink-0`}>{initials(r.supplier.name)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-card-foreground truncate">{r.supplier.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{r.supplier.phone?"WhatsApp opened":"Email opened"}</p>
+                      <p className="text-[11px] text-muted-foreground">{r.supplier.phone?"WhatsApp opened":"Email opened"}</p>
                     </div>
                     {r.status==="sent"?<CheckCircle2 className="h-4 w-4 text-green-500 shrink-0"/>:<AlertCircle className="h-4 w-4 text-red-500 shrink-0"/>}
                   </div>
                 ))}
               </div>
-              <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm transition-colors">Done</button>
+              <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">Done</button>
             </div>
           )}
         </div>
@@ -901,8 +901,8 @@ What would you like to communicate?` }]);
           <div className="px-4 pt-5 pb-3 border-b border-border space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[15px] font-bold text-card-foreground leading-tight">Supplier Outreach</h2>
-                <p className="text-[10px] text-muted-foreground">AI messaging · deal tracking · follow-up automation</p>
+                <h2 className="text-[15px] font-semibold text-card-foreground leading-tight">Supplier Outreach</h2>
+                <p className="text-[11px] text-muted-foreground">AI messaging · deal tracking · follow-up automation</p>
               </div>
               <div className="flex gap-1.5">
                 <button onClick={() => setShowBulk(true)}
@@ -926,7 +926,7 @@ What would you like to communicate?` }]);
                   className={`flex-1 text-[11px] py-1.5 rounded-lg font-semibold transition-all relative ${filterTab===tab?"bg-card shadow-sm text-card-foreground":"text-muted-foreground hover:text-card-foreground"}`}>
                   {tab}
                   {tab === "Chases" && pendingChases > 0 && (
-                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{pendingChases}</span>
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center">{pendingChases}</span>
                   )}
                 </button>
               ))}
@@ -936,11 +936,11 @@ What would you like to communicate?` }]);
           {/* Bulk broadcast CTA banner — hidden on Chases tab */}
           {filterTab !== "Chases" && (
             <button onClick={() => setShowBulk(true)}
-              className="mx-3 mt-3 flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:opacity-90 transition-opacity shadow-sm">
+              className="mx-3 mt-3 flex items-center gap-3 p-3 rounded-xl bg-primary text-white hover:opacity-90 transition-opacity shadow-sm">
               <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0"><Users className="h-4 w-4" /></div>
               <div className="text-left flex-1">
-                <p className="text-xs font-bold">Bulk Broadcast</p>
-                <p className="text-[10px] text-white/80">{suppliers.length} suppliers · AI personalised</p>
+                <p className="text-xs font-semibold">Bulk Broadcast</p>
+                <p className="text-[11px] text-white/80">{suppliers.length} suppliers · AI personalised</p>
               </div>
               <MessageSquare className="h-4 w-4 opacity-70" />
             </button>
@@ -948,11 +948,11 @@ What would you like to communicate?` }]);
 
           {/* n8n follow-up automation info banner — shown on Chases tab */}
           {filterTab === "Chases" && (
-            <div className="mx-3 mt-3 flex items-start gap-3 p-3 rounded-xl bg-gradient-to-r from-[#0D5C5A] to-emerald-700 text-white shadow-sm">
+            <div className="mx-3 mt-3 flex items-start gap-3 p-3 rounded-xl bg-primary text-white shadow-sm">
               <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0"><Bell className="h-4 w-4" /></div>
               <div className="text-left flex-1">
-                <p className="text-xs font-bold">Auto Follow-up Active</p>
-                <p className="text-[10px] text-white/80">n8n watches for unanswered quotes and auto-emails after 24 hrs</p>
+                <p className="text-xs font-semibold">Auto Follow-up Active</p>
+                <p className="text-[11px] text-white/80">n8n watches for unanswered quotes and auto-emails after 24 hrs</p>
               </div>
             </div>
           )}
@@ -973,15 +973,15 @@ What would you like to communicate?` }]);
                   className={`w-full text-left px-4 py-3.5 border-b border-border/40 transition-all hover:bg-muted/30 ${isActive?"bg-rose-50 border-l-[3px] border-l-violet-500":""}`}>
                   <div className="flex items-start gap-3">
                     <div className="relative">
-                      <div className={`h-10 w-10 rounded-full bg-gradient-to-br ${grad(s.name)} flex items-center justify-center shrink-0 text-[11px] font-bold text-white shadow-sm`}>{initials(s.name)}</div>
+                      <div className={`h-10 w-10 rounded-full bg-[#8A5A63] flex items-center justify-center shrink-0 text-[11px] font-semibold text-white shadow-sm`}>{initials(s.name)}</div>
                       {hasChase && <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 border-2 border-card" title="Pending follow-up" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <p className="text-sm font-semibold text-card-foreground truncate">{s.name}</p>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{idx%2===0?"2d ago":"4d ago"}</span>
+                        <span className="text-[11px] text-muted-foreground shrink-0">{idx%2===0?"2d ago":"4d ago"}</span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">🏔️ {s.supplier_type||"Supplier"} · {s.address||"—"}</p>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">{s.supplier_type||"Supplier"} · {s.address||"—"}</p>
                     </div>
                   
                   </div>
@@ -990,7 +990,7 @@ What would you like to communicate?` }]);
             })}
           </div>
           <div className="p-3 border-t border-border text-center">
-            <p className="text-[10px] text-muted-foreground">{suppliers.length} suppliers from Supabase</p>
+            <p className="text-[11px] text-muted-foreground">{suppliers.length} suppliers from Supabase</p>
           </div>
         </div>
 
@@ -1002,7 +1002,7 @@ What would you like to communicate?` }]);
                 <div className="flex items-center gap-3">
                   <div className="h-9 w-9 rounded-xl bg-[#0D5C5A] flex items-center justify-center"><Bell className="h-5 w-5 text-white" /></div>
                   <div>
-                    <h2 className="font-bold text-card-foreground text-base">Follow-up Chases</h2>
+                    <h2 className="font-semibold text-card-foreground text-base">Follow-up Chases</h2>
                     <p className="text-xs text-muted-foreground">n8n auto follow-up · 24-hr no-reply detection · logged chases</p>
                   </div>
                 </div>
@@ -1017,15 +1017,15 @@ What would you like to communicate?` }]);
           <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "#ece5dd" }}>
             {!selected ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8">
-                <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center shadow-xl">
+                <div className="h-20 w-20 rounded-3xl bg-primary flex items-center justify-center shadow-xl">
                   <Bot className="h-10 w-10 text-white" />
                 </div>
                 <div className="text-center">
-                  <h2 className="text-2xl font-bold text-foreground">Supplier WhatsApp Automation</h2>
+                  <h2 className="text-2xl font-semibold text-foreground">Supplier WhatsApp Automation</h2>
                   <p className="text-sm text-muted-foreground mt-1">AI-powered messaging · deal tracking · real-time quotes</p>
                 </div>
                 <button onClick={() => setShowBulk(true)}
-                  className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm transition-colors shadow-lg">
+                  className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors shadow-lg">
                   <Megaphone className="h-4 w-4" /> Start Bulk Broadcast
                 </button>
                 <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
@@ -1039,9 +1039,9 @@ What would you like to communicate?` }]);
                 <div className="px-5 py-3 border-b border-black/10 bg-[#075e54] shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-full bg-gradient-to-br ${grad(selected.name)} flex items-center justify-center text-[11px] font-bold text-white shadow-sm`}>{initials(selected.name)}</div>
+                      <div className={`h-10 w-10 rounded-full bg-[#8A5A63] flex items-center justify-center text-[11px] font-semibold text-white shadow-sm`}>{initials(selected.name)}</div>
                       <div>
-                        <p className="text-sm font-bold text-white">{selected.name}</p>
+                        <p className="text-sm font-semibold text-white">{selected.name}</p>
                         <div className="flex items-center gap-2 text-[11px] text-green-300">
                           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />Online</span>
                           {selected.phone && <span className="text-white/70">· {selected.phone}</span>}
@@ -1051,11 +1051,11 @@ What would you like to communicate?` }]);
                     <div className="flex items-center gap-2">
                       <button onClick={() => doSend("Please send us your best rates and deal offer.")}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors border border-white/20">
-                        📋 Request Quote
+                        Request Quote
                       </button>
                       <button onClick={() => doSend("We'd like to negotiate better rates. What's your best deal with inclusions?")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-400 hover:bg-green-300 text-green-900 text-xs font-bold transition-colors shadow-sm">
-                        🤝 Negotiate
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-400 hover:bg-green-300 text-green-900 text-xs font-semibold transition-colors shadow-sm">
+                        Negotiate
                       </button>
                       <button onClick={() => selectSupplier(selected)} className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors">
                         <RefreshCw className="h-3.5 w-3.5" />
@@ -1078,7 +1078,7 @@ What would you like to communicate?` }]);
                               onAccept={() => doSend("We accept the deal! Please confirm the booking details.")}
                               onCounter={() => doSend("We'd like to counter the offer. Can you improve the rate or add more inclusions?")} />
                           )}
-                          <div className={"flex items-center gap-1 mt-1 text-[10px] text-gray-500 "+(msg.role==="user"?"flex-row-reverse":"")}>
+                          <div className={"flex items-center gap-1 mt-1 text-[11px] text-gray-500 "+(msg.role==="user"?"flex-row-reverse":"")}>
                             <Clock className="h-2.5 w-2.5" /><span>{fmt(msg.timestamp)}</span>
                             {msg.role==="user"&&<CheckCheck className="h-2.5 w-2.5 text-blue-500"/>}
                           </div>
@@ -1106,7 +1106,7 @@ What would you like to communicate?` }]);
                       value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
                       onKeyDown={e => { if(e.key==="Enter") handleGenerate(); }} />
                     <button onClick={handleGenerate} disabled={generating||!aiPrompt.trim()}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-colors disabled:opacity-40 flex items-center gap-1.5 shrink-0">
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors disabled:opacity-40 flex items-center gap-1.5 shrink-0">
                       {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Generate
                     </button>
                   </div>
@@ -1131,46 +1131,46 @@ What would you like to communicate?` }]);
         {selected && !showChases && (
           <div className="w-72 shrink-0 border-l border-border bg-card flex flex-col overflow-y-auto">
             <div className="px-5 py-4 border-b border-border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">This Month</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-3">This Month</p>
               <div className="grid grid-cols-2 gap-2.5">
                 {[{val:"24",label:"Messages Sent",color:"text-green-600",trend:"↑ Auto"},{val:"7",label:"Deals Closed",color:"text-green-600",trend:"↑ 3 new"},{val:"₹2.1L",label:"Savings",color:"text-green-600",trend:"↑ 18%"},{val:"3h",label:"Avg Response",color:"text-red-500",trend:"↓ 12%"}].map(s=>(
                   <div key={s.label} className="rounded-xl bg-muted/40 p-3 space-y-1 border border-border/50">
-                    <p className="text-xl font-bold text-card-foreground">{s.val}</p>
-                    <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
-                    <p className={`text-[10px] font-semibold ${s.color}`}>{s.trend}</p>
+                    <p className="text-xl font-semibold text-card-foreground">{s.val}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">{s.label}</p>
+                    <p className={`text-[11px] font-semibold ${s.color}`}>{s.trend}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="px-5 py-4 border-b border-border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Active Deals</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-3">Active Deals</p>
               <div className="space-y-2">
                 {ACTIVE_DEALS.map(d => (
                   <div key={d.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-muted/20 hover:bg-amber-50 hover:border-amber-200 transition-all cursor-pointer">
-                    <span className="text-xl shrink-0">{d.icon}</span>
+                    
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-card-foreground truncate">{d.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{d.sub}</p>
+                      <p className="text-[11px] text-muted-foreground">{d.sub}</p>
                     </div>
-                    <span className="text-xs font-bold text-green-600 shrink-0">{d.saving}</span>
+                    <span className="text-xs font-semibold text-green-600 shrink-0">{d.saving}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="px-5 py-4 border-b border-border flex-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Quick Templates</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-3">Quick Templates</p>
               <div className="space-y-2">
                 {QUICK_TEMPLATES.map(t => (
                   <button key={t.label} onClick={() => doSend(t.prompt)}
                     className="w-full text-left rounded-xl border border-border p-3 hover:bg-amber-50 hover:border-amber-300 transition-all group">
                     <div className="flex items-start gap-2.5">
-                      <span className="text-base shrink-0">{t.icon}</span>
+                      
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-card-foreground">{t.label}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{t.desc}</p>
-                        <p className="text-[10px] text-amber-600 font-medium mt-1 group-hover:underline">→ Use template</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{t.desc}</p>
+                        <p className="text-[11px] text-amber-600 font-medium mt-1 group-hover:underline">→ Use template</p>
                       </div>
                     </div>
                   </button>
@@ -1180,7 +1180,7 @@ What would you like to communicate?` }]);
 
             <div className="px-5 py-4 border-b border-border shrink-0">
               <div className="rounded-2xl bg-[#1a2332] p-4 space-y-3">
-                <div className="flex items-center gap-2"><span className="text-base">📣</span><p className="text-sm font-bold text-white">Bulk Message</p></div>
+                <div className="flex items-center gap-2"><p className="text-sm font-semibold text-white">Bulk Message</p></div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">Send automated messages to all suppliers of a category at once.</p>
                 <select value={bulkCategory} onChange={e => setBulkCategory(e.target.value)}
                   className="w-full h-9 rounded-xl bg-[#243044] border border-white/10 text-white text-xs px-3 focus:outline-none focus:border-amber-400"
@@ -1188,7 +1188,7 @@ What would you like to communicate?` }]);
                   {SUPPLIER_TYPES.filter(t => t !== "All Types").map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <button onClick={() => setShowBulk(true)}
-                  className="w-full h-10 rounded-xl bg-[#25d366] hover:bg-[#1da851] text-white text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-md">
+                  className="w-full h-10 rounded-xl bg-[#25d366] hover:bg-[#1da851] text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-md">
                   <Send className="h-3.5 w-3.5" /> Send Broadcast
                 </button>
               </div>
@@ -1197,21 +1197,21 @@ What would you like to communicate?` }]);
             {/* Follow-up status for selected supplier */}
             {followUpLogs.filter(l => l.supplier_id === selected.id).length > 0 && (
               <div className="px-5 py-4 border-b border-border">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Follow-up Status</p>
+                <p className="text-[11px] font-semibold text-muted-foreground mb-2">Follow-up Status</p>
                 <div className="space-y-1.5">
                   {followUpLogs.filter(l => l.supplier_id === selected.id).slice(0,3).map(l => {
                     const meta = FOLLOW_STATUS_META[l.followup_status];
                     return (
                       <div key={l.id} className="flex items-center justify-between px-2.5 py-2 rounded-lg bg-muted/40 border border-border/50">
-                        <span className="text-[10px] text-muted-foreground">{timeAgo(l.quote_requested_at)}</span>
-                        <span className={`flex items-center gap-1 text-[10px] font-semibold ${meta.color}`}>
+                        <span className="text-[11px] text-muted-foreground">{timeAgo(l.quote_requested_at)}</span>
+                        <span className={`flex items-center gap-1 text-[11px] font-semibold ${meta.color}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
                         </span>
                       </div>
                     );
                   })}
                   <button onClick={() => setFilterTab("Chases")}
-                    className="w-full text-[10px] text-[#0D5C5A] font-semibold hover:underline text-center pt-1">
+                    className="w-full text-[11px] text-[#0D5C5A] font-semibold hover:underline text-center pt-1">
                     View all chases →
                   </button>
                 </div>
@@ -1219,14 +1219,14 @@ What would you like to communicate?` }]);
             )}
 
             <div className="px-5 py-4">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Supplier Info</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-3">Supplier Info</p>
               <div className="space-y-2 text-xs text-muted-foreground">
-                {selected.company   && <p className="flex items-center gap-2">🏢 {selected.company}</p>}
+                {selected.company   && <p className="flex items-center gap-2">{selected.company}</p>}
                 {selected.phone     && <p className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 shrink-0" />{selected.phone}</p>}
                 {selected.email     && <p className="flex items-center gap-2 break-all"><Mail className="h-3.5 w-3.5 shrink-0" />{selected.email}</p>}
                 {selected.address   && <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 shrink-0" />{selected.address}</p>}
                 {selected.supplier_type && (
-                  <span className={"mt-2 text-[10px] font-semibold px-2.5 py-1 rounded-full inline-block "+(TYPE_COLORS[selected.supplier_type]??"bg-gray-100 text-gray-600")}>
+                  <span className={"mt-2 text-[11px] font-semibold px-2.5 py-1 rounded-full inline-block "+(TYPE_COLORS[selected.supplier_type]??"bg-gray-100 text-gray-600")}>
                     {selected.supplier_type}
                   </span>
                 )}

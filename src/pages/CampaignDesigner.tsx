@@ -302,7 +302,7 @@ export default function CampaignDesigner() {
       }
       if (!rows.length) { alert("No valid rows found."); return; }
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, { method: "POST", headers: supabase_headers, body: JSON.stringify(rows) });
-      if (res.ok) { alert(`✅ ${rows.length} leads imported!`); fetchLeads(); } else { alert("Import failed."); }
+      if (res.ok) { alert(`${rows.length} leads imported`); fetchLeads(); } else { alert("Import failed."); }
     } catch (e) { console.error("CSV error:", e); }
     finally { setImporting(false); if (csvRef.current) csvRef.current.value = ""; }
   };
@@ -365,7 +365,7 @@ export default function CampaignDesigner() {
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }}
               onClick={() => setMode("leads")}
               className="group relative rounded-2xl border-2 border-border hover:border-emerald-400 bg-card p-8 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1">
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-5 shadow-md group-hover:scale-110 transition-transform">
+              <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center mb-5 shadow-md transition-transform">
                 <Users className="h-7 w-7 text-white" />
               </div>
               <h2 className="text-xl font-serif text-card-foreground mb-2">Campaign for Leads</h2>
@@ -388,7 +388,7 @@ export default function CampaignDesigner() {
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.12 }}
               onClick={() => setMode("suppliers")}
               className="group relative rounded-2xl border-2 border-border hover:border-blue-400 bg-card p-8 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1">
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-rose-600 flex items-center justify-center mb-5 shadow-md group-hover:scale-110 transition-transform">
+              <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center mb-5 shadow-md transition-transform">
                 <Truck className="h-7 w-7 text-white" />
               </div>
               <h2 className="text-xl font-serif text-card-foreground mb-2">Campaign for Suppliers</h2>
@@ -411,14 +411,14 @@ export default function CampaignDesigner() {
           {!campLoading && campaigns.length > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
               className="mt-12 max-w-3xl mx-auto">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recent Campaigns</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-3">Recent Campaigns</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {campaigns.slice(0, 3).map(c => {
                   const st = ST[c.status] || ST.Draft;
                   return (
                     <div key={c.id} className="rounded-xl border bg-card p-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 ${st.color}`}>
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 ${st.color}`}>
                           <span className={"h-1.5 w-1.5 rounded-full " + st.dot} />{c.status}
                         </span>
                       </div>
@@ -474,7 +474,7 @@ export default function CampaignDesigner() {
               {isLeads ? <Truck className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
               Switch to {isLeads ? "Suppliers" : "Leads"}
             </Button>
-            <Button size="sm" className={"gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600") + " text-white hover:opacity-90"}
+            <Button size="sm" className={"gap-2 " + (isLeads ? "bg-primary" : "bg-primary") + " text-white hover:opacity-90"}
               onClick={() => { resetCampaign(); setShowModal(true); }}>
               <Plus className="h-3.5 w-3.5" /> New {modeLabel} Campaign
             </Button>
@@ -492,7 +492,7 @@ export default function CampaignDesigner() {
             <motion.div key={s.label} {...fade(i * 0.05)} className="rounded-xl border bg-card p-4 shadow-card">
               <div className="flex items-center gap-2 mb-1"><s.icon className="h-4 w-4 text-accent" /><span className="text-xs text-muted-foreground">{s.label}</span></div>
               <p className="text-2xl font-serif text-card-foreground">{campLoading ? "—" : s.value}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>
             </motion.div>
           ))}
         </div>
@@ -523,7 +523,7 @@ export default function CampaignDesigner() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="text-sm font-semibold text-card-foreground truncate">{c.name}</h4>
-                              <span className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${st.color}`}><span className={"h-1.5 w-1.5 rounded-full " + st.dot} />{c.status}</span>
+                              <span className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${st.color}`}><span className={"h-1.5 w-1.5 rounded-full " + st.dot} />{c.status}</span>
                             </div>
                             {c.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{c.description}</p>}
                             <div className="flex items-center gap-4 mt-2 flex-wrap">
@@ -532,7 +532,7 @@ export default function CampaignDesigner() {
                               {c.start_date && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Calendar className="h-3 w-3" />{c.start_date}</span>}
                             </div>
                             <div className="flex gap-1.5 mt-2">
-                              {(c.channels || []).map(ch => { const cfg = CH[ch as keyof typeof CH]; if (!cfg) return null; const Icon = cfg.icon; return <span key={ch} className={"flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border " + cfg.light}><Icon className="h-3 w-3" />{cfg.label}</span>; })}
+                              {(c.channels || []).map(ch => { const cfg = CH[ch as keyof typeof CH]; if (!cfg) return null; const Icon = cfg.icon; return <span key={ch} className={"flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border " + cfg.light}><Icon className="h-3 w-3" />{cfg.label}</span>; })}
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -545,7 +545,7 @@ export default function CampaignDesigner() {
                         {isExp && (
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-border bg-muted/10">
                             <div className="p-5">
-                              <p className="text-xs font-semibold text-muted-foreground mb-4 uppercase tracking-wider">Sequence Timeline</p>
+                              <p className="text-xs font-semibold text-muted-foreground mb-4 ">Sequence Timeline</p>
                               {seqs.length === 0 ? <p className="text-xs text-muted-foreground italic">No sequences configured.</p> : (
                                 <div className="space-y-3">
                                   {seqs.map((seq, si) => { const cfg = CH[seq.channel as keyof typeof CH] || CH.email; const Icon = cfg.icon; return (
@@ -555,7 +555,7 @@ export default function CampaignDesigner() {
                                         {si < seqs.length - 1 && <div className="w-px h-full bg-border mt-1 min-h-[20px]" />}
                                       </div>
                                       <div className="flex-1 pb-3">
-                                        <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-white bg-accent px-2 py-0.5 rounded-full">Day {seq.day_number}</span><span className="text-xs font-medium text-card-foreground capitalize">{seq.channel}</span></div>
+                                        <div className="flex items-center gap-2"><span className="text-[11px] font-semibold text-white bg-accent px-2 py-0.5 rounded-full">Day {seq.day_number}</span><span className="text-xs font-medium text-card-foreground capitalize">{seq.channel}</span></div>
                                         {seq.subject && <p className="text-xs font-medium text-card-foreground mt-1">{seq.subject}</p>}
                                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{seq.message}</p>
                                       </div>
@@ -590,11 +590,11 @@ export default function CampaignDesigner() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-accent shrink-0 mt-0.5" />
                   </div>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full font-medium">{t.conversion_rate}</span>
-                    <span className="text-[10px] text-muted-foreground">{Array.isArray(t.sequences) ? t.sequences.length : 0} steps</span>
+                    <span className="text-[11px] bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full font-medium">{t.conversion_rate}</span>
+                    <span className="text-[11px] text-muted-foreground">{Array.isArray(t.sequences) ? t.sequences.length : 0} steps</span>
                   </div>
                   <div className="flex gap-1 mt-2">
-                    {(t.channels || []).map(ch => { const cfg = CH[ch as keyof typeof CH]; if (!cfg) return null; const Icon = cfg.icon; return <span key={ch} className={"flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border " + cfg.light}><Icon className="h-2.5 w-2.5" /></span>; })}
+                    {(t.channels || []).map(ch => { const cfg = CH[ch as keyof typeof CH]; if (!cfg) return null; const Icon = cfg.icon; return <span key={ch} className={"flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border " + cfg.light}><Icon className="h-2.5 w-2.5" /></span>; })}
                   </div>
                 </motion.div>
               ))}
@@ -619,19 +619,19 @@ export default function CampaignDesigner() {
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-3 p-3 rounded-xl border bg-background">
                     <div className={"h-8 w-8 rounded-lg " + s.bg + " flex items-center justify-center shrink-0"}><s.icon className={"h-4 w-4 " + s.color} /></div>
-                    <div><p className="text-xl font-semibold text-card-foreground">{leadsLoading ? "—" : s.value}</p><p className="text-[10px] text-muted-foreground">{s.label}</p></div>
+                    <div><p className="text-xl font-semibold text-card-foreground">{leadsLoading ? "—" : s.value}</p><p className="text-[11px] text-muted-foreground">{s.label}</p></div>
                   </div>
                 ))}
               </div>
               {!leadsLoading && leads.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recent Leads</p>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Recent Leads</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {leads.slice(0, 6).map(lead => (
                       <div key={lead.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border bg-muted/20">
-                        <div className="h-8 w-8 rounded-full bg-accent/10 flex items-center justify-center shrink-0 text-xs font-bold text-accent">{lead.name?.charAt(0).toUpperCase()}</div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium text-card-foreground truncate">{lead.name}</p><p className="text-[10px] text-muted-foreground truncate">{lead.destination || lead.email || "—"}</p></div>
-                        <span className={"text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 " + (stageStyle[lead.stage] || stageStyle["New"])}>{lead.stage}</span>
+                        <div className="h-8 w-8 rounded-full bg-accent/10 flex items-center justify-center shrink-0 text-xs font-semibold text-accent">{lead.name?.charAt(0).toUpperCase()}</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium text-card-foreground truncate">{lead.name}</p><p className="text-[11px] text-muted-foreground truncate">{lead.destination || lead.email || "—"}</p></div>
+                        <span className={"text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 " + (stageStyle[lead.stage] || stageStyle["New"])}>{lead.stage}</span>
                       </div>
                     ))}
                   </div>
@@ -661,13 +661,13 @@ export default function CampaignDesigner() {
                       </span>
                     ))}
                   </div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recent Suppliers</p>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Recent Suppliers</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {suppliers.slice(0, 6).map(s => (
                       <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border bg-muted/20">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-xs font-bold text-blue-600">{s.name?.charAt(0).toUpperCase()}</div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium text-card-foreground truncate">{s.name}</p><p className="text-[10px] text-muted-foreground truncate">{s.company_name || s.supplier_type || "—"}</p></div>
-                        {s.supplier_type && <span className={"text-[10px] font-medium px-1.5 py-0.5 rounded-full border shrink-0 " + (TYPE_COLORS[s.supplier_type] ?? "bg-gray-50 text-gray-600 border-gray-200")} style={{maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.supplier_type.split("/")[0].trim()}</span>}
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-xs font-semibold text-blue-600">{s.name?.charAt(0).toUpperCase()}</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium text-card-foreground truncate">{s.name}</p><p className="text-[11px] text-muted-foreground truncate">{s.company_name || s.supplier_type || "—"}</p></div>
+                        {s.supplier_type && <span className={"text-[11px] font-medium px-1.5 py-0.5 rounded-full border shrink-0 " + (TYPE_COLORS[s.supplier_type] ?? "bg-gray-50 text-gray-600 border-gray-200")} style={{maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.supplier_type.split("/")[0].trim()}</span>}
                       </div>
                     ))}
                   </div>
@@ -685,7 +685,7 @@ export default function CampaignDesigner() {
               <div className="h-8 w-8 rounded-lg bg-accent/10 flex items-center justify-center"><ListChecks className="h-4 w-4 text-accent" /></div>
               <div><h3 className="font-serif text-base text-card-foreground">Sequence Builder</h3><p className="text-xs text-muted-foreground">Default outreach flow</p></div>
             </div>
-            <Button size="sm" className={"gap-1.5 text-white hover:opacity-90 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600")} onClick={() => { resetCampaign(); setShowModal(true); }}>
+            <Button size="sm" className={"gap-1.5 text-white hover:opacity-90 " + (isLeads ? "bg-primary" : "bg-primary")} onClick={() => { resetCampaign(); setShowModal(true); }}>
               <Plus className="h-3.5 w-3.5" /> Add Sequence
             </Button>
           </div>
@@ -695,7 +695,7 @@ export default function CampaignDesigner() {
                 <div className="flex flex-col items-center w-16">
                   <div className={"w-10 h-10 " + s.color + " rounded-xl flex items-center justify-center shadow-sm"}><Icon className="h-4 w-4 text-white" /></div>
                   <span className="text-xs mt-1 text-card-foreground font-medium text-center">{s.label}</span>
-                  <span className="text-[10px] text-muted-foreground">{s.day}</span>
+                  <span className="text-[11px] text-muted-foreground">{s.day}</span>
                 </div>
                 {i < DEFAULT_STEPS.length - 1 && <div className="w-8 h-px bg-border mx-1 mb-5" />}
               </div>
@@ -704,7 +704,7 @@ export default function CampaignDesigner() {
               <div className="w-8 h-px bg-border mx-1 mb-5" />
               <div className="flex flex-col items-center w-16">
                 <button onClick={() => { resetCampaign(); setShowModal(true); }} className="w-10 h-10 rounded-xl border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-colors flex items-center justify-center text-muted-foreground hover:text-accent"><Plus className="h-4 w-4" /></button>
-                <span className="text-xs mt-1 text-muted-foreground">Add Step</span><span className="text-[10px] opacity-0">x</span>
+                <span className="text-xs mt-1 text-muted-foreground">Add Step</span><span className="text-[11px] opacity-0">x</span>
               </div>
             </div>
           </div>
@@ -781,7 +781,7 @@ export default function CampaignDesigner() {
                   </div>
                   <div className="flex gap-2 mt-5">
                     <Button variant="outline" size="sm" className="flex-1" onClick={closeAddModal}>Cancel</Button>
-                    <Button size="sm" className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white" onClick={handleSaveLead} disabled={addingLead}>
+                    <Button size="sm" className="flex-1 bg-primary text-white" onClick={handleSaveLead} disabled={addingLead}>
                       {addingLead ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Saving…</> : isEditing ? "Update Lead" : "Save Lead"}
                     </Button>
                   </div>
@@ -817,7 +817,7 @@ export default function CampaignDesigner() {
                 {[{ n:1 as const, label:"Details & Messages" }, { n:2 as const, label:"Add " + modeLabel }, { n:3 as const, label:"Sequences" }].map((s, i) => (
                   <div key={s.n} className="flex items-center gap-2">
                     <button onClick={() => setStep(s.n)} className={"flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors " + (step === s.n ? "bg-accent text-accent-foreground" : step > s.n ? "text-green-600" : "text-muted-foreground")}>
-                      {step > s.n ? <Check className="h-3.5 w-3.5" /> : <span className={"h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold " + (step === s.n ? "bg-white/20" : "bg-muted")}>{s.n}</span>}
+                      {step > s.n ? <Check className="h-3.5 w-3.5" /> : <span className={"h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-semibold " + (step === s.n ? "bg-white/20" : "bg-muted")}>{s.n}</span>}
                       {s.label}
                     </button>
                     {i < 2 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
@@ -831,7 +831,7 @@ export default function CampaignDesigner() {
                 {step === 1 && (
                   <div className="space-y-5">
                     <div className="space-y-3">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Campaign Details</p>
+                      <p className="text-xs font-semibold text-muted-foreground ">Campaign Details</p>
                       <div><label className="text-xs font-medium text-muted-foreground mb-1.5 block">Campaign Name *</label><Input placeholder={"e.g. " + (isLeads ? "Spring Sale 2025" : "Vendor Partnership Drive Q2")} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="h-10" /></div>
                       <div><label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label><textarea placeholder="Campaign goal…" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none" /></div>
                       <div className="grid grid-cols-2 gap-3">
@@ -860,7 +860,7 @@ export default function CampaignDesigner() {
                     </div>
                     <div className="border-t border-border" />
                     <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Draft Messages</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-4">Draft Messages</p>
                       <div className="flex gap-1 mb-4 bg-muted/50 p-1 rounded-xl w-fit">
                         {(["whatsapp","email","call"] as const).map(ch => { const cfg = CH[ch]; const Icon = cfg.icon; return (
                           <button key={ch} onClick={() => setDraftTab(ch)} className={"flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all " + (draftTab === ch ? cfg.color + " text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}>
@@ -899,7 +899,7 @@ export default function CampaignDesigner() {
                                   className={"flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all " + (sel ? "border-accent bg-accent/5" : "border-border hover:border-accent/30")}>
                                   <div className={"h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 " + (sel ? "bg-accent border-accent" : "border-muted-foreground/30")}>{sel && <Check className="h-3 w-3 text-white" />}</div>
                                   <div className="flex-1 min-w-0"><p className="text-sm font-medium text-card-foreground truncate">{lead.name}</p><p className="text-xs text-muted-foreground truncate">{lead.email} · {lead.phone}</p></div>
-                                  <div className="shrink-0 text-right">{lead.destination && <span className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground">{lead.destination}</span>}<p className="text-[10px] text-muted-foreground mt-0.5">{lead.stage}</p></div>
+                                  <div className="shrink-0 text-right">{lead.destination && <span className="text-[11px] bg-muted px-2 py-0.5 rounded text-muted-foreground">{lead.destination}</span>}<p className="text-[11px] text-muted-foreground mt-0.5">{lead.stage}</p></div>
                                 </div>
                               );
                             })}
@@ -925,7 +925,7 @@ export default function CampaignDesigner() {
                                   <div className={"h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 " + (sel ? "bg-blue-500 border-blue-500" : "border-muted-foreground/30")}>{sel && <Check className="h-3 w-3 text-white" />}</div>
                                   <div className="flex-1 min-w-0"><p className="text-sm font-medium text-card-foreground truncate">{s.name}</p><p className="text-xs text-muted-foreground truncate">{s.company_name || s.designation || "—"} {s.phone ? "· " + s.phone : ""}</p></div>
                                   <div className="shrink-0">
-                                    {s.supplier_type && <span className={"text-[10px] font-medium px-1.5 py-0.5 rounded-full border " + (TYPE_COLORS[s.supplier_type] ?? "bg-gray-50 text-gray-600 border-gray-200")} style={{maxWidth:"90px",display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.supplier_type.split("/")[0].trim()}</span>}
+                                    {s.supplier_type && <span className={"text-[11px] font-medium px-1.5 py-0.5 rounded-full border " + (TYPE_COLORS[s.supplier_type] ?? "bg-gray-50 text-gray-600 border-gray-200")} style={{maxWidth:"90px",display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.supplier_type.split("/")[0].trim()}</span>}
                                   </div>
                                 </div>
                               );
@@ -942,13 +942,13 @@ export default function CampaignDesigner() {
                   <div className="space-y-4">
                     {sequences.length > 0 && (
                       <div className="rounded-xl border bg-muted/20 overflow-hidden">
-                        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between"><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Timeline</p><span className="text-xs text-muted-foreground">{sequences.length} steps</span></div>
+                        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between"><p className="text-xs font-semibold text-muted-foreground ">Timeline</p><span className="text-xs text-muted-foreground">{sequences.length} steps</span></div>
                         <div className="p-3 flex gap-2 overflow-x-auto">
                           {sequences.map((seq, i) => { const cfg = CH[seq.channel] || CH.email; const Icon = cfg.icon; return (
                             <div key={i} className="flex items-center gap-1 shrink-0">
                               <div className="flex flex-col items-center w-12 gap-0.5">
                                 <div className={"h-9 w-9 rounded-xl " + cfg.color + " flex items-center justify-center"}><Icon className="h-3.5 w-3.5 text-white" /></div>
-                                <span className="text-[9px] font-bold text-accent text-center">Day {seq.day_number}</span>
+                                <span className="text-[11px] font-semibold text-accent text-center">Day {seq.day_number}</span>
                                 <span className="text-[8px] text-muted-foreground capitalize">{seq.channel}</span>
                               </div>
                               {i < sequences.length - 1 && <div className="h-px w-3 bg-border shrink-0 mb-4" />}
@@ -965,8 +965,8 @@ export default function CampaignDesigner() {
                             <div className="flex items-center gap-3 p-3 cursor-pointer" onClick={() => setExpandedSeq(open ? null : i)}>
                               <div className={"h-8 w-8 rounded-lg " + cfg.color + " flex items-center justify-center shrink-0"}><Icon className="h-3.5 w-3.5 text-white" /></div>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2"><span className="text-xs font-bold text-accent">Day {seq.day_number}</span><span className="text-xs font-medium text-card-foreground capitalize">{seq.channel}</span>{seq.subject && <span className="text-xs text-muted-foreground truncate">· {seq.subject}</span>}</div>
-                                {!open && seq.message && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{seq.message}</p>}
+                                <div className="flex items-center gap-2"><span className="text-xs font-semibold text-accent">Day {seq.day_number}</span><span className="text-xs font-medium text-card-foreground capitalize">{seq.channel}</span>{seq.subject && <span className="text-xs text-muted-foreground truncate">· {seq.subject}</span>}</div>
+                                {!open && seq.message && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{seq.message}</p>}
                               </div>
                               <div className="flex items-center gap-1">
                                 {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
@@ -978,12 +978,12 @@ export default function CampaignDesigner() {
                                 <motion.div initial={{ height:0 }} animate={{ height:"auto" }} exit={{ height:0 }} className="overflow-hidden border-t border-border">
                                   <div className="p-4 space-y-3">
                                     <div className="grid grid-cols-3 gap-3">
-                                      <div><label className="text-[10px] font-medium text-muted-foreground mb-1 block">Day</label><Input type="number" min={0} value={seq.day_number} onChange={e => updStep(i, "day_number", parseInt(e.target.value)||0)} className="h-8 text-sm" /></div>
-                                      <div><label className="text-[10px] font-medium text-muted-foreground mb-1 block">Channel</label><select value={seq.channel} onChange={e => updStep(i,"channel",e.target.value)} className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="call">Call</option></select></div>
-                                      <div><label className="text-[10px] font-medium text-muted-foreground mb-1 block">Time</label><Input type="time" value={seq.send_time} onChange={e => updStep(i,"send_time",e.target.value)} className="h-8 text-sm" /></div>
+                                      <div><label className="text-[11px] font-medium text-muted-foreground mb-1 block">Day</label><Input type="number" min={0} value={seq.day_number} onChange={e => updStep(i, "day_number", parseInt(e.target.value)||0)} className="h-8 text-sm" /></div>
+                                      <div><label className="text-[11px] font-medium text-muted-foreground mb-1 block">Channel</label><select value={seq.channel} onChange={e => updStep(i,"channel",e.target.value)} className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="call">Call</option></select></div>
+                                      <div><label className="text-[11px] font-medium text-muted-foreground mb-1 block">Time</label><Input type="time" value={seq.send_time} onChange={e => updStep(i,"send_time",e.target.value)} className="h-8 text-sm" /></div>
                                     </div>
-                                    {seq.channel === "email" && <div><label className="text-[10px] font-medium text-muted-foreground mb-1 block">Subject</label><Input placeholder="Subject…" value={seq.subject} onChange={e => updStep(i,"subject",e.target.value)} className="h-8 text-sm" /></div>}
-                                    <div><label className="text-[10px] font-medium text-muted-foreground mb-1 block">Message</label><textarea value={seq.message} onChange={e => updStep(i,"message",e.target.value)} rows={3} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none" /></div>
+                                    {seq.channel === "email" && <div><label className="text-[11px] font-medium text-muted-foreground mb-1 block">Subject</label><Input placeholder="Subject…" value={seq.subject} onChange={e => updStep(i,"subject",e.target.value)} className="h-8 text-sm" /></div>}
+                                    <div><label className="text-[11px] font-medium text-muted-foreground mb-1 block">Message</label><textarea value={seq.message} onChange={e => updStep(i,"message",e.target.value)} rows={3} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none" /></div>
                                   </div>
                                 </motion.div>
                               )}
@@ -1008,10 +1008,10 @@ export default function CampaignDesigner() {
                 <div className="flex gap-2">
                   {step > 1 && <Button variant="outline" size="sm" onClick={() => setStep(p => (p-1) as 1|2|3)}>Back</Button>}
                   {step < 3
-                    ? <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600")} onClick={() => setStep(p => (p+1) as 1|2|3)} disabled={step===1&&!form.name.trim()}>
+                    ? <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-primary" : "bg-primary")} onClick={() => setStep(p => (p+1) as 1|2|3)} disabled={step===1&&!form.name.trim()}>
                         Next <ArrowRight className="h-3.5 w-3.5" />
                       </Button>
-                    : <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600")} onClick={saveCampaign} disabled={saving}>
+                    : <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-primary" : "bg-primary")} onClick={saveCampaign} disabled={saving}>
                         {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</> : <><Send className="h-3.5 w-3.5" />Save Campaign</>}
                       </Button>}
                 </div>

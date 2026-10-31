@@ -59,7 +59,7 @@ const Website = () => {
                 <span className="text-xs text-muted-foreground">{s.label}</span>
               </div>
               <p className="text-xl font-serif text-card-foreground">{s.value}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>
             </motion.div>
           ))}
         </div>
@@ -100,14 +100,14 @@ const Website = () => {
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-card-foreground text-xs">{p.name}</p>
-                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">{p.path} <ExternalLink className="h-2.5 w-2.5" /></p>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">{p.path} <ExternalLink className="h-2.5 w-2.5" /></p>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-card-foreground">{p.visits.toLocaleString()}</td>
                     <td className="px-4 py-3 text-xs text-card-foreground">{p.bounce}</td>
                     <td className="px-4 py-3 text-xs text-card-foreground">{p.avgTime}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${p.status === "Live" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${p.status === "Live" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
                         {p.status}
                       </span>
                     </td>

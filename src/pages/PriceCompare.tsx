@@ -173,14 +173,14 @@ export default function PriceCompare() {
   const TEXT = dark ? "#F0D8DC" : "#3A2428";
   const MUTED = dark ? "#A07A82" : "#9A8285";
   const ACCENT = "#9B2C3F";
-  const GRAD = "linear-gradient(135deg,#B23A4E,#8A2436)";
+  const GRAD = "#9B2C3F";
   const GREEN = "#2FA37A", PURPLE = "#A8475C", WARN = "#C98A2B", ERR = "#D1435B";
   const TINT = dark ? "rgba(107,127,212,0.14)" : "rgba(107,127,212,0.10)";
 
   const card: React.CSSProperties = { background: BG, borderRadius: 18, boxShadow: SHADOW_OUT };
   const inp: React.CSSProperties = { background: BG, boxShadow: SHADOW_IN, border: "none", borderRadius: 12, padding: "11px 14px", fontSize: 14.5, color: TEXT, outline: "none", width: "100%" };
   const lbl: React.CSSProperties = { fontSize: 12.5, fontWeight: 500, color: MUTED, display: "flex", flexDirection: "column", gap: 6 };
-  const pill = (bg: string, fg = "#fff"): React.CSSProperties => ({ background: bg, color: fg, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, whiteSpace: "nowrap" });
+  const pill = (bg: string, fg = "#fff"): React.CSSProperties => ({ background: bg, color: fg, fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, whiteSpace: "nowrap" });
   const btn = (kind: "primary" | "ghost" = "ghost"): React.CSSProperties => ({
     background: kind === "primary" ? GRAD : BG, color: kind === "primary" ? "#fff" : TEXT,
     boxShadow: SHADOW_SM, border: "none", borderRadius: 12, padding: "11px 18px", fontSize: 14, fontWeight: 600,
@@ -869,9 +869,9 @@ export default function PriceCompare() {
     const siteCcy = opts.ccy && opts.ccy !== "INR" && opts.amt ? money(opts.amt, opts.ccy) : fmtCc(rupees);
     return (
       <div style={{ textAlign: "right", lineHeight: 1.2 }}>
-        <div style={{ fontSize: opts.big ? 24 : 16, fontWeight: 800, color: TEXT }}>{inr(rupees)}</div>
-        {siteCcy && <div style={{ fontSize: opts.big ? 13 : 11.5, color: MUTED, fontWeight: 700 }}>{siteCcy}</div>}
-        <div style={{ fontSize: opts.big ? 12.5 : 11.5, color: ACCENT, fontWeight: 700, whiteSpace: "nowrap" }}>{inr(rupees / n)} / night</div>
+        <div style={{ fontSize: opts.big ? 24 : 16, fontWeight: 600, color: TEXT }}>{inr(rupees)}</div>
+        {siteCcy && <div style={{ fontSize: opts.big ? 13 : 11.5, color: MUTED, fontWeight: 600 }}>{siteCcy}</div>}
+        <div style={{ fontSize: opts.big ? 12.5 : 11.5, color: ACCENT, fontWeight: 600, whiteSpace: "nowrap" }}>{inr(rupees / n)} / night</div>
         {nRooms > 1 && <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 600, whiteSpace: "nowrap" }}>{inr(rupees / n / nRooms)} / room / night</div>}
       </div>
     );
@@ -879,13 +879,13 @@ export default function PriceCompare() {
   const Stepper = ({ value, min, max, onChange }: { value: number; min: number; max: number; onChange: (n: number) => void }) => (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
       <button style={{ ...round, opacity: value <= min ? 0.4 : 1 }} disabled={value <= min} onClick={() => onChange(value - 1)}><Minus style={{ width: 14, height: 14 }} /></button>
-      <span style={{ minWidth: 18, textAlign: "center", fontWeight: 800, color: TEXT, fontSize: 15 }}>{value}</span>
+      <span style={{ minWidth: 18, textAlign: "center", fontWeight: 600, color: TEXT, fontSize: 15 }}>{value}</span>
       <button style={{ ...round, opacity: value >= max ? 0.4 : 1 }} disabled={value >= max} onClick={() => onChange(value + 1)}><Plus style={{ width: 14, height: 14 }} /></button>
     </div>
   );
   const sectionTitle = (text: string, sub?: string) => (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "4px 4px 0" }}>
-      <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{text}</span>
+      <span style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>{text}</span>
       {sub && <span style={{ fontSize: 12.5, color: MUTED }}>{sub}</span>}
     </div>
   );
@@ -898,7 +898,7 @@ export default function PriceCompare() {
       <span style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, color: col }}>
         <span>{short || "—"}</span>
         {(terms || extra) && <button title="Full cancellation policy" onClick={() => setCxlInfo(open ? "" : id)}
-          style={{ border: `1.5px solid ${col}`, color: col, background: "transparent", borderRadius: 999, width: 17, height: 17, fontSize: 10.5, fontWeight: 800, lineHeight: "13px", cursor: "pointer", padding: 0, flexShrink: 0 }}>i</button>}
+          style={{ border: `1.5px solid ${col}`, color: col, background: "transparent", borderRadius: 999, width: 17, height: 17, fontSize: 10.5, fontWeight: 600, lineHeight: "13px", cursor: "pointer", padding: 0, flexShrink: 0 }}>i</button>}
         {open && (
           <div style={{ position: "absolute", right: 0, top: 22, zIndex: 40, width: 340, maxHeight: 280, overflowY: "auto", background: BG, color: TEXT, borderRadius: 12, padding: 12, fontSize: 12, fontWeight: 500, lineHeight: 1.45, whiteSpace: "pre-wrap", boxShadow: "0 14px 40px rgba(0,0,0,0.35), " + SHADOW_OUT }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><b>Cancellation policy</b><button onClick={() => setCxlInfo("")} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer" }}>✕</button></div>
@@ -941,7 +941,7 @@ export default function PriceCompare() {
           {/* details */}
           <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>{h.online?.name && mineHotel ? h.online.name : h.name}</span>
+              <span style={{ fontSize: 17, fontWeight: 600, color: TEXT }}>{h.online?.name && mineHotel ? h.online.name : h.name}</span>
               {h.stars ? <span style={{ display: "inline-flex" }}>{Array.from({ length: h.stars }).map((_, i) => <Star key={i} style={{ width: 13, height: 13, color: "#F5B400", fill: "#F5B400" }} />)}</span> : null}
               <div style={{ flex: 1 }} />
               <button title="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: MUTED }} onClick={() => setCity(c.id, { hotels: c.hotels.filter(x => x.id !== h.id) })}><X style={{ width: 16, height: 16 }} /></button>
@@ -981,15 +981,15 @@ export default function PriceCompare() {
                   <button data-pc-picker-btn onClick={toggle} title="Room type — the same room is priced on every site" style={{ ...inp, width: 220, padding: "7px 9px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}>
                     <BedDouble style={{ width: 13, height: 13, color: ACCENT, flexShrink: 0 }} />
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: h.room ? TEXT : MUTED }}>{(() => { const f = h.room ? findType(h) : null; return f?.remapped ? f.type : h.room || "Room type (any)"; })()}</span>
-                    {h.room && (h.online || h.roomsBySite) && (() => { const f = findType(h); return !f ? <span title="This room type isn't in the hotel's room list any more — pick it again" style={{ color: WARN, fontWeight: 800 }}>!</span> : f.subs > 1 ? <span title={`This hotel has ${f.subs} different rooms called "${h.room}" — pick the exact one`} style={{ color: WARN, fontWeight: 800 }}>{f.subs}</span> : null; })()}
+                    {h.room && (h.online || h.roomsBySite) && (() => { const f = findType(h); return !f ? <span title="This room type isn't in the hotel's room list any more — pick it again" style={{ color: WARN, fontWeight: 600 }}>!</span> : f.subs > 1 ? <span title={`This hotel has ${f.subs} different rooms called "${h.room}" — pick the exact one`} style={{ color: WARN, fontWeight: 600 }}>{f.subs}</span> : null; })()}
                     {h.loading || h.typesLoading ? <Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> : <ChevronDown style={{ width: 13, height: 13 }} />}
                   </button>
-                  {h.room && (() => { const f = findType(h); return f && f.subs > 1 ? <span style={{ fontSize: 11.5, color: WARN, fontWeight: 700 }}>{f.subs} different “{h.room}” rooms — open the list to pick the exact one</span> : null; })()}
+                  {h.room && (() => { const f = findType(h); return f && f.subs > 1 ? <span style={{ fontSize: 11.5, color: WARN, fontWeight: 600 }}>{f.subs} different “{h.room}” rooms — open the list to pick the exact one</span> : null; })()}
                   {open && picker && (
                     <div id="pc-room-picker" style={{ position: "fixed", left: picker.left, width: picker.width, zIndex: 70, ...(picker.up ? { bottom: window.innerHeight - picker.top } : { top: picker.top }),
                       maxHeight: picker.maxH, display: "flex", flexDirection: "column", background: BG, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35), " + SHADOW_OUT, overflow: "hidden" }}>
                       <div style={{ padding: "10px 12px", borderBottom: `1px solid ${MUTED}22`, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>Room types at {h.online?.name || h.name}</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: TEXT }}>Room types at {h.online?.name || h.name}</span>
                         <input placeholder="…or type a room name and press Enter" style={{ ...inp, padding: "6px 9px", fontSize: 12 }} defaultValue=""
                           onKeyDown={e => { if (e.key === "Enter") { setHotel(c.id, h.id, { room: (e.target as HTMLInputElement).value.trim() }); setPicker(null); } }} />
                         {h.typesLoading && <span style={{ fontSize: 11, color: ACCENT, display: "inline-flex", gap: 5, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 11, height: 11 }} /> Matching the same rooms across sites…</span>}
@@ -1000,18 +1000,18 @@ export default function PriceCompare() {
                           });
                           if (!st.length) return null;
                           return (
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 10.5, fontWeight: 700, alignItems: "center" }}>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 10.5, fontWeight: 600, alignItems: "center" }}>
                               <span style={{ color: MUTED }}>Room lists:</span>
                               {st.map(x => <span key={x.sx} title={x.v && !["ok", "queued", "checking"].includes(x.v) ? x.v : ""} style={{ ...pill(BG, x.busy ? ACCENT : x.n2 ? GREEN : x.v && x.v !== "ok" ? WARN : MUTED), boxShadow: SHADOW_IN, fontSize: 10, display: "inline-flex", gap: 3, alignItems: "center" }}>
                                 {x.busy ? <Loader2 className="animate-spin" style={{ width: 10, height: 10 }} /> : x.n2 ? "✓" : x.v && x.v !== "ok" ? "✗" : "–"} {x.sx}{x.n2 ? ` (${x.n2})` : ""}</span>)}
-                              {!st.some(x => x.busy) && <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 10.5, fontWeight: 800, padding: 0 }} onClick={() => loadRoomLists(c, h)}>↻ read again</button>}
+                              {!st.some(x => x.busy) && <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 10.5, fontWeight: 600, padding: 0 }} onClick={() => loadRoomLists(c, h)}>↻ read again</button>}
                               {st.filter(x => !x.busy && !x.n2 && x.v && x.v !== "ok").map(x => <div key={x.sx + "e"} style={{ width: "100%", color: WARN, fontWeight: 600 }}>✗ {x.sx}: {x.v}</div>)}
                             </div>
                           );
                         })()}
                       </div>
                       <div style={{ overflowY: "auto", padding: 6 }}>
-                        <button onClick={() => { setHotel(c.id, h.id, { room: "" }); setPicker(null); }} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !h.room ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 700 }}>Any room — cheapest on each site</button>
+                        <button onClick={() => { setHotel(c.id, h.id, { room: "" }); setPicker(null); }} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !h.room ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 600 }}>Any room — cheapest on each site</button>
                         {h.loading && <div style={{ padding: 12, fontSize: 12, color: ACCENT, display: "flex", gap: 6, alignItems: "center" }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Loading this hotel's rooms…</div>}
                         {!h.loading && groups.length === 0 && (() => {
                           const lk = Object.entries(checks).filter(([kk]) => kk.startsWith(h.id + "|") && kk.endsWith("|list"));
@@ -1020,7 +1020,7 @@ export default function PriceCompare() {
                           return (
                             <div style={{ padding: 12, fontSize: 12, color: MUTED, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
                               <span>Google doesn't list the rooms for this hotel. Get them from the booking sites (a checker window opens for about 30 seconds — only the room list is read, no prices are checked).</span>
-                              {going ? <span style={{ color: ACCENT, display: "inline-flex", gap: 6, alignItems: "center", fontWeight: 700 }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Reading the room lists…</span>
+                              {going ? <span style={{ color: ACCENT, display: "inline-flex", gap: 6, alignItems: "center", fontWeight: 600 }}><Loader2 className="animate-spin" style={{ width: 13, height: 13 }} /> Reading the room lists…</span>
                                 : <button style={{ ...btn("primary"), padding: "7px 13px", fontSize: 12.5 }} onClick={() => loadRoomLists(c, h)}><BedDouble style={{ width: 13, height: 13 }} /> Get room list</button>}
                               {err && !going && <span style={{ color: WARN }}>{err}</span>}
                             </div>
@@ -1033,12 +1033,12 @@ export default function PriceCompare() {
                               style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: on ? TINT : "transparent", color: TEXT }}
                               onMouseEnter={e => { if (!on) e.currentTarget.style.background = `${ACCENT}14`; }} onMouseLeave={e => { e.currentTarget.style.background = on ? TINT : "transparent"; }}>
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 12.5, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.type}</div>
+                                <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.type}</div>
                                 <div style={{ marginTop: 3, fontSize: 11, color: MUTED, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sites.length === 1 ? <b style={{ color: WARN }}>only on {g.sites[0]}</b> : <>on {g.sites.join(" · ")}</>} · {plural(g.items.length, "option", "options")}</div>
                               </div>
                               <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                                <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700 }}>from</div>
-                                <div style={{ fontSize: 13.5, fontWeight: 800 }}>{inr(g.from)}</div>
+                                <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 600 }}>from</div>
+                                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{inr(g.from)}</div>
                               </div>
                             </button>
                           );
@@ -1087,7 +1087,7 @@ export default function PriceCompare() {
           <div style={{ margin: 10, borderRadius: 14, boxShadow: SHADOW_IN, padding: 14, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-end", gap: 6 }}>
             {best ? (<>
               <div style={{ fontSize: 12, color: MUTED }}>{plural(ds.length, "deal", "deals")} · cheapest on</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{best.source}{best.mine ? " (your rate)" : ""}</div>
               {!best.mine && best.room && <div style={{ fontSize: 12, fontWeight: 600, color: MUTED, textAlign: "right", maxWidth: 220, display: "flex", gap: 4, alignItems: "center", justifyContent: "flex-end" }}><BedDouble style={{ width: 12, height: 12, color: ACCENT }} />{best.room}</div>}
               {!best.mine && (() => {
                 const k = best.confirmed ? "confirmed" : best.fx?.kind;
@@ -1110,7 +1110,7 @@ export default function PriceCompare() {
               </div>
             </>) : h.fromPrice && !h.online ? (<>
               <div style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>{h.fromSource ? "≈ cheapest on" : "≈ from (Google's lowest)"}</div>
-              {h.fromSource && <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{h.fromSource}</div>}
+              {h.fromSource && <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{h.fromSource}</div>}
               {priceBlock(h.fromPrice, n, { big: true })}
               <div style={{ fontSize: 11.5, color: MUTED, textAlign: "right" }}>total for {plural(n, "night", "nights")}{nRooms > 1 ? `, ${nRooms} rooms` : ""}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -1141,20 +1141,20 @@ export default function PriceCompare() {
               // a room type is chosen but the sites haven't been checked for it yet → say so, one click to check
               if (!h.room || !extAuto) return null;
               const f = findType(h);
-              if (!f) return <div style={{ ...card, padding: "9px 12px", fontSize: 12.5, color: WARN, fontWeight: 700 }}>“{h.room}” isn't in this hotel's room list any more — open Room type and pick the room again.</div>;
+              if (!f) return <div style={{ ...card, padding: "9px 12px", fontSize: 12.5, color: WARN, fontWeight: 600 }}>“{h.room}” isn't in this hotel's room list any more — open Room type and pick the room again.</div>;
               const sites = ds.filter(d => !d.mine && d.source !== "Hotel website").map(d => ({ d, t: typeFor(h, d.source) })).filter(x => x.t && !x.t.notSold);
               const missing = sites.filter(x => !x.t!.ex && !siteBusy(h.id, x.d.source));
               if (!missing.length) return null;
               return (
                 <div style={{ ...card, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
                   <Zap style={{ width: 14, height: 14, color: ACCENT }} />
-                  <span style={{ color: TEXT, fontWeight: 700 }}>Not checked yet for {f.type}{MEAL_NAME[h.meal] ? ` · ${MEAL_NAME[h.meal]}` : ""}</span>
+                  <span style={{ color: TEXT, fontWeight: 600 }}>Not checked yet for {f.type}{MEAL_NAME[h.meal] ? ` · ${MEAL_NAME[h.meal]}` : ""}</span>
                   <span style={{ color: MUTED }}>— {missing.map(x => x.d.source).join(", ")} show room-list / Google prices</span>
                   <button style={{ ...btn("primary"), padding: "6px 12px", fontSize: 12.5 }} onClick={() => autoCheck([{ c, h }])}><Zap style={{ width: 13, height: 13 }} /> Get exact prices for this room</button>
                 </div>
               );
             })()}
-            <div style={{ display: "grid", gridTemplateColumns: "34px 1fr auto 170px 120px", gap: 12, padding: "2px 12px", fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.3 }} className="max-md:!hidden">
+            <div style={{ display: "grid", gridTemplateColumns: "34px 1fr auto 170px 120px", gap: 12, padding: "2px 12px", fontSize: 10.5, fontWeight: 600, color: MUTED, textTransform: "", letterSpacing: 0.3 }} className="max-md:!hidden">
               <span /> <span>Website ({ds.length})</span> <span /> <span style={{ textAlign: "right" }}>Total · per night</span> <span />
             </div>
             {ds.map((d, i) => {
@@ -1175,12 +1175,12 @@ export default function PriceCompare() {
               const ck = sr ? checks[`${h.id}|${d.source}|${sr.key}`] : "";
               const busyR = ck === "queued" || ck === "checking" || ck === "verifying";
               const pk = sr && (h.picks || []).find(p => p.site === d.source && p.key === sr.key);
-              const lb = (color: string): React.CSSProperties => ({ background: "none", border: "none", color, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0, whiteSpace: "nowrap" });
+              const lb = (color: string): React.CSSProperties => ({ background: "none", border: "none", color, cursor: "pointer", fontSize: 11.5, fontWeight: 600, padding: 0, whiteSpace: "nowrap" });
               const short = (t: string, k: number) => t.length > k ? t.slice(0, k - 1) + "…" : t;
               return (
               <div key={d.source + i} style={{ display: "grid", gridTemplateColumns: "34px 1fr auto 170px 120px", alignItems: "center", gap: 12, padding: "9px 12px", borderRadius: 12, background: i === 0 ? TINT : "transparent", boxShadow: i === 0 ? "none" : SHADOW_IN }}>
-                <div style={{ width: 30, height: 30, borderRadius: 9, background: d.mine ? GRAD : BG, boxShadow: d.mine ? "none" : SHADOW_SM, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: d.mine ? "#fff" : ACCENT }}>{d.source[0]?.toUpperCase()}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>
+                <div style={{ width: 30, height: 30, borderRadius: 9, background: d.mine ? GRAD : BG, boxShadow: d.mine ? "none" : SHADOW_SM, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: d.mine ? "#fff" : ACCENT }}>{d.source[0]?.toUpperCase()}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>
                   {d.source}
                   {d.mine && <span style={{ ...pill(ACCENT), marginLeft: 8 }}>your rate</span>}
                   {i === 0 && !h.soldOut?.[d.source] && <span style={{ ...pill(GREEN), marginLeft: 8 }}>cheapest</span>}
@@ -1199,7 +1199,7 @@ export default function PriceCompare() {
                         const choose = (key: string) => { setHotel(c.id, h.id, { roomSel: { ...(h.roomSel || {}), [d.source]: key } }); setPicker(null); };
                         const mealsHere = ["Room only", "Breakfast", "Half board", "Full board", "All inclusive"].filter(m => siteRooms.some(r => r.meal === m));
                         const vis = siteRooms.filter(r => (!fu.meal || r.meal === fu.meal) && (!fu.cxl || /^free/i.test(r.exactCxl || r.cxl)));
-                        const chip = (on: boolean): React.CSSProperties => ({ border: "none", cursor: "pointer", borderRadius: 999, padding: "4px 10px", fontSize: 11.5, fontWeight: 700, background: on ? GRAD : BG, color: on ? "#fff" : TEXT, boxShadow: on ? "none" : SHADOW_SM });
+                        const chip = (on: boolean): React.CSSProperties => ({ border: "none", cursor: "pointer", borderRadius: 999, padding: "4px 10px", fontSize: 11.5, fontWeight: 600, background: on ? GRAD : BG, color: on ? "#fff" : TEXT, boxShadow: on ? "none" : SHADOW_SM });
                         const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
                           if (open) return setPicker(null);
                           const r = e.currentTarget.getBoundingClientRect(), w = Math.min(680, window.innerWidth - 24);
@@ -1232,7 +1232,7 @@ export default function PriceCompare() {
                                 const pickR = !ft ? siteRooms.filter(r => r.meal === nm).sort((x, y) => (x.exact || x.total) - (y.exact || y.total))[0] : undefined;
                                 setHotel(c.id, h.id, { mealBySite: { ...(h.mealBySite || {}), [d.source]: code }, ...(!ft ? { roomSel: { ...(h.roomSel || {}), [d.source]: pickR?.key || "" } } : {}) });
                               }}
-                                style={{ ...inp, width: "auto", maxWidth: 240, padding: "5px 8px", fontSize: 12, fontWeight: 700, color: own ? ACCENT : TEXT }}>
+                                style={{ ...inp, width: "auto", maxWidth: 240, padding: "5px 8px", fontSize: 12, fontWeight: 600, color: own ? ACCENT : TEXT }}>
                                 {MEALS.map(m => { const nm = MEAL_NAME[m] || m, v = minOf(nm); return <option key={m} value={m}>{`${nm}${v ? ` — ${inr(v)}${base && nm !== "Room only" && v > base ? ` (+${inr(v - base)})` : ""}` : pool.length ? " — not offered" : ""}`}</option>; })}
                               </select>
                             );
@@ -1241,13 +1241,13 @@ export default function PriceCompare() {
                             <div id="pc-room-picker" style={{ position: "fixed", left: picker.left, width: picker.width, zIndex: 70, ...(picker.up ? { bottom: window.innerHeight - picker.top } : { top: picker.top }),
                               maxHeight: picker.maxH, display: "flex", flexDirection: "column", background: BG, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35), " + SHADOW_OUT, overflow: "hidden" }}>
                               <div style={{ padding: "10px 12px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", borderBottom: `1px solid ${MUTED}22` }}>
-                                <span style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginRight: 4 }}>{d.source} · {vis.length} of {siteRooms.length}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: TEXT, marginRight: 4 }}>{d.source} · {vis.length} of {siteRooms.length}</span>
                                 <button style={chip(!fu.meal)} onClick={() => setRoomUi(o => ({ ...o, [pid]: { ...fu, meal: "" } }))}>All meals</button>
                                 {mealsHere.map(m => <button key={m} style={chip(fu.meal === m)} onClick={() => setRoomUi(o => ({ ...o, [pid]: { ...fu, meal: m } }))}>{m}</button>)}
                                 <button style={chip(!!fu.cxl)} onClick={() => setRoomUi(o => ({ ...o, [pid]: { ...fu, cxl: fu.cxl ? "" : "free" } }))}>Free cancellation</button>
                               </div>
                               <div style={{ overflowY: "auto", padding: 6 }}>
-                                <button onClick={() => choose("")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !sr ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 700 }}>
+                                <button onClick={() => choose("")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: !sr ? TINT : "transparent", color: TEXT, fontSize: 12.5, fontWeight: 600 }}>
                                   {d.confirmed ? "Cheapest room (checked)" : "Cheapest room"} — {inr(d.rupees)}</button>
                                 {vis.map(r => {
                                   const cx = r.exactCxl || r.cxl, on = sr?.key === r.key;
@@ -1256,16 +1256,16 @@ export default function PriceCompare() {
                                       style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center", textAlign: "left", border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 12px", background: on ? TINT : "transparent", color: TEXT }}
                                       onMouseEnter={e => { if (!on) e.currentTarget.style.background = `${ACCENT}14`; }} onMouseLeave={e => { e.currentTarget.style.background = on ? TINT : "transparent"; }}>
                                       <div style={{ minWidth: 0 }}>
-                                        <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.room}</div>
-                                        <div style={{ marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11, fontWeight: 700 }}>
+                                        <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.room}</div>
+                                        <div style={{ marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11, fontWeight: 600 }}>
                                           <span style={{ ...pill(BG, r.meal === "Room only" ? MUTED : GREEN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>{r.meal}</span>
                                           <span style={{ color: /^free/i.test(cx) ? GREEN : /non-?refundable|no free/i.test(cx) ? WARN : MUTED }}>{cx || "—"}</span>
                                           {(h.picks || []).some(p => p.site === d.source && p.key === r.key) && <span style={{ color: GREEN }}>✓ In Excel</span>}
                                         </div>
                                       </div>
                                       <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                                        <div style={{ fontSize: 13.5, fontWeight: 800 }}>{r.ccy === "INR" || r.exact ? inr(r.exact || r.total) : `${r.ccy} ${Math.round(r.total).toLocaleString("en-IN")}`}</div>
-                                        <div style={{ fontSize: 10.5, color: r.exact ? GREEN : !r.taxes ? WARN : MUTED, fontWeight: 700 }}>{r.exact ? "✓ exact" : !r.taxes ? "+ taxes" : "room-list"}</div>
+                                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{r.ccy === "INR" || r.exact ? inr(r.exact || r.total) : `${r.ccy} ${Math.round(r.total).toLocaleString("en-IN")}`}</div>
+                                        <div style={{ fontSize: 10.5, color: r.exact ? GREEN : !r.taxes ? WARN : MUTED, fontWeight: 600 }}>{r.exact ? "✓ exact" : !r.taxes ? "+ taxes" : "room-list"}</div>
                                       </div>
                                     </button>
                                   );
@@ -1286,7 +1286,7 @@ export default function PriceCompare() {
                       </>)}
                     </div>
                   )}
-                  {tsel?.notSold && <div style={{ marginTop: 5, fontSize: 12, fontWeight: 700, color: WARN }}>Not sold on {d.source} — {d.source}'s room list doesn't have “{tsel.g.type}”</div>}
+                  {tsel?.notSold && <div style={{ marginTop: 5, fontSize: 12, fontWeight: 600, color: WARN }}>Not sold on {d.source} — {d.source}'s room list doesn't have “{tsel.g.type}”</div>}
                   {tsel && !tsel.notSold && (
                     <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {tsel.ex ? <span style={{ ...pill(GREEN), fontSize: 10.5 }}>✓ exact {clock(tsel.ex.at)}</span>
@@ -1331,7 +1331,7 @@ export default function PriceCompare() {
                                 cxl: d.cxl ? cxlLine(d.cxl, d.rupees) : d.free ? "Free cancellation" : "", total: d.rupees, taxes: true, exact: d.rupees }])}>+ Add to Excel</button>;
                         })()}
                         {h.confirmedAuto?.[d.source] && <span style={{ color: MUTED }}>checked {clock(h.confirmedAuto[d.source])}</span>}
-                        <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
+                        <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 600, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: String(Math.round(d.rupees)) })}>Edit</button>
                         <button style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 11.5, padding: 0 }} onClick={() => clearConfirm(c, h, d.source)}>Undo</button>
                       </>) : (<>
                         {d.fx?.kind === "adjust" ? <>
@@ -1347,22 +1347,22 @@ export default function PriceCompare() {
                           <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ Google price</span>
                           <span style={{ color: MUTED }}>1 check so far: site was {pct(d.fx.lo)} vs Google</span>
                         </> : <span style={{ ...pill(BG, WARN), boxShadow: SHADOW_IN, fontSize: 10.5 }}>≈ Google price</span>}
-                        <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: "" })}>Confirm price</button>
+                        <button style={{ background: "none", border: "none", color: ACCENT, cursor: "pointer", fontSize: 11.5, fontWeight: 600, padding: 0 }} onClick={() => setEditing({ hid: h.id, source: d.source, value: "" })}>Confirm price</button>
                       </>)}
                     </div>
                   )}
                 </div>
                 {sr ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span style={{ color: sr.meal === "Room only" ? MUTED : GREEN, fontWeight: 700 }}>{sr.meal}</span>
+                  <span style={{ color: sr.meal === "Room only" ? MUTED : GREEN, fontWeight: 600 }}>{sr.meal}</span>
                   {cxlCell(`${h.id}|${d.source}|sr`, srCx, h.confirmedCxl?.[d.source]?.full)}
                 </div> : tsel ? <div style={{ fontSize: 12, fontWeight: 600, maxWidth: 260, display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span style={{ color: tMeal && tMeal !== "Room only" ? GREEN : MUTED, fontWeight: 700 }}>{tMeal || "Meal: not shown yet"}</span>
+                  <span style={{ color: tMeal && tMeal !== "Room only" ? GREEN : MUTED, fontWeight: 600 }}>{tMeal || "Meal: not shown yet"}</span>
                   {cxlCell(`${h.id}|${d.source}|t`, tCx, tsel.ex?.full || tsel.item?.full, tsel.ex?.note ? `Includes ${tsel.ex.note}` : "")}
                 </div> : <div style={{ fontSize: 12, color: d.cxl ? (d.cxl.kind === "non-refundable" ? WARN : d.free ? GREEN : TEXT) : d.free ? GREEN : MUTED, fontWeight: 600, maxWidth: 260 }}>{d.cxl ? cxlCell(`${h.id}|${d.source}|d`, cxlLine(d.cxl, d.rupees), d.cxl.full || d.cxl.text) : d.free ? (d.mine && h.cancel ? `Free cxl till ${nice(h.cancel)}` : "Free cancellation") : ""}</div>}
-                {sr ? (sr.exact || sr.ccy === "INR" ? <div>{priceBlock(sr.exact || sr.total, n)}{!sr.exact && !sr.taxes && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div>
-                  : <div style={{ textAlign: "right", fontWeight: 800, color: TEXT }}>{sr.ccy} {Math.round(sr.total).toLocaleString("en-IN")}</div>)
-                  : tsel?.notSold ? <div style={{ textAlign: "right", fontSize: 12, color: WARN, fontWeight: 700 }}>not sold here</div>
-                  : tsel ? (tPrice ? <div>{priceBlock(tPrice, n)}{!tsel.ex && tsel.item?.taxes === false && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 700 }}>+ taxes</div>}</div> : <div style={{ textAlign: "right", fontSize: 12, color: MUTED }}>{tBusy ? "checking…" : "price on the site"}</div>)
+                {sr ? (sr.exact || sr.ccy === "INR" ? <div>{priceBlock(sr.exact || sr.total, n)}{!sr.exact && !sr.taxes && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 600 }}>+ taxes</div>}</div>
+                  : <div style={{ textAlign: "right", fontWeight: 600, color: TEXT }}>{sr.ccy} {Math.round(sr.total).toLocaleString("en-IN")}</div>)
+                  : tsel?.notSold ? <div style={{ textAlign: "right", fontSize: 12, color: WARN, fontWeight: 600 }}>not sold here</div>
+                  : tsel ? (tPrice ? <div>{priceBlock(tPrice, n)}{!tsel.ex && tsel.item?.taxes === false && <div style={{ fontSize: 10.5, color: WARN, textAlign: "right", fontWeight: 600 }}>+ taxes</div>}</div> : <div style={{ textAlign: "right", fontSize: 12, color: MUTED }}>{tBusy ? "checking…" : "price on the site"}</div>)
                   : priceBlock(d.rupees, n, { amt: d.amt, ccy: d.ccy })}
                 {d.mine ? <span style={{ fontSize: 12, color: MUTED, textAlign: "right" }}>supplier rate</span>
                   : <a href={link(d)} target="_blank" rel="noreferrer" style={{ ...btn(i === 0 ? "primary" : "ghost"), justifyContent: "center", padding: "7px 10px", fontSize: 12.5, textDecoration: "none" }}>View deal <ExternalLink style={{ width: 12, height: 12 }} /></a>}
@@ -1393,7 +1393,7 @@ export default function PriceCompare() {
           <div onClick={() => setPreview(false)} style={{ position: "fixed", inset: 0, background: "rgba(10,10,25,0.55)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ ...card, width: "min(1000px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: 18, gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: TEXT, flex: 1 }}>Excel preview — {plural(secs.reduce((a, s2) => a + s2.rows.length, 0), "row", "rows")}</span>
+                <span style={{ fontSize: 18, fontWeight: 600, color: TEXT, flex: 1 }}>Excel preview — {plural(secs.reduce((a, s2) => a + s2.rows.length, 0), "row", "rows")}</span>
                 <label style={{ ...lbl, flexDirection: "row", alignItems: "center", gap: 6 }} title="Only for the Excel — the page keeps its own currency">Excel currency
                   <select style={{ ...inp, width: 90, padding: "6px 8px" }} value={xcc} onChange={e => xlRate(e.target.value)}>{CCYS.map(c2 => <option key={c2}>{c2}</option>)}</select></label>
                 {xcc !== "INR" && <label style={{ ...lbl, flexDirection: "row", alignItems: "center", gap: 6 }}>₹ per 1 {xcc}
@@ -1405,16 +1405,16 @@ export default function PriceCompare() {
                 {secs.filter(s2 => s2.rows.length).length === 0 && <div style={{ color: MUTED, fontSize: 13, padding: 12 }}>Nothing to put in the Excel yet — add hotels to your list, or add rooms with <b>+ Add to Excel</b>.</div>}
                 {secs.filter(s2 => s2.rows.length).map((s2, si) => (
                   <div key={si} style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 800, color: ACCENT, margin: "4px 0 6px" }}>{s2.title}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: ACCENT, margin: "4px 0 6px" }}>{s2.title}</div>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead><tr>{["Hotel & room", "Source", "Meal", "Cancellation", "Per room (stay)", "Website (yellow block)", "Note", ""].map(t => <th key={t} style={{ ...cell, fontSize: 10.5, color: MUTED, textTransform: "uppercase", textAlign: "left" }}>{t}</th>)}</tr></thead>
+                      <thead><tr>{["Hotel & room", "Source", "Meal", "Cancellation", "Per room (stay)", "Website (yellow block)", "Note", ""].map(t => <th key={t} style={{ ...cell, fontSize: 10.5, color: MUTED, textTransform: "", textAlign: "left" }}>{t}</th>)}</tr></thead>
                       <tbody>{s2.rows.map((r: any, ri: number) => (
                         <tr key={ri}>
-                          <td style={{ ...cell, fontWeight: 700 }}>{r.description}{r.bid ? <span style={{ ...pill(ACCENT), marginLeft: 6, fontSize: 10 }}>{r.bid}</span> : null}</td>
+                          <td style={{ ...cell, fontWeight: 600 }}>{r.description}{r.bid ? <span style={{ ...pill(ACCENT), marginLeft: 6, fontSize: 10 }}>{r.bid}</span> : null}</td>
                           <td style={cell}>{r.source || "—"}</td>
                           <td style={cell}>{r.meal || "—"}</td>
                           <td style={cell}>{r.cancel || "—"}</td>
-                          <td style={{ ...cell, fontWeight: 800, whiteSpace: "nowrap" }}>{amt(r)}</td>
+                          <td style={{ ...cell, fontWeight: 600, whiteSpace: "nowrap" }}>{amt(r)}</td>
                           <td style={{ ...cell, whiteSpace: "nowrap" }}>{r.compare ? <><b>{r.compare.source}</b> {amt(r.compare)} · {r.compare.meal || "—"}{r.compare.cancel ? ` · ${r.compare.cancel}` : ""}</> : "—"}</td>
                           <td style={{ ...cell, color: MUTED, fontSize: 11.5 }}>{r.remark || r.notes || ""}</td>
                           <td style={cell}><button title="Remove from the Excel" style={{ background: "none", border: "none", cursor: "pointer", color: ERR }} onClick={() => remove(r)}><X style={{ width: 15, height: 15 }} /></button></td>
@@ -1503,7 +1503,7 @@ export default function PriceCompare() {
             {roomsOpen && (<>
               <div onClick={() => setRoomsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
               <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 8, width: 360, maxWidth: "88vw", zIndex: 50, ...card, padding: 16, textTransform: "none", letterSpacing: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT, marginBottom: 10 }}>{roomSummary(rooms)}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: ACCENT, marginBottom: 10 }}>{roomSummary(rooms)}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 380, overflowY: "auto", padding: 4 }}>
                   {rooms.map((r, i) => (
                     <div key={i} style={{ borderRadius: 14, boxShadow: SHADOW_IN, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1522,7 +1522,7 @@ export default function PriceCompare() {
                       </div>
                       {r.ages.length > 0 && (
                         <div>
-                          <div style={{ fontSize: 11.5, color: MUTED, fontWeight: 700, marginBottom: 6 }}>Children Age (in yrs)</div>
+                          <div style={{ fontSize: 11.5, color: MUTED, fontWeight: 600, marginBottom: 6 }}>Children Age (in yrs)</div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             {r.ages.map((a, k) => (
                               <select key={k} value={a} style={{ ...inp, width: 70, padding: "7px 8px" }}
@@ -1550,7 +1550,7 @@ export default function PriceCompare() {
           {/* ROE — automatic */}
           <div style={lbl}>
             ROE (₹ per 1 {cc})
-            <div style={{ ...inp, display: "flex", alignItems: "center", gap: 6, fontWeight: 800, textTransform: "none", letterSpacing: 0 }}>
+            <div style={{ ...inp, display: "flex", alignItems: "center", gap: 6, fontWeight: 600, textTransform: "none", letterSpacing: 0 }}>
               <span style={{ flex: 1 }}>{cc === "INR" ? "—" : roe ? `₹ ${roe.toFixed(2)}` : roeBusy ? "Fetching…" : "—"}</span>
               {cc !== "INR" && <button title="Get latest rate" onClick={() => fetchRoe()} style={{ background: "none", border: "none", cursor: "pointer", color: ACCENT, display: "inline-flex", padding: 0 }}>
                 <RefreshCw className={roeBusy ? "animate-spin" : ""} style={{ width: 14, height: 14 }} /></button>}
@@ -1570,7 +1570,7 @@ export default function PriceCompare() {
               const cnt = c.hotels.filter(h => h.name.trim() && isMine(h)).length;
               return (
                 <button key={c.id} onClick={() => setCityTab(c.id)}
-                  style={{ ...btn(), background: on ? GRAD : undefined, color: on ? "#fff" : TEXT, boxShadow: on ? SHADOW_SM : undefined, fontWeight: 800 }}>
+                  style={{ ...btn(), background: on ? GRAD : undefined, color: on ? "#fff" : TEXT, boxShadow: on ? SHADOW_SM : undefined, fontWeight: 600 }}>
                   {c.name || `City ${i + 1}`}{cnt ? ` (${cnt})` : ""}
                 </button>
               );

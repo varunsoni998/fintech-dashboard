@@ -102,7 +102,7 @@ function Select({ label, value, onChange, options, placeholder }: {
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+      <label className="text-xs font-semibold text-muted-foreground ">{label}</label>
       <div className="relative">
         <select
           value={value}
@@ -124,9 +124,9 @@ function TextInput({ label, value, onChange, placeholder, readOnly }: {
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+      <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
         {label}
-        {readOnly && <span className="text-[10px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">Auto-filled</span>}
+        {readOnly && <span className="text-[11px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">Auto-filled</span>}
       </label>
       <input
         type="text"
@@ -148,7 +148,7 @@ function TextArea({ label, value, onChange, placeholder, rows = 3 }: {
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+      <label className="text-xs font-semibold text-muted-foreground ">{label}</label>
       <textarea
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -164,7 +164,7 @@ function LengthSelector({ value, onChange }: { value: string; onChange: (v: stri
   const opts = ["Short", "Medium", "Detailed"];
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Length</label>
+      <label className="text-xs font-semibold text-muted-foreground ">Length</label>
       <div className="flex gap-2">
         {opts.map(o => (
           <button key={o} onClick={() => onChange(o)}
@@ -460,7 +460,7 @@ function DataPreview({ fields }: { fields: Record<string, string> }) {
   return (
     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
       className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-primary">BusinessOS Data</p>
+      <p className="text-[11px] font-semibold text-primary">BusinessOS Data</p>
       <div className="divide-y divide-border/50">
         {rows.map(([key, val]) => (
           <div key={key} className="flex items-start gap-2 py-1.5">
@@ -541,7 +541,7 @@ export default function Content() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-card-foreground">Content Generator</h1>
+          <h1 className="text-2xl font-semibold text-card-foreground">Content Generator</h1>
           <p className="text-sm text-muted-foreground mt-1">AI-powered content creation for your travel business</p>
         </div>
 
@@ -600,7 +600,7 @@ export default function Content() {
                     <ct.icon className="h-3.5 w-3.5 shrink-0" />
                     <span className="text-sm">{ct.label}</span>
                     {ct.priority && (
-                      <span className="ml-auto text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">Popular</span>
+                      <span className="ml-auto text-[11px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">Popular</span>
                     )}
                   </button>
                 ))}
@@ -609,7 +609,7 @@ export default function Content() {
 
             {/* Content Source toggle */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Content Source</p>
+              <p className="text-xs font-semibold text-muted-foreground">Content Source</p>
               <div className="space-y-2">
                 {[
                   { val: true,  icon: Database, label: "Use BusinessOS Data",  sub: "Auto-fill from trips & clients" },
@@ -629,7 +629,7 @@ export default function Content() {
                     <opt.icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <div>
                       <p className="text-xs font-semibold text-card-foreground">{opt.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{opt.sub}</p>
+                      <p className="text-[11px] text-muted-foreground">{opt.sub}</p>
                     </div>
                   </button>
                 ))}
@@ -677,7 +677,7 @@ export default function Content() {
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recent Content</p>
+                <p className="text-xs font-semibold text-muted-foreground">Recent Content</p>
               </div>
               <div className="space-y-1">
                 {RECENT_CONTENT.map((r, i) => (
@@ -687,7 +687,7 @@ export default function Content() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-card-foreground truncate">{r.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{r.subtitle} · {r.time}</p>
+                      <p className="text-[11px] text-muted-foreground">{r.subtitle} · {r.time}</p>
                     </div>
                   </div>
                 ))}
@@ -774,7 +774,7 @@ export default function Content() {
                           <button key={q.id} onClick={() => selectType(q.id)}
                             className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-muted/30 transition-all">
                             <q.icon className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground text-center">{q.label}</span>
+                            <span className="text-[11px] text-muted-foreground text-center">{q.label}</span>
                           </button>
                         ))}
                       </div>

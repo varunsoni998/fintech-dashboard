@@ -254,7 +254,7 @@ const WebAnalytics = () => {
                       <span className="text-xs text-muted-foreground">{s.label}</span>
                     </div>
                     <p className="text-xl font-serif text-card-foreground">{s.value}</p>
-                    <p className={`text-[10px] mt-0.5 flex items-center gap-0.5 ${up ? "text-green-600" : "text-red-500"}`}>
+                    <p className={`text-[11px] mt-0.5 flex items-center gap-0.5 ${up ? "text-green-600" : "text-red-500"}`}>
                       {up
                         ? <ArrowUpRight className="h-3 w-3" />
                         : <ArrowDownRight className="h-3 w-3" />}
@@ -271,7 +271,7 @@ const WebAnalytics = () => {
                 className="lg:col-span-2 rounded-xl border bg-card shadow-card overflow-hidden">
                 <div className="p-4 border-b border-border flex items-center justify-between">
                   <h3 className="font-serif text-lg text-card-foreground">Top Pages</h3>
-                  <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                     Last 30 days
                   </span>
                 </div>
@@ -340,7 +340,7 @@ const WebAnalytics = () => {
                               <span className="text-xs font-medium text-card-foreground">
                                 {c.sessions.toLocaleString("en-IN")}
                               </span>
-                              <span className="text-[10px] text-muted-foreground w-8 text-right">
+                              <span className="text-[11px] text-muted-foreground w-8 text-right">
                                 {c.pct}%
                               </span>
                             </div>

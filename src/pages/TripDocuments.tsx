@@ -96,7 +96,7 @@ export default function TripDocuments() {
     fontSize: 14, color: TEXT_MAIN, outline: "none", width: "100%",
   };
   const btn = (primary = false): React.CSSProperties => ({
-    background: primary ? "linear-gradient(135deg,#B23A4E,#8A2436)" : BG,
+    background: primary ? "#9B2C3F" : BG,
     color: primary ? "#fff" : TEXT_MAIN, boxShadow: SHADOW_OUT, border: "none", borderRadius: 12,
     padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
     display: "inline-flex", alignItems: "center", gap: 7,
@@ -331,7 +331,7 @@ export default function TripDocuments() {
   const Toggle = ({ on, set, disabled }: { on: boolean; set: (v: boolean) => void; disabled?: boolean }) => (
     <button disabled={disabled} onClick={() => set(!on)} style={{
       width: 38, height: 22, borderRadius: 99, border: "none", cursor: disabled ? "not-allowed" : "pointer",
-      background: on ? "linear-gradient(135deg,#B23A4E,#8A2436)" : BG, boxShadow: on ? "none" : SHADOW_IN,
+      background: on ? "#9B2C3F" : BG, boxShadow: on ? "none" : SHADOW_IN,
       position: "relative", opacity: disabled ? 0.5 : 1, flexShrink: 0,
     }}>
       <span style={{ position: "absolute", top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: 99, background: "#fff", transition: "left .15s", boxShadow: "0 1px 3px rgba(0,0,0,.25)" }} />
@@ -347,11 +347,11 @@ export default function TripDocuments() {
 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 14, background: "linear-gradient(135deg,#B23A4E,#8A2436)", boxShadow: SHADOW_OUT, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 46, height: 46, borderRadius: 14, background: "#9B2C3F", boxShadow: SHADOW_OUT, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <FolderTree style={{ width: 22, height: 22, color: "#fff" }} />
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: TEXT_MAIN, margin: 0 }}>Trip Documents</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: TEXT_MAIN, margin: 0 }}>Trip Documents</h1>
             <p style={{ fontSize: 13, color: TEXT_MUTED, margin: 0 }}>
               Drop vouchers, tickets and documents. They're sorted into the client folder on your PC and on Google Drive.
             </p>
@@ -361,14 +361,14 @@ export default function TripDocuments() {
         {/* Trip details + folder preview */}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 20 }} className="max-lg:!grid-cols-1">
           <div style={card}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: TEXT_MAIN, margin: "0 0 14px" }}>1 · Trip details</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: TEXT_MAIN, margin: "0 0 14px" }}>1 · Trip details</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1.4fr 0.8fr", gap: 12 }}>
               {[
                 { label: "Client name", value: client, set: setClient, ph: "Mr. Romil" },
                 { label: "Destination", value: destination, set: setDestination, ph: "Amsterdam" },
                 { label: "Travel year", value: year, set: setYear, ph: "2026" },
               ].map(f => (
-                <label key={f.label} style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 600, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>
+                <label key={f.label} style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 600, color: TEXT_MUTED, textTransform: "", }}>
                   {f.label}
                   <input value={f.value} placeholder={f.ph} onChange={e => f.set(e.target.value)} style={input} />
                 </label>
@@ -381,9 +381,9 @@ export default function TripDocuments() {
 
           {/* Folder map */}
           <div style={card}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: TEXT_MAIN, margin: "0 0 12px" }}>Folder preview</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: TEXT_MAIN, margin: "0 0 12px" }}>Folder preview</h3>
             <div style={{ fontSize: 13, color: TEXT_MAIN, fontFamily: "ui-monospace, Consolas, monospace" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
                 <FolderOpen style={{ width: 15, height: 15, color: ACCENT }} /> {folderName || "Client Destination_YY"}
               </div>
               {CATEGORIES.filter(c => c.folder).map((c, idx, arr) => {
@@ -408,7 +408,7 @@ export default function TripDocuments() {
 
         {/* Drop zone */}
         <div style={card}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: TEXT_MAIN, margin: "0 0 14px" }}>2 · Drop files</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: TEXT_MAIN, margin: "0 0 14px" }}>2 · Drop files</h3>
           <div {...dragProps("all")} onClick={() => fileInput.current?.click()}
             style={{
               borderRadius: 18, padding: "28px 16px", textAlign: "center", cursor: "pointer",
@@ -437,7 +437,7 @@ export default function TripDocuments() {
                       <Icon style={{ width: 14, height: 14, color: "#fff" }} />
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_MAIN }}>{c.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_MAIN }}>{c.label}</div>
                       <div style={{ fontSize: 10.5, color: TEXT_MUTED }}>{c.hint}</div>
                     </div>
                   </div>
@@ -523,7 +523,7 @@ export default function TripDocuments() {
         {/* Save */}
         <div style={card}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: TEXT_MAIN, margin: 0 }}>3 · Save</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: TEXT_MAIN, margin: 0 }}>3 · Save</h3>
             <button onClick={() => setShowSettings(s => !s)} style={{ ...btn(), padding: "6px 10px", fontSize: 12 }}>
               <Settings2 style={{ width: 13, height: 13 }} /> Settings
             </button>
@@ -535,7 +535,7 @@ export default function TripDocuments() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <HardDrive style={{ width: 18, height: 18, color: ACCENT }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_MAIN }}>This computer</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_MAIN }}>This computer</div>
                   <div style={{ fontSize: 11.5, color: TEXT_MUTED }}>
                     {direct
                       ? baseDirName ? <>Saves inside <b>{baseDirName}</b></> : "Choose where client folders should go"
@@ -556,7 +556,7 @@ export default function TripDocuments() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <Cloud style={{ width: 18, height: 18, color: "#3FAE82" }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_MAIN }}>Google Drive</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_MAIN }}>Google Drive</div>
                   <div style={{ fontSize: 11.5, color: TEXT_MUTED }}>
                     {!isDriveConfigured()
                       ? "Not set up yet: add VITE_GOOGLE_CLIENT_ID to the app settings."

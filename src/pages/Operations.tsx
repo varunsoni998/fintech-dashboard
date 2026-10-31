@@ -93,10 +93,10 @@ const Operations = () => {
                     <span className="text-xs font-medium text-card-foreground">{proj.progress}%</span>
                   </div>
                   <div className="flex items-center justify-between mt-2">
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3" /> {proj.tasks.done}/{proj.tasks.total} tasks
                     </span>
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                       <Calendar className="h-3 w-3" /> Due {proj.dueDate}
                     </span>
                   </div>

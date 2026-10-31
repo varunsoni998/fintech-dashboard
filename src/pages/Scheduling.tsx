@@ -166,7 +166,7 @@ const Scheduling = () => {
                 <span className="text-xs text-muted-foreground">{item.label}</span>
               </div>
               <p className="text-xl font-serif text-card-foreground">{item.value}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">{item.sub}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{item.sub}</p>
             </motion.div>
           ))}
         </div>
@@ -314,7 +314,7 @@ const Scheduling = () => {
                             {formatDate(lead.created_at)}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
                               {lead.status || "Sent"}
                             </span>
                           </td>
@@ -348,7 +348,7 @@ const Scheduling = () => {
                   <div key={item.name}
                     className="flex items-center justify-between bg-muted/40 rounded-lg px-3 py-2">
                     <span className="text-xs font-medium text-card-foreground">{item.name}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${item.color}`}>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${item.color}`}>
                       {item.status}
                     </span>
                   </div>
@@ -366,7 +366,7 @@ const Scheduling = () => {
                   "The record is saved to Supabase automatically",
                 ].map((step, i) => (
                   <li key={i} className="flex items-start gap-2.5">
-                    <span className="h-5 w-5 rounded-full bg-accent/10 text-accent flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                    <span className="h-5 w-5 rounded-full bg-accent/10 text-accent flex items-center justify-center text-[11px] font-semibold shrink-0 mt-0.5">
                       {i + 1}
                     </span>
                     <span className="text-xs text-muted-foreground leading-relaxed">{step}</span>
@@ -377,7 +377,7 @@ const Scheduling = () => {
 
             {/* Quick tip */}
             <motion.div {...fade(0.35)} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-xs font-semibold text-amber-800 mb-1">⚙️ Setup required</p>
+              <p className="text-xs font-semibold text-amber-800 mb-1">Setup required</p>
               <p className="text-[11px] text-amber-700 leading-relaxed">
                 Update <code className="bg-amber-100 px-1 rounded">CALENDLY_BASE</code> at the top of this file with your actual Calendly URL before going live.
               </p>

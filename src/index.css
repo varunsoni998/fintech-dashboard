@@ -124,7 +124,7 @@
     letter-spacing: -0.005em;
   }
   /* page titles: elegant serif, like the Custom Holidays brochures */
-  h1, .font-serif { font-family: 'Newsreader', 'DM Serif Display', Georgia, serif !important; font-weight: 600; letter-spacing: -0.01em; }
+  h1, .font-serif { font-family: 'Newsreader', 'DM Serif Display', Georgia, serif !important; font-weight: 500; letter-spacing: -0.01em; }
 
   /* ── Dark mode: override ALL hardcoded neumorphic inline styles ── */
   /* This catches every page that uses background: #F3EAEA inline */
@@ -317,3 +317,8 @@ html [role="tab"][data-state="active"] { box-shadow: var(--neu-shadow-sm); borde
 .neu-raise:active:not(:disabled) { box-shadow: var(--neu-inset-sm); }
 .neu-lift { box-shadow: 4px 4px 10px var(--neu-dark), -3px -3px 8px var(--neu-light), inset 1px 1px 0 rgba(255,255,255,.18); }
 :where(select) { padding: 0.45rem 0.75rem; }
+
+/* unslop */
+body { font-variant-numeric: tabular-nums; }
+h1 { font-weight: 500; letter-spacing: -0.01em; }
+h2, h3 { font-weight: 500; }

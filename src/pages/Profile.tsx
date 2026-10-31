@@ -29,7 +29,7 @@ function Toggle({ value, onChange, dark }: { value: boolean; onChange: () => voi
   return (
     <div onClick={onChange} style={{
       width: 44, height: 24, borderRadius: 99,
-      background: value ? "linear-gradient(135deg, #B23A4E, #8A2436)" : BG,
+      background: value ? "#9B2C3F" : BG,
       boxShadow: value ? "none" : SHADOW_IN,
       position: "relative", cursor: "pointer", transition: "all 0.3s", flexShrink: 0,
     }}>
@@ -110,7 +110,7 @@ export default function Profile() {
 
   function SectionTitle({ children }: { children: React.ReactNode }) {
     return (
-      <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: TEXT_MUTED, textTransform: "uppercase", marginBottom: 16 }}>
+      <p style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, textTransform: "", marginBottom: 16 }}>
         {children}
       </p>
     );
@@ -177,7 +177,7 @@ export default function Profile() {
   return (
     <DashboardLayout>
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "8px 0 40px" }}>
-        <p style={{ fontSize: 22, fontWeight: 800, color: TEXT_MAIN, marginBottom: 24 }}>My Profile</p>
+        <p style={{ fontSize: 22, fontWeight: 600, color: TEXT_MAIN, marginBottom: 24 }}>My Profile</p>
 
         {/* Avatar card */}
         <Card style={{ marginBottom: 20, textAlign: "center" }}>
@@ -185,9 +185,9 @@ export default function Profile() {
             <div style={{ position: "relative" }}>
               <div style={{
                 width: 80, height: 80, borderRadius: 22,
-                background: "linear-gradient(135deg, #B23A4E, #8A2436)",
+                background: "#9B2C3F",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 28, fontWeight: 800, color: "#fff",
+                fontSize: 28, fontWeight: 600, color: "#fff",
                 boxShadow: SHADOW_OUT, letterSpacing: 1,
               }}>
                 {initials}
@@ -204,11 +204,11 @@ export default function Profile() {
               <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} />
             </div>
             <div>
-              <p style={{ fontSize: 18, fontWeight: 800, color: TEXT_MAIN, margin: 0 }}>
+              <p style={{ fontSize: 18, fontWeight: 600, color: TEXT_MAIN, margin: 0 }}>
                 {profile?.full_name || "No name set"}
               </p>
               <span style={{
-                display: "inline-block", marginTop: 6, fontSize: 11, fontWeight: 700,
+                display: "inline-block", marginTop: 6, fontSize: 11, fontWeight: 600,
                 color: "#B23A4E", background: "rgba(178,58,78,0.12)",
                 borderRadius: 99, padding: "3px 12px",
               }}>
@@ -252,10 +252,10 @@ export default function Profile() {
             disabled={saving || !fullName.trim()}
             style={{
               width: "100%", padding: 11, borderRadius: 12, border: "none",
-              background: saving || !fullName.trim() ? BG : "linear-gradient(135deg, #B23A4E, #8A2436)",
+              background: saving || !fullName.trim() ? BG : "#9B2C3F",
               boxShadow: saving || !fullName.trim() ? SHADOW_OUT : "none",
               color: saving || !fullName.trim() ? TEXT_MUTED : "#fff",
-              fontSize: 13, fontWeight: 700,
+              fontSize: 13, fontWeight: 600,
               cursor: saving || !fullName.trim() ? "not-allowed" : "pointer",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               transition: "all 0.2s",
@@ -307,7 +307,7 @@ export default function Profile() {
             sublabel="Contact admin to change your role"
             color="#9B2C3F"
             right={
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#B23A4E", background: "rgba(178,58,78,0.12)", borderRadius: 99, padding: "3px 10px" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#B23A4E", background: "rgba(178,58,78,0.12)", borderRadius: 99, padding: "3px 10px" }}>
                 {displayRole}
               </span>
             }
@@ -335,7 +335,7 @@ export default function Profile() {
         <button onClick={handleSignOut} style={{
           width: "100%", padding: 13, borderRadius: 14, border: "none",
           background: BG, boxShadow: SHADOW_OUT, color: "#E05B5B",
-          fontSize: 13, fontWeight: 700, cursor: "pointer",
+          fontSize: 13, fontWeight: 600, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}>
           <LogOut style={{ width: 15, height: 15 }} />

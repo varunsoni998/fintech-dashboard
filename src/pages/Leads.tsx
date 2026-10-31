@@ -369,7 +369,7 @@ const CHIP_COLORS: Record<string, string> = {
 function FilterSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{label}</p>
+      <p className="text-[11px] font-semibold text-muted-foreground mb-2">{label}</p>
       <div className="flex flex-wrap gap-1.5">{children}</div>
     </div>
   );
@@ -602,7 +602,7 @@ const Leads = () => {
         await insertLead(lead);
         imported++;
       }
-      if (imported) { alert(`✅ ${imported} leads imported!`); loadLeads(); }
+      if (imported) { alert(`${imported} leads imported`); loadLeads(); }
       else           { alert("No valid rows found."); }
     } catch (e: any) {
       alert(`Import failed: ${e.message}`);
@@ -798,7 +798,7 @@ const Leads = () => {
                 <Filter className="h-3.5 w-3.5" />
                 Filters
                 {activeFilterCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-rose-500 text-white text-[11px] font-semibold flex items-center justify-center">
                     {activeFilterCount}
                   </span>
                 )}
@@ -816,7 +816,7 @@ const Leads = () => {
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-                      <span className="text-sm font-bold text-card-foreground">Filters</span>
+                      <span className="text-sm font-semibold text-card-foreground">Filters</span>
                       <div className="flex items-center gap-2">
                         {activeFilterCount > 0 && (
                           <button
@@ -867,9 +867,9 @@ const Leads = () => {
                       <FilterSection label="Lead Score">
                         {[
                           { val: "all",  label: "All",       color: "slate"  },
-                          { val: "high", label: "🔥 70+",    color: "green"  },
-                          { val: "mid",  label: "⚡ 40–69",  color: "yellow" },
-                          { val: "low",  label: "🌱 0–39",   color: "red"    },
+                          { val: "high", label: "70+",    color: "green"  },
+                          { val: "mid",  label: "40–69",  color: "yellow" },
+                          { val: "low",  label: "0–39",   color: "red"    },
                         ].map(opt => (
                           <FilterChip
                             key={opt.val} label={opt.label}
@@ -914,9 +914,9 @@ const Leads = () => {
                       <FilterSection label="Quick Filters">
                         <div className="flex flex-col gap-2 w-full">
                           {[
-                            { key: "hasPhone",    label: "📱 Has Phone number" },
-                            { key: "hasEmail",    label: "📧 Has Email address" },
-                            { key: "hasWhatsApp", label: "💬 WhatsApp reachable" },
+                            { key: "hasPhone",    label: "Has Phone number" },
+                            { key: "hasEmail",    label: "Has Email address" },
+                            { key: "hasWhatsApp", label: "WhatsApp reachable" },
                           ].map(({ key, label }) => (
                             <label key={key} className="flex items-center justify-between px-3 py-2 rounded-xl border border-border hover:bg-muted/40 cursor-pointer transition-colors">
                               <span className="text-xs font-medium text-card-foreground">{label}</span>
@@ -943,7 +943,7 @@ const Leads = () => {
                       </span>
                       <button
                         onClick={() => setShowFilters(false)}
-                        className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity"
+                        className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
                       >
                         Apply
                       </button>

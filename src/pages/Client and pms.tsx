@@ -389,7 +389,7 @@ function AddTripModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+      <label className="text-[11px] font-semibold text-muted-foreground ">{label}</label>
       {children}
     </div>
   );
@@ -446,14 +446,14 @@ function ClientDrawer({
         className="fixed right-0 top-0 h-full w-full max-w-md bg-card border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden"
       >
         <div className="px-5 py-4 border-b border-border flex items-center gap-3 shrink-0">
-          <div className={`h-11 w-11 rounded-full bg-gradient-to-br ${grad(client.name)} flex items-center justify-center text-sm font-bold text-white shrink-0`}>
+          <div className={`h-11 w-11 rounded-full bg-[#8A5A63] flex items-center justify-center text-sm font-semibold text-white shrink-0`}>
             {initials(client.name)}
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-card-foreground truncate">{client.name}</p>
             <p className="text-xs text-muted-foreground">{client.contact_type}</p>
           </div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>
             {client.stage}
           </span>
           <button onClick={() => setConfirmDel(true)}
@@ -473,14 +473,14 @@ function ClientDrawer({
               { label: "Since",      value: fmt(client.created_at).split(" ").slice(1).join(" ") },
             ].map(s => (
               <div key={s.label} className="rounded-xl bg-muted/40 border border-border p-3 text-center">
-                <p className="text-lg font-bold text-card-foreground">{s.value}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{s.label}</p>
+                <p className="text-lg font-semibold text-card-foreground">{s.value}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{s.label}</p>
               </div>
             ))}
           </div>
 
           <div className="rounded-xl border border-border p-4 space-y-2.5">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Contact</p>
+            <p className="text-xs font-semibold text-muted-foreground ">Contact</p>
             {client.email && (
               <div className="flex items-center gap-2 text-sm text-card-foreground">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -505,7 +505,7 @@ function ClientDrawer({
           </div>
 
           <div>
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Trip History</p>
+            <p className="text-xs font-semibold text-muted-foreground mb-3">Trip History</p>
             {loadTrips ? (
               <div className="flex items-center gap-2 text-muted-foreground py-4">
                 <Loader2 className="h-4 w-4 animate-spin" /><span className="text-xs">Loading trips…</span>
@@ -522,7 +522,7 @@ function ClientDrawer({
                     <div key={trip.id} className="rounded-xl border border-border bg-card p-3 space-y-1.5">
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-semibold text-card-foreground leading-tight">{trip.name}</p>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${sm.bg} ${sm.color}`}>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${sm.bg} ${sm.color}`}>
                           {sm.label}
                         </span>
                       </div>
@@ -604,14 +604,14 @@ function TripDrawer({
               { label: "End Date",   value: fmt(trip.end_date)   },
             ].map(s => (
               <div key={s.label} className="rounded-xl bg-muted/40 border border-border p-3">
-                <p className="text-[10px] text-muted-foreground mb-1">{s.label}</p>
+                <p className="text-[11px] text-muted-foreground mb-1">{s.label}</p>
                 <p className="text-sm font-semibold text-card-foreground">{s.value}</p>
               </div>
             ))}
           </div>
 
           <div className="rounded-xl border border-border p-4 space-y-3">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Details</p>
+            <p className="text-xs font-semibold text-muted-foreground ">Details</p>
             {[
               { label: "Project Lead", value: trip.project_lead },
               { label: "Places",       value: trip.places       },
@@ -619,14 +619,14 @@ function TripDrawer({
               { label: "Description",  value: trip.description  },
             ].filter(r => r.value).map(r => (
               <div key={r.label}>
-                <p className="text-[10px] text-muted-foreground">{r.label}</p>
+                <p className="text-[11px] text-muted-foreground">{r.label}</p>
                 <p className="text-sm text-card-foreground mt-0.5">{r.value}</p>
               </div>
             ))}
           </div>
 
           <div className="rounded-xl border border-border p-4">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Automations</p>
+            <p className="text-xs font-semibold text-muted-foreground mb-3">Automations</p>
             <div className="space-y-2">
               {[
                 { label: "Confirmation Email" },
@@ -636,7 +636,7 @@ function TripDrawer({
               ].map(a => (
                 <div key={a.label} className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">{a.label}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Tracked</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Tracked</span>
                 </div>
               ))}
             </div>
@@ -874,7 +874,7 @@ const ClientPMS = () => {
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="rounded-xl border bg-card p-4 shadow-card">
-                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                  <p className={`text-2xl font-semibold ${s.color}`}>{s.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
                 </motion.div>
               ))}
@@ -926,14 +926,14 @@ const ClientPMS = () => {
 
                       <button className="w-full text-left" onClick={() => setSelectedClient(client)}>
                         <div className="flex items-start gap-3 mb-3 pr-6">
-                          <div className={`h-10 w-10 rounded-full bg-gradient-to-br ${grad(client.name)} flex items-center justify-center text-[11px] font-bold text-white shrink-0`}>
+                          <div className={`h-10 w-10 rounded-full bg-[#8A5A63] flex items-center justify-center text-[11px] font-semibold text-white shrink-0`}>
                             {initials(client.name)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-card-foreground truncate">{client.name}</p>
                             <p className="text-[11px] text-muted-foreground">{client.contact_type}</p>
                           </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>
                             {client.stage}
                           </span>
                         </div>
@@ -987,7 +987,7 @@ const ClientPMS = () => {
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="rounded-xl border bg-card p-4 shadow-card">
-                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                  <p className={`text-2xl font-semibold ${s.color}`}>{s.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
                 </motion.div>
               ))}
@@ -1055,7 +1055,7 @@ const ClientPMS = () => {
                               {trip.client || "—"}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sm.bg} ${sm.color}`}>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${sm.bg} ${sm.color}`}>
                                 {trip.status || "—"}
                               </span>
                             </td>

@@ -47,7 +47,7 @@ const LeadAnalytics = () => {
                 <span className="text-xs text-muted-foreground">{s.label}</span>
               </div>
               <p className="text-xl font-serif text-card-foreground">{s.value}</p>
-              <p className={`text-[10px] mt-0.5 flex items-center gap-0.5 ${s.up ? "text-green-600" : "text-red-500"}`}>
+              <p className={`text-[11px] mt-0.5 flex items-center gap-0.5 ${s.up ? "text-green-600" : "text-red-500"}`}>
                 {s.up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                 {s.sub}
               </p>

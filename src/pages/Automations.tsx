@@ -112,18 +112,18 @@ const initialCategories: Category[] = [
 const TriggerBadge = ({ t }: { t: TriggerType }) => {
   if (t === "webhook")
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400">
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400">
         <Webhook className="h-2.5 w-2.5" /> Webhook
       </span>
     );
   if (t === "scheduled")
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400">
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400">
         <Clock className="h-2.5 w-2.5" /> Scheduled
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-800/40 text-zinc-500">
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-800/40 text-zinc-500">
       <Construction className="h-2.5 w-2.5" /> Not built
     </span>
   );
@@ -184,7 +184,7 @@ const AutomationRow = ({
             </p>
           )}
           {automation.status === "idle" && automation.remarks && (
-            <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
               <AlertCircle className="h-2.5 w-2.5 shrink-0" />
               {automation.remarks}
             </p>
@@ -446,7 +446,7 @@ const Automations = () => {
                 {cat.name}
 
                 {/* Built count pill */}
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
                   isActive
                     ? "bg-muted text-muted-foreground"
                     : "bg-muted/50 text-muted-foreground/60"

@@ -116,7 +116,7 @@ function Stars({ n }: { n: number }) {
 
 function OnboardedBadge() {
   return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+    <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
       <BadgeCheck className="h-2.5 w-2.5" /> Onboarded
     </span>
   );
@@ -128,7 +128,7 @@ function SourceTag({ email, date }: { email?: string; date?: string }) {
   return (
     <div className="relative inline-block">
       <button onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition px-1.5 py-0.5 rounded border border-border hover:border-foreground/20">
+        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition px-1.5 py-0.5 rounded border border-border hover:border-foreground/20">
         <Eye className="h-2.5 w-2.5" /> Source
       </button>
       {open && (
@@ -145,7 +145,7 @@ function SourceTag({ email, date }: { email?: string; date?: string }) {
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      <label className="text-xs font-medium text-muted-foreground ">
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       {children}
@@ -274,7 +274,7 @@ function ItineraryList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: stri
             <thead>
               <tr className="border-b bg-muted/30">
                 {["Client","Destination","Dates","Nights","Price","Status","Updated",""].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left px-4 py-3 text-xs font-medium text-muted-foreground ">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -613,7 +613,7 @@ function CreateItinerary({ onBack, onSaved }: { onBack: () => void; onSaved: (id
                         <div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">{h.supplier_name}</span>{h.is_onboarded_supplier && <OnboardedBadge />}</div>
                         <SourceTag email={h.source_email} date={h.source_date} />
                       </div>
-                      {h.cancellation_policy && <p className="text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded">{h.cancellation_policy}</p>}
+                      {h.cancellation_policy && <p className="text-[11px] text-green-600 bg-green-50 px-2 py-1 rounded">{h.cancellation_policy}</p>}
                     </div>
                   );
                 })}
@@ -747,7 +747,7 @@ function CreateItinerary({ onBack, onSaved }: { onBack: () => void; onSaved: (id
                 </div>
               ))}
               <div className="flex items-center justify-between py-2 border-b border-border font-semibold"><p>Supplier Total</p><p>{fmt(hotelCost + activityCost + transferCost, form.currency)}</p></div>
-              <div className="flex items-center justify-between py-2 text-lg font-bold text-foreground"><p>Total (before markup)</p><p>{fmt(hotelCost + activityCost + transferCost, form.currency)}</p></div>
+              <div className="flex items-center justify-between py-2 text-lg font-semibold text-foreground"><p>Total (before markup)</p><p>{fmt(hotelCost + activityCost + transferCost, form.currency)}</p></div>
               <p className="text-xs text-muted-foreground">Markup and discounts can be applied after saving.</p>
             </div>
           </div>
@@ -803,10 +803,10 @@ function DayCard({ day }: { day: DayPlan }) {
             <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20">
               <div className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${itemColors[item.type] || "bg-gray-50 text-gray-500"}`}>{icons[item.type] || <FileText className="h-3.5 w-3.5" />}</div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">{item.time && <span className="text-[10px] text-muted-foreground font-mono">{item.time}</span>}<p className="text-sm font-medium text-foreground">{item.title}</p></div>
+                <div className="flex items-center gap-2">{item.time && <span className="text-[11px] text-muted-foreground font-mono">{item.time}</span>}<p className="text-sm font-medium text-foreground">{item.title}</p></div>
                 {item.description && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.description}</p>}
-                {item.supplier && <p className="text-[10px] text-muted-foreground mt-1">{item.supplier}</p>}
-                {item.notes && <p className="text-[10px] text-blue-600 mt-1 italic">{item.notes}</p>}
+                {item.supplier && <p className="text-[11px] text-muted-foreground mt-1">{item.supplier}</p>}
+                {item.notes && <p className="text-[11px] text-blue-600 mt-1 italic">{item.notes}</p>}
               </div>
             </div>
           ))}
@@ -968,7 +968,7 @@ function ItineraryDetail({ id, onBack }: { id: string; onBack: () => void }) {
               <div className="flex justify-between text-muted-foreground"><span>Markup ({markup.type === "percentage" ? `${markup.value}%` : "fixed"})</span><span>+ {fmt(markupAmt, data.currency)}</span></div>
               {discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>- {fmt(discount, data.currency)}</span></div>}
               {tax > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax</span><span>+ {fmt(tax, data.currency)}</span></div>}
-              <div className="flex justify-between font-bold text-lg text-foreground border-t border-border pt-2"><span>Final Price</span><span>{fmt(finalPrice, data.currency)}</span></div>
+              <div className="flex justify-between font-semibold text-lg text-foreground border-t border-border pt-2"><span>Final Price</span><span>{fmt(finalPrice, data.currency)}</span></div>
             </div>
             <Btn className="w-full" loading={saving} onClick={() => saveChanges()}><Save className="h-4 w-4" /> Save Pricing</Btn>
           </div>
@@ -983,8 +983,8 @@ function ItineraryDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
           <div className="rounded-xl border bg-white dark:bg-card p-8 space-y-6 font-serif">
             <div className="text-center border-b border-border pb-6">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Travel Proposal</p>
-              <h1 className="text-2xl font-bold text-foreground">{data.destination} Itinerary</h1>
+              <p className="text-xs text-muted-foreground mb-2">Travel Proposal</p>
+              <h1 className="text-2xl font-semibold text-foreground">{data.destination} Itinerary</h1>
               <p className="text-muted-foreground mt-1">Prepared for {data.client_name}</p>
               <p className="text-sm text-muted-foreground">{fmtDate(data.start_date)} – {fmtDate(data.end_date)} · {data.nights} Nights</p>
             </div>
@@ -997,16 +997,16 @@ function ItineraryDetail({ id, onBack }: { id: string; onBack: () => void }) {
                 { label: "Transfer", value: data.transport_preference || "Private" },
                 { label: "Trip Type", value: data.trip_type || "Leisure" },
               ].map(item => (
-                <div key={item.label} className="bg-muted/30 rounded-lg p-3"><p className="text-xs text-muted-foreground uppercase tracking-wide">{item.label}</p><p className="font-medium text-foreground mt-0.5">{item.value}</p></div>
+                <div key={item.label} className="bg-muted/30 rounded-lg p-3"><p className="text-xs text-muted-foreground ">{item.label}</p><p className="font-medium text-foreground mt-0.5">{item.value}</p></div>
               ))}
             </div>
             {days.length > 0 && (
               <div>
-                <h2 className="text-base font-bold text-foreground mb-3 uppercase tracking-wide text-xs text-muted-foreground">Day-by-Day Itinerary</h2>
+                <h2 className="text-base font-semibold text-foreground mb-3 text-xs text-muted-foreground">Day-by-Day Itinerary</h2>
                 <div className="space-y-4">
                   {days.map(day => (
                     <div key={day.day_number} className="border-l-2 border-accent/30 pl-4 space-y-1">
-                      <p className="font-bold text-foreground text-sm">{day.title}</p>
+                      <p className="font-semibold text-foreground text-sm">{day.title}</p>
                       {day.date && <p className="text-xs text-muted-foreground">{fmtDate(day.date)}</p>}
                       <ul className="space-y-1">{day.items.map((item, i) => (<li key={i} className="text-sm text-foreground flex items-start gap-2"><span className="text-muted-foreground mt-0.5">•</span><span>{item.title}{item.description ? ` — ${item.description}` : ""}</span></li>))}</ul>
                     </div>
@@ -1015,14 +1015,14 @@ function ItineraryDetail({ id, onBack }: { id: string; onBack: () => void }) {
               </div>
             )}
             <div className="border-t border-border pt-4">
-              <h2 className="text-xs uppercase tracking-wide text-muted-foreground font-bold mb-3">Package Price</h2>
+              <h2 className="text-xs text-muted-foreground font-semibold mb-3">Package Price</h2>
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground space-y-1">
                   {data.selected_hotels?.[0] && <p>• Accommodation: {data.nights} nights at {data.selected_hotels[0].hotel_name}</p>}
                   {data.selected_activities?.map(a => <p key={a.id}>• {a.activity_name}</p>)}
                   {data.selected_transfers?.map(t => <p key={t.id}>• {t.transfer_type}: {t.route}</p>)}
                 </div>
-                <div className="text-right"><p className="text-3xl font-bold text-foreground">{fmt(finalPrice, data.currency)}</p><p className="text-xs text-muted-foreground">for {data.adults} adult(s)</p></div>
+                <div className="text-right"><p className="text-3xl font-semibold text-foreground">{fmt(finalPrice, data.currency)}</p><p className="text-xs text-muted-foreground">for {data.adults} adult(s)</p></div>
               </div>
             </div>
             {data.special_requests && <div className="bg-muted/30 rounded-lg p-4 text-sm text-muted-foreground"><p className="font-medium text-foreground mb-1">Special Arrangements</p><p>{data.special_requests}</p></div>}

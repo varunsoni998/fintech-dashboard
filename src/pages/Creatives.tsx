@@ -84,7 +84,7 @@ const RATIO_OPTIONS: { value: Ratio; label: string; icon: "landscape" | "portrai
 function RatioButtons({ value, onChange }: { value: Ratio; onChange: (v: Ratio) => void }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ratio</p>
+      <p className="text-xs font-semibold text-muted-foreground ">Ratio</p>
       <div className="flex flex-wrap gap-2">
         {RATIO_OPTIONS.map((r) => (
           <button
@@ -115,7 +115,7 @@ const DURATION_OPTIONS: Duration[] = [2, 3, 5, 8];
 function DurationButtons({ value, onChange }: { value: Duration; onChange: (v: Duration) => void }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</p>
+      <p className="text-xs font-semibold text-muted-foreground ">Duration</p>
       <div className="flex gap-2">
         {DURATION_OPTIONS.map((d) => (
           <button
@@ -245,7 +245,7 @@ function TextToImage() {
       <div className="lg:col-span-1">
         <div className="rounded-xl border bg-card p-4 space-y-4">
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</p>
+            <p className="text-xs font-semibold text-muted-foreground ">Prompt</p>
             <Input
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -362,7 +362,7 @@ function TextToVideo() {
       <div className="lg:col-span-1">
         <div className="rounded-xl border bg-card p-4 space-y-4">
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</p>
+            <p className="text-xs font-semibold text-muted-foreground ">Prompt</p>
             <Input
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -529,7 +529,7 @@ function ImageToVideo() {
     <div className="grid lg:grid-cols-3 gap-6 items-start">
       <div className="space-y-4">
         <div className="rounded-xl border bg-card p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source Image</p>
+          <p className="text-xs font-semibold text-muted-foreground ">Source Image</p>
           {analyzing ? (
             <div className="relative h-48 rounded-lg overflow-hidden bg-gray-100">
               <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
@@ -565,7 +565,7 @@ function ImageToVideo() {
 
         <div className="rounded-xl border bg-card p-4 space-y-4">
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Motion Prompt</p>
+            <p className="text-xs font-semibold text-muted-foreground ">Motion Prompt</p>
             {analyzing ? (
               <PromptSkeleton />
             ) : (
@@ -922,7 +922,7 @@ function Storyboard() {
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
               className="border rounded-2xl shadow-md p-6 bg-white"
             >
-              <h2 className="text-2xl font-bold mb-5">Scene {scene.scene}</h2>
+              <h2 className="text-2xl font-semibold mb-5">Scene {scene.scene}</h2>
               <div className="grid lg:grid-cols-2 gap-8">
                 {/* Image */}
                 <div>
@@ -948,7 +948,7 @@ function Storyboard() {
                       <Trash2 className="h-4 w-4 mr-2" /> Delete
                     </Button>
                     <Button variant="secondary" disabled={scene.imageLoading} onClick={() => regenerateImage(i)}>
-                      🔄 Regenerate
+                      Regenerate
                     </Button>
                     {scene.imageLoading && (
                       <Button variant="destructive" onClick={() => stopSceneImage(i)}>
@@ -985,7 +985,7 @@ function Storyboard() {
                       <Video className="mr-2 h-4 w-4" /> Generate Video
                     </Button>
                     <Button variant="secondary" disabled={!imgSrc || scene.videoLoading} onClick={() => generateVideo(i)}>
-                      🔄 Regenerate Video
+                      Regenerate Video
                     </Button>
                     {scene.videoLoading && (
                       <Button variant="destructive" onClick={() => stopSceneVideo(i)}>
@@ -1002,11 +1002,11 @@ function Storyboard() {
               {/* Prompts */}
               <div className="mt-8 grid md:grid-cols-2 gap-6">
                 <div className="bg-gray-50 rounded-xl p-4 border">
-                  <h3 className="font-bold text-lg mb-3">Image Prompt</h3>
+                  <h3 className="font-semibold text-lg mb-3">Image Prompt</h3>
                   {scene.promptsLoading ? <PromptSkeleton /> : <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.image_prompt}</p>}
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 border">
-                  <h3 className="font-bold text-lg mb-3">Video Prompt</h3>
+                  <h3 className="font-semibold text-lg mb-3">Video Prompt</h3>
                   {scene.promptsLoading ? <PromptSkeleton /> : <p className="text-sm whitespace-pre-wrap leading-7 text-gray-700">{scene.video_prompt}</p>}
                 </div>
               </div>
@@ -1030,7 +1030,7 @@ export default function Creatives() {
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         <div>
-          <h1 className="text-4xl font-bold flex items-center gap-2">
+          <h1 className="text-4xl font-semibold flex items-center gap-2">
             <Sparkles className="text-yellow-500" />
             AI Travel Studio
           </h1>

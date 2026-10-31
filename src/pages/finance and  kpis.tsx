@@ -122,17 +122,17 @@ export default function FinanceKPIs() {
 
   // ── KPI card configs ───────────────────────────────────────────────────────
   const kpiCards = [
-    { label: "Revenue",       value: finance ? currency(finance.revenue.realized)   : null, icon: IndianRupee, bg: "bg-green-100",  color: "text-green-600"  },
-    { label: "Expenses",      value: finance ? currency(finance.expenses.total)      : null, icon: TrendingDown, bg: "bg-red-100",  color: "text-red-600"    },
-    { label: "Gross Profit",  value: finance ? currency(finance.profit.gross_profit) : null, icon: TrendingUp,  bg: "bg-blue-100", color: "text-blue-600"   },
-    { label: "Profit Margin", value: finance ? percent(finance.profit.profit_margin) : null, icon: PieChart,    bg: "bg-yellow-100", color: "text-yellow-600" },
+    { label: "Revenue",       value: finance ? currency(finance.revenue.realized)   : null, icon: IndianRupee, bg: "bg-transparent",  color: "text-muted-foreground"  },
+    { label: "Expenses",      value: finance ? currency(finance.expenses.total)      : null, icon: TrendingDown, bg: "bg-transparent",  color: "text-muted-foreground"    },
+    { label: "Gross Profit",  value: finance ? currency(finance.profit.gross_profit) : null, icon: TrendingUp,  bg: "bg-transparent", color: "text-muted-foreground"   },
+    { label: "Profit Margin", value: finance ? percent(finance.profit.profit_margin) : null, icon: PieChart,    bg: "bg-transparent", color: "text-muted-foreground" },
   ];
 
   const row2Cards = [
-    { label: "Bookings",   value: finance ? String(finance.bookings.total)                     : null, icon: Briefcase,   color: "text-primary"    },
-    { label: "Confirmed",  value: finance ? String(finance.bookings.confirmed)                  : null, icon: CheckCircle, color: "text-green-600"  },
-    { label: "Conversion", value: finance ? percent(finance.bookings.conversion_rate)           : null, icon: Target,      color: "text-blue-600"   },
-    { label: "Updated",    value: finance ? new Date(finance.generated_at).toLocaleDateString() : null, icon: Calendar,    color: "text-accent"     },
+    { label: "Bookings",   value: finance ? String(finance.bookings.total)                     : null, icon: Briefcase,   color: "text-muted-foreground"    },
+    { label: "Confirmed",  value: finance ? String(finance.bookings.confirmed)                  : null, icon: CheckCircle, color: "text-muted-foreground"  },
+    { label: "Conversion", value: finance ? percent(finance.bookings.conversion_rate)           : null, icon: Target,      color: "text-muted-foreground"   },
+    { label: "Updated",    value: finance ? new Date(finance.generated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null, icon: Calendar,    color: "text-muted-foreground"     },
   ];
 
   return (
@@ -163,7 +163,7 @@ export default function FinanceKPIs() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{label}</p>
-                    <h2 className="text-3xl font-bold mt-3">{value}</h2>
+                    <h2 className="text-3xl font-semibold mt-3">{value}</h2>
                   </div>
                   <div className={`h-12 w-12 rounded-xl ${bg} flex items-center justify-center`}>
                     <Icon className={`h-6 w-6 ${color}`} />
@@ -192,7 +192,7 @@ export default function FinanceKPIs() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{label}</p>
-                    <h2 className="text-2xl font-bold mt-3">{value}</h2>
+                    <h2 className="text-2xl font-semibold mt-3">{value}</h2>
                   </div>
                   <Icon className={`h-7 w-7 ${color}`} />
                 </div>
@@ -204,9 +204,9 @@ export default function FinanceKPIs() {
         {/* PROGRESS SECTION */}
         <div className="grid lg:grid-cols-3 gap-6">
           {[
-            { title: "Revenue Target",       current: finance?.revenue.realized ?? 0,      target: finance?.targets.target_revenue ?? 0,       color: "bg-green-600"  },
-            { title: "Booking Target",       current: finance?.bookings.total ?? 0,         target: finance?.targets.target_bookings ?? 0,      color: "bg-blue-600"   },
-            { title: "Profit Margin Target", current: finance?.profit.profit_margin ?? 0,   target: finance?.targets.target_profit_margin ?? 0, color: "bg-yellow-500" },
+            { title: "Revenue Target",       current: finance?.revenue.realized ?? 0,      target: finance?.targets.target_revenue ?? 0,       color: "bg-primary"  },
+            { title: "Booking Target",       current: finance?.bookings.total ?? 0,         target: finance?.targets.target_bookings ?? 0,      color: "bg-primary"   },
+            { title: "Profit Margin Target", current: finance?.profit.profit_margin ?? 0,   target: finance?.targets.target_profit_margin ?? 0, color: "bg-primary" },
           ].map(({ title, current, target, color }, i) => (
             <motion.div key={title} {...fade(0.5 + i * 0.05)} className="rounded-2xl border bg-card p-6">
               <h3 className="font-semibold text-lg mb-6">{title}</h3>
@@ -246,13 +246,13 @@ export default function FinanceKPIs() {
             ) : (
               <div className="space-y-5">
                 {[
-                  { label: "Realized Revenue", value: finance.revenue.realized,      icon: IndianRupee, color: "text-green-600"  },
-                  { label: "Pending Revenue",  value: finance.revenue.pending,        icon: Clock,       color: "text-yellow-600" },
-                  { label: "Pipeline Value",   value: finance.revenue.pipeline_total, icon: TrendingUp,  color: "text-blue-600"   },
+                  { label: "Realized Revenue", value: finance.revenue.realized,      icon: IndianRupee, color: "text-muted-foreground"  },
+                  { label: "Pending Revenue",  value: finance.revenue.pending,        icon: Clock,       color: "text-muted-foreground" },
+                  { label: "Pipeline Value",   value: finance.revenue.pipeline_total, icon: TrendingUp,  color: "text-muted-foreground"   },
                 ].map(({ label, value, icon: Icon, color }, i, arr) => (
                   <div key={label}>
                     <div className="flex items-center justify-between">
-                      <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-bold mt-1">{currency(value)}</p></div>
+                      <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold mt-1">{currency(value)}</p></div>
                       <Icon className={`h-8 w-8 ${color}`} />
                     </div>
                     {i < arr.length - 1 && <hr className="mt-4" />}
@@ -271,14 +271,14 @@ export default function FinanceKPIs() {
             ) : (
               <div className="space-y-5">
                 {[
-                  { label: "Supplier Cost",    value: finance.expenses.supplier_cost, icon: DollarSign,  color: "text-red-500"    },
-                  { label: "Operational Cost", value: finance.expenses.overhead,       icon: Briefcase,   color: "text-orange-500" },
-                  { label: "Refunds",          value: finance.expenses.refunds,        icon: TrendingDown, color: "text-red-600"  },
-                  { label: "Total Expenses",   value: finance.expenses.total,          icon: PieChart,    color: "text-red-600"    },
+                  { label: "Supplier Cost",    value: finance.expenses.supplier_cost, icon: IndianRupee,  color: "text-muted-foreground"    },
+                  { label: "Operational Cost", value: finance.expenses.overhead,       icon: Briefcase,   color: "text-muted-foreground" },
+                  { label: "Refunds",          value: finance.expenses.refunds,        icon: TrendingDown, color: "text-muted-foreground"  },
+                  { label: "Total Expenses",   value: finance.expenses.total,          icon: PieChart,    color: "text-muted-foreground"    },
                 ].map(({ label, value, icon: Icon, color }, i, arr) => (
                   <div key={label}>
                     <div className="flex items-center justify-between">
-                      <div><p className="text-sm text-muted-foreground">{label}</p><p className={`text-2xl font-bold mt-1 ${label === "Total Expenses" ? "text-red-600" : ""}`}>{currency(value)}</p></div>
+                      <div><p className="text-sm text-muted-foreground">{label}</p><p className={`text-2xl font-semibold mt-1 `}>{currency(value)}</p></div>
                       <Icon className={`h-8 w-8 ${color}`} />
                     </div>
                     {i < arr.length - 1 && <hr className="mt-4" />}
@@ -302,7 +302,7 @@ export default function FinanceKPIs() {
                 <p className="text-sm text-muted-foreground">{label}</p>
                 {loading || !value
                   ? <div className="h-7 w-24 bg-muted-foreground/20 rounded-lg mt-3 animate-pulse" />
-                  : <h2 className="text-2xl font-bold mt-3">{value}</h2>}
+                  : <h2 className="text-2xl font-semibold mt-3">{value}</h2>}
                 <p className="text-xs mt-2 text-muted-foreground">{sub}</p>
               </div>
             ))}
@@ -340,9 +340,9 @@ export default function FinanceKPIs() {
                     <tr key={e.id} className="border-t hover:bg-muted/30 transition-colors">
                       <td className="px-6 py-5 font-medium">{e.trip_name}</td>
                       <td className="px-6 py-5">{e.client_name}</td>
-                      <td className="px-6 py-5 text-right text-green-600 font-semibold">{currency(e.revenue)}</td>
-                      <td className="px-6 py-5 text-right text-red-500 font-semibold">{currency(e.expense)}</td>
-                      <td className="px-6 py-5 text-right font-bold">{currency(e.profit)}</td>
+                      <td className="px-6 py-5 text-right font-medium tabular-nums">{currency(e.revenue)}</td>
+                      <td className="px-6 py-5 text-right text-muted-foreground tabular-nums">{currency(e.expense)}</td>
+                      <td className="px-6 py-5 text-right font-semibold">{currency(e.profit)}</td>
                       <td className="px-6 py-5 text-center text-muted-foreground">{new Date(e.booking_date).toLocaleDateString("en-IN")}</td>
                     </tr>
                   ))
@@ -361,7 +361,7 @@ export default function FinanceKPIs() {
                 <p className="text-sm text-muted-foreground mt-1">Updated from your connected data source.</p>
               </div>
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Last Updated</p>
+                <p className="text-xs text-muted-foreground">Last Updated</p>
                 <p className="font-medium mt-1">{new Date(finance.generated_at).toLocaleString("en-IN")}</p>
               </div>
             </div>

@@ -486,7 +486,7 @@ const Chat = () => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium truncate">{attachment.name}</p>
-          <p className="text-[10px] opacity-70">{formatBytes(attachment.size)}</p>
+          <p className="text-[11px] opacity-70">{formatBytes(attachment.size)}</p>
         </div>
         <Download className="h-3.5 w-3.5 opacity-70 shrink-0" />
       </a>
@@ -544,7 +544,7 @@ const Chat = () => {
               <div className="flex-1 overflow-y-auto">
                 {/* Groups */}
                 <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                  <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Groups</span>
+                  <span className="text-[11px] font-semibold text-muted-foreground ">Groups</span>
                   <button onClick={() => openAdd("group")} className="text-muted-foreground hover:text-accent p-0.5">
                     <Plus className="h-3.5 w-3.5" />
                   </button>
@@ -566,7 +566,7 @@ const Chat = () => {
 
                 {/* People Online */}
                 <div className="flex items-center justify-between px-4 pt-4 pb-1">
-                  <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  <span className="text-[11px] font-semibold text-muted-foreground ">
                     Online {onlinePeople.length > 0 && `(${onlinePeople.length})`}
                   </span>
                 </div>
@@ -586,7 +586,7 @@ const Chat = () => {
 
                 {/* All Company Members */}
                 <div className="flex items-center justify-between px-4 pt-4 pb-1">
-                  <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  <span className="text-[11px] font-semibold text-muted-foreground ">
                     All Members ({offlineRecent.length + onlinePeople.length})
                   </span>
                 </div>
@@ -610,14 +610,14 @@ const Chat = () => {
               <div className="p-3 border-t border-border">
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-primary-foreground">
+                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
                       {myName.slice(0, 2).toUpperCase()}
                     </div>
                     <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500 border-2 border-card" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-card-foreground truncate">{myName}</p>
-                    <p className="text-[10px] text-green-500">● Online</p>
+                    <p className="text-[11px] text-green-500">● Online</p>
                   </div>
                 </div>
               </div>
@@ -637,7 +637,7 @@ const Chat = () => {
                             ? <User className="h-3 w-3 text-muted-foreground" />
                             : <Users className="h-3 w-3 text-muted-foreground" />}
                         </p>
-                        <p className={`text-[10px] ${
+                        <p className={`text-[11px] ${
                           activeConversation.type === "dm"
                             ? activeConversation.online ? "text-green-500" : "text-muted-foreground"
                             : "text-muted-foreground"
@@ -674,7 +674,7 @@ const Chat = () => {
                     {visibleMessages.map(msg => (
                       <div key={msg.id} className={`flex ${msg.self ? "justify-end" : "justify-start"}`}>
                         <div className="max-w-[75%]">
-                          {!msg.self && <p className="text-[10px] font-medium text-accent mb-1">{msg.sender}</p>}
+                          {!msg.self && <p className="text-[11px] font-medium text-accent mb-1">{msg.sender}</p>}
                           {msg.attachment ? (
                             <div className={msg.self ? "flex justify-end" : ""}>
                               {renderAttachment(msg.attachment, msg.self)}
@@ -689,7 +689,7 @@ const Chat = () => {
                             </div>
                           )}
                           <div className={`flex items-center gap-1 mt-1 ${msg.self ? "justify-end" : ""}`}>
-                            <span className="text-[10px] text-muted-foreground">{msg.time}</span>
+                            <span className="text-[11px] text-muted-foreground">{msg.time}</span>
                             {msg.self && <CheckCheck className="h-3 w-3 text-info" />}
                           </div>
                         </div>
@@ -708,13 +708,13 @@ const Chat = () => {
                             </button>
                           </div>
                           {p.error ? (
-                            <p className="text-[10px] text-destructive">{p.error} · tap ✕ to retry</p>
+                            <p className="text-[11px] text-destructive">{p.error} · tap ✕ to retry</p>
                           ) : (
                             <>
                               <div className="h-1.5 rounded-full bg-border overflow-hidden">
                                 <div className="h-full bg-primary transition-all" style={{ width: `${p.progress}%` }} />
                               </div>
-                              <p className="text-[10px] text-muted-foreground mt-1">{formatBytes(p.size)} · {p.progress}%</p>
+                              <p className="text-[11px] text-muted-foreground mt-1">{formatBytes(p.size)} · {p.progress}%</p>
                             </>
                           )}
                         </div>
