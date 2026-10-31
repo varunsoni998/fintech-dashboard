@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Inter:wght@400;500;600;700&family=DM+Serif+Display&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -119,9 +119,12 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', sans-serif;
+    font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.005em;
   }
+  /* page titles: elegant serif, like the Custom Holidays brochures */
+  h1, .font-serif { font-family: 'Newsreader', 'DM Serif Display', Georgia, serif !important; font-weight: 600; letter-spacing: -0.01em; }
 
   /* ── Dark mode: override ALL hardcoded neumorphic inline styles ── */
   /* This catches every page that uses background: #E8E8F2 inline */
@@ -267,3 +270,50 @@
   .shadow-card     { box-shadow: var(--neu-shadow-sm); }
   .shadow-elevated { box-shadow: var(--neu-shadow-lg); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   UI refresh — soft "neumorphic" buttons + fields across the whole dashboard
+   (shapes, shadows and fonts only – every colour still comes from the theme)
+══════════════════════════════════════════════════════════════════════ */
+/* text fields, dropdowns and text boxes: pressed into the page */
+html input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+html select,
+html textarea {
+  border-color: transparent !important;
+  background-color: var(--neu-base);
+  box-shadow: var(--neu-inset-sm);
+  border-radius: 0.75rem;
+  transition: box-shadow .15s ease;
+}
+html input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+html select:focus,
+html textarea:focus {
+  outline: none;
+  box-shadow: var(--neu-inset-sm), 0 0 0 2px hsl(var(--ring) / .35);
+}
+/* every button: rounded, soft press when clicked */
+html button { border-radius: 0.75rem; transition: box-shadow .15s ease, transform .1s ease, background-color .15s ease; }
+html button:not(:disabled):active { transform: translateY(1px); }
+/* outlined buttons → raised soft buttons (no hard border line) */
+html button[class*="border"]:not([class*="border-0"]):not([class*="border-none"]):not([class~="border-b"]):not([class~="border-t"]):not([class~="border-b-2"]):not([role="tab"]) {
+  border-color: transparent !important;
+  background-color: var(--neu-base);
+  box-shadow: var(--neu-shadow-sm);
+}
+html button[class*="border"]:not([class*="border-0"]):not([class*="border-none"]):not([class~="border-b"]):not([class~="border-t"]):not([class~="border-b-2"]):not([role="tab"]):hover:not(:disabled) { box-shadow: var(--neu-shadow); }
+html button[class*="border"]:not([class*="border-0"]):not([class*="border-none"]):not([class~="border-b"]):not([class~="border-t"]):not([class~="border-b-2"]):not([role="tab"]):active:not(:disabled) { box-shadow: var(--neu-inset-sm); }
+/* filled / coloured buttons (main actions) → same colour, soft lift */
+html button[class*="bg-primary"]:not([class*="/1"]):not([class*="/2"]),
+html button[class*="bg-gradient"],
+html button[class*="bg-destructive"] {
+  box-shadow: 4px 4px 10px var(--neu-dark), -3px -3px 8px var(--neu-light), inset 1px 1px 0 rgba(255,255,255,.18);
+}
+/* tabs: active tab pressed in */
+html [role="tablist"] { border-radius: 0.9rem; box-shadow: var(--neu-inset-sm); background-color: var(--neu-base); }
+html [role="tab"][data-state="active"] { box-shadow: var(--neu-shadow-sm); border-radius: 0.7rem; }
+/* shared button looks (used by the Button component) */
+.neu-raise { background-color: var(--neu-base); box-shadow: var(--neu-shadow-sm); border: none; }
+.neu-raise:hover:not(:disabled) { box-shadow: var(--neu-shadow); }
+.neu-raise:active:not(:disabled) { box-shadow: var(--neu-inset-sm); }
+.neu-lift { box-shadow: 4px 4px 10px var(--neu-dark), -3px -3px 8px var(--neu-light), inset 1px 1px 0 rgba(255,255,255,.18); }
+:where(select) { padding: 0.45rem 0.75rem; }

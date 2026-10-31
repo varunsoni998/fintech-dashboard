@@ -15,7 +15,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["DM Sans", "system-ui", "sans-serif"],
-        serif: ["DM Serif Display", "serif"],
+        serif: ["Newsreader", "DM Serif Display", "Georgia", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",

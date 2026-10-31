@@ -178,12 +178,12 @@ export default function PriceCompare() {
   const TINT = dark ? "rgba(107,127,212,0.14)" : "rgba(107,127,212,0.10)";
 
   const card: React.CSSProperties = { background: BG, borderRadius: 18, boxShadow: SHADOW_OUT };
-  const inp: React.CSSProperties = { background: BG, boxShadow: SHADOW_IN, border: "none", borderRadius: 12, padding: "10px 12px", fontSize: 14, color: TEXT, outline: "none", width: "100%" };
-  const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, display: "flex", flexDirection: "column", gap: 5, textTransform: "uppercase", letterSpacing: 0.3 };
+  const inp: React.CSSProperties = { background: BG, boxShadow: SHADOW_IN, border: "none", borderRadius: 12, padding: "11px 14px", fontSize: 14.5, color: TEXT, outline: "none", width: "100%" };
+  const lbl: React.CSSProperties = { fontSize: 12.5, fontWeight: 500, color: MUTED, display: "flex", flexDirection: "column", gap: 6 };
   const pill = (bg: string, fg = "#fff"): React.CSSProperties => ({ background: bg, color: fg, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, whiteSpace: "nowrap" });
   const btn = (kind: "primary" | "ghost" = "ghost"): React.CSSProperties => ({
     background: kind === "primary" ? GRAD : BG, color: kind === "primary" ? "#fff" : TEXT,
-    boxShadow: SHADOW_SM, border: "none", borderRadius: 12, padding: "10px 15px", fontSize: 13.5, fontWeight: 700,
+    boxShadow: SHADOW_SM, border: "none", borderRadius: 12, padding: "11px 18px", fontSize: 14, fontWeight: 600,
     cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
   });
   const round: React.CSSProperties = { width: 30, height: 30, borderRadius: 99, border: "none", background: BG, boxShadow: SHADOW_SM, color: ACCENT, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" };
@@ -1438,7 +1438,7 @@ export default function PriceCompare() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ width: 46, height: 46, borderRadius: 14, background: GRAD, boxShadow: SHADOW_OUT, display: "flex", alignItems: "center", justifyContent: "center" }}><Scale style={{ width: 22, height: 22, color: "#fff" }} /></div>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: TEXT, margin: 0 }}>Price Compare</h1>
+            <h1 style={{ fontSize: 32, fontWeight: 600, color: TEXT, margin: 0, lineHeight: 1.1 }}>Price Compare</h1>
             <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>Every booking site plus your Ottila / TBO / DMC rates. Cheapest first, prices as quoted (no markup).</p>
           </div>
           {extAuto ? (
