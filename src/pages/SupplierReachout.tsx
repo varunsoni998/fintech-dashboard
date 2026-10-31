@@ -296,10 +296,10 @@ const ACTIVE_DEALS = [
 
 const TYPE_COLORS: Record<string, string> = {
   "Luxury Hotel / Resort": "bg-blue-100 text-blue-700",
-  "Boutique Hotel":        "bg-indigo-100 text-indigo-700",
+  "Boutique Hotel":        "bg-rose-100 text-rose-700",
   "Budget Hotel":          "bg-slate-100 text-slate-600",
   "Transport":             "bg-amber-100 text-amber-700",
-  "Tour Operator":         "bg-purple-100 text-purple-700",
+  "Tour Operator":         "bg-rose-100 text-rose-700",
   "Travel Agency":         "bg-pink-100 text-pink-700",
   "Local Guide":           "bg-lime-100 text-lime-700",
   "Activity Provider":     "bg-green-100 text-green-700",
@@ -313,7 +313,7 @@ const FOLLOW_STATUS_META: Record<FollowUpLog["followup_status"], { label: string
   failed:   { label: "Failed",   color: "text-red-500",    dot: "bg-red-400" },
 };
 
-const GRADS = ["from-violet-500 to-purple-600","from-emerald-500 to-teal-600","from-blue-500 to-cyan-600","from-orange-500 to-amber-600","from-rose-500 to-pink-600","from-indigo-500 to-blue-600"];
+const GRADS = ["from-rose-500 to-rose-600","from-emerald-500 to-teal-600","from-blue-500 to-cyan-600","from-orange-500 to-amber-600","from-rose-500 to-pink-600","from-rose-500 to-blue-600"];
 function grad(name: string) { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff; return GRADS[h % GRADS.length]; }
 function initials(name: string) { return name.split(" ").slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join(""); }
 function renderContent(text: string) {
@@ -691,11 +691,11 @@ function BulkModal({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () 
                     onChange={e => { setCustomMessage(e.target.value); setUseCustom(true); }}
                     className="w-full rounded-xl border border-border bg-muted/30 text-sm px-3 py-2 focus:outline-none focus:border-amber-400 resize-none transition-all" />
                 </div>
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50 border border-violet-200">
-                  <input type="checkbox" id="personalise-cb" checked={personalise} onChange={e => setPersonalise(e.target.checked)} className="accent-violet-500 h-4 w-4" />
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-rose-50 border border-rose-200">
+                  <input type="checkbox" id="personalise-cb" checked={personalise} onChange={e => setPersonalise(e.target.checked)} className="accent-rose-500 h-4 w-4" />
                   <div>
-                    <label htmlFor="personalise-cb" className="text-xs font-semibold text-violet-800 cursor-pointer">AI Personalisation</label>
-                    <p className="text-[10px] text-violet-600">Each message uniquely tailored to the supplier's profile</p>
+                    <label htmlFor="personalise-cb" className="text-xs font-semibold text-rose-800 cursor-pointer">AI Personalisation</label>
+                    <p className="text-[10px] text-rose-600">Each message uniquely tailored to the supplier's profile</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border">
@@ -917,7 +917,7 @@ What would you like to communicate?` }]);
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input placeholder="Search suppliers…" className="w-full pl-9 pr-3 h-9 rounded-xl border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 transition-all"
+              <input placeholder="Search suppliers…" className="w-full pl-9 pr-3 h-9 rounded-xl border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all"
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <div className="flex gap-1 p-1 bg-muted/40 rounded-xl">
@@ -970,7 +970,7 @@ What would you like to communicate?` }]);
               const hasChase  = followUpLogs.some(l => l.supplier_id === s.id && (l.followup_status === "pending" || l.followup_status === "sent"));
               return (
                 <button key={s.id} onClick={() => { selectSupplier(s); if (filterTab === "Chases") setFilterTab("All"); }}
-                  className={`w-full text-left px-4 py-3.5 border-b border-border/40 transition-all hover:bg-muted/30 ${isActive?"bg-violet-50 border-l-[3px] border-l-violet-500":""}`}>
+                  className={`w-full text-left px-4 py-3.5 border-b border-border/40 transition-all hover:bg-muted/30 ${isActive?"bg-rose-50 border-l-[3px] border-l-violet-500":""}`}>
                   <div className="flex items-start gap-3">
                     <div className="relative">
                       <div className={`h-10 w-10 rounded-full bg-gradient-to-br ${grad(s.name)} flex items-center justify-center shrink-0 text-[11px] font-bold text-white shadow-sm`}>{initials(s.name)}</div>
@@ -1017,7 +1017,7 @@ What would you like to communicate?` }]);
           <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "#ece5dd" }}>
             {!selected ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8">
-                <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-xl">
+                <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center shadow-xl">
                   <Bot className="h-10 w-10 text-white" />
                 </div>
                 <div className="text-center">

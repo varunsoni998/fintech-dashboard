@@ -36,7 +36,7 @@ const categoryColors: Record<Category, string> = {
   General:    "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
   Operations: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   Sales:      "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Content:    "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  Content:    "bg-rose-500/10 text-rose-400 border-rose-500/20",
   Finance:    "bg-amber-500/10 text-amber-400 border-amber-500/20",
   Suppliers:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
 };
@@ -219,7 +219,7 @@ export default function TodoPage() {
             )}
             <Button
               size="sm"
-              className="h-8 text-xs bg-gradient-to-r from-fuchsia-500 to-indigo-600 hover:opacity-90 text-white gap-1.5"
+              className="h-8 text-xs bg-gradient-to-r from-fuchsia-500 to-rose-600 hover:opacity-90 text-white gap-1.5"
               onClick={() => setShowForm(v => !v)}
             >
               {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -322,7 +322,7 @@ export default function TodoPage() {
                                   cat === "General"    ? "bg-zinc-400"    :
                                   cat === "Operations" ? "bg-blue-400"    :
                                   cat === "Sales"      ? "bg-emerald-400" :
-                                  cat === "Content"    ? "bg-purple-400"  :
+                                  cat === "Content"    ? "bg-rose-400"  :
                                   cat === "Finance"    ? "bg-amber-400"   :
                                                         "bg-orange-400"
                                 }`} />

@@ -5,7 +5,7 @@ import { Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 const N = {
   card: {
     background: "var(--neu-base)",
-    boxShadow: "10px 10px 24px #C0C0D2, -10px -10px 24px #FFFFFF",
+    boxShadow: "10px 10px 24px #D5C1C3, -10px -10px 24px #FFFFFF",
     borderRadius: "1.5rem",
     border: "none",
   },
@@ -14,11 +14,11 @@ const N = {
     boxShadow: "inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px #FFFFFF",
     borderRadius: "0.75rem",
     border: "none",
-    color: "var(--foreground, #3D3D5C)",
+    color: "var(--foreground, #3A2428)",
   },
   btn: {
-    background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
-    boxShadow: "3px 3px 8px #B0B0C8, -2px -2px 6px #FFFFFF",
+    background: "linear-gradient(135deg, #B23A4E, #8A2436)",
+    boxShadow: "3px 3px 8px #C4ACAF, -2px -2px 6px #FFFFFF",
     borderRadius: "0.75rem",
     border: "none",
     color: "white",
@@ -81,16 +81,16 @@ export default function Login() {
           <div
             className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
             style={{
-              background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
+              background: "linear-gradient(135deg, #B23A4E, #8A2436)",
               boxShadow: "6px 6px 14px var(--neu-dark), -6px -6px 14px #FFFFFF",
             }}
           >
             <Sparkles className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold" style={{ color: "var(--foreground, #3D3D5C)" }}>
+          <h1 className="text-3xl font-bold" style={{ color: "var(--foreground, #3A2428)" }}>
             BusinessOS
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--muted-foreground, #9090A8)" }}>
+          <p className="text-sm mt-1" style={{ color: "var(--muted-foreground, #9A8285)" }}>
             {mode === "login" && "Sign in to your workspace"}
             {mode === "signup" && "Create your account"}
             {mode === "forgot" && "Reset your password"}
@@ -105,7 +105,7 @@ export default function Login() {
               <div className="relative">
                 <User
                   className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-                  style={{ color: "var(--muted-foreground, #9090A8)" }}
+                  style={{ color: "var(--muted-foreground, #9A8285)" }}
                 />
                 <input
                   type="text"
@@ -122,7 +122,7 @@ export default function Login() {
             <div className="relative">
               <Mail
                 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-                style={{ color: "var(--muted-foreground, #9090A8)" }}
+                style={{ color: "var(--muted-foreground, #9A8285)" }}
               />
               <input
                 type="email"
@@ -140,7 +140,7 @@ export default function Login() {
               <div className="relative">
                 <Lock
                   className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-                  style={{ color: "var(--muted-foreground, #9090A8)" }}
+                  style={{ color: "var(--muted-foreground, #9A8285)" }}
                 />
                 <input
                   type={showPassword ? "text" : "password"}
@@ -154,7 +154,7 @@ export default function Login() {
                 <button
                   onClick={() => setShowPassword(v => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--muted-foreground, #9090A8)" }}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--muted-foreground, #9A8285)" }}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -197,15 +197,15 @@ export default function Login() {
                 <button
                   onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }}
                   className="block w-full text-xs"
-                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--muted-foreground, #9090A8)" }}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--muted-foreground, #9A8285)" }}
                 >
                   Forgot password?
                 </button>
-                <p className="text-xs" style={{ color: "var(--muted-foreground, #9090A8)" }}>
+                <p className="text-xs" style={{ color: "var(--muted-foreground, #9A8285)" }}>
                   Don't have an account?{" "}
                   <button
                     onClick={() => { setMode("signup"); setError(""); setSuccess(""); }}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "#6B7FD4", fontWeight: 500 }}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9B2C3F", fontWeight: 500 }}
                   >
                     Sign up
                   </button>
@@ -213,11 +213,11 @@ export default function Login() {
               </>
             )}
             {mode === "signup" && (
-              <p className="text-xs" style={{ color: "var(--muted-foreground, #9090A8)" }}>
+              <p className="text-xs" style={{ color: "var(--muted-foreground, #9A8285)" }}>
                 Already have an account?{" "}
                 <button
                   onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
-                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "#6B7FD4", fontWeight: 500 }}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9B2C3F", fontWeight: 500 }}
                 >
                   Sign in
                 </button>
@@ -227,7 +227,7 @@ export default function Login() {
               <button
                 onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
                 className="text-xs"
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#6B7FD4" }}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9B2C3F" }}
               >
                 Back to sign in
               </button>
@@ -236,7 +236,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-xs mt-6" style={{ color: "var(--neu-dark)" }}>
-          Powered by <span style={{ color: "var(--muted-foreground, #9090A8)" }}>BusinessOS</span>
+          Powered by <span style={{ color: "var(--muted-foreground, #9A8285)" }}>BusinessOS</span>
         </p>
       </div>
     </div>

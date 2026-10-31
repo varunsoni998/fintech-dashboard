@@ -46,10 +46,10 @@ function AppRoutes() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center"
-        style={{ background: "var(--neu-base, #E8E8F2)" }}>
+        style={{ background: "var(--neu-base, #F3EAEA)" }}>
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 rounded-2xl flex items-center justify-center animate-pulse"
-            style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)" }} />
+            style={{ background: "linear-gradient(135deg, #B23A4E, #8A2436)" }} />
           <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
@@ -67,7 +67,7 @@ function AppRoutes() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full" style={{ background: "var(--neu-base, #E8E8F2)" }}>
+      <div className="flex min-h-screen w-full" style={{ background: "var(--neu-base, #F3EAEA)" }}>
         <DashboardSidebar />
         <Routes>
           <Route path="/"                  element={<Index />} />

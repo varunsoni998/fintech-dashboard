@@ -418,7 +418,7 @@ export default function MXAI() {
         <div className="w-64 shrink-0 flex flex-col border-r border-border bg-card">
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2 mb-3">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-fuchsia-500 to-indigo-600 flex items-center justify-center">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-fuchsia-500 to-rose-600 flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
               <span className="font-bold text-card-foreground tracking-wide">Zeno AI</span>
@@ -426,7 +426,7 @@ export default function MXAI() {
             </div>
             <Button
               onClick={createConversation}
-              className="w-full h-8 text-xs bg-gradient-to-r from-fuchsia-500 to-indigo-600 hover:opacity-90 text-white gap-1.5"
+              className="w-full h-8 text-xs bg-gradient-to-r from-fuchsia-500 to-rose-600 hover:opacity-90 text-white gap-1.5"
             >
               <Plus className="h-3.5 w-3.5" /> New Chat
             </Button>
@@ -495,7 +495,7 @@ export default function MXAI() {
         <div className="flex-1 flex flex-col min-w-0 bg-background">
           {!activeId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-indigo-600 flex items-center justify-center shadow-lg">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-rose-600 flex items-center justify-center shadow-lg">
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
               <div className="text-center">
@@ -506,7 +506,7 @@ export default function MXAI() {
               </div>
               <Button
                 onClick={createConversation}
-                className="bg-gradient-to-r from-fuchsia-500 to-indigo-600 hover:opacity-90 text-white gap-2"
+                className="bg-gradient-to-r from-fuchsia-500 to-rose-600 hover:opacity-90 text-white gap-2"
               >
                 <Plus className="h-4 w-4" /> Start New Chat
               </Button>
@@ -535,7 +535,7 @@ export default function MXAI() {
             <>
               {/* Chat header */}
               <div className="h-12 border-b border-border flex items-center px-4 gap-3 shrink-0">
-                <div className="h-6 w-6 rounded-md bg-gradient-to-br from-fuchsia-500 to-indigo-600 flex items-center justify-center">
+                <div className="h-6 w-6 rounded-md bg-gradient-to-br from-fuchsia-500 to-rose-600 flex items-center justify-center">
                   <Sparkles className="h-3.5 w-3.5 text-white" />
                 </div>
                 <span className="text-sm font-medium text-card-foreground truncate">
@@ -574,7 +574,7 @@ export default function MXAI() {
                       <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-1 ${
                         msg.error
                           ? "bg-red-500/20 border border-red-500/30"
-                          : "bg-gradient-to-br from-fuchsia-500 to-indigo-600"
+                          : "bg-gradient-to-br from-fuchsia-500 to-rose-600"
                       }`}>
                         {msg.error
                           ? <AlertCircle className="h-3.5 w-3.5 text-red-400" />
@@ -586,7 +586,7 @@ export default function MXAI() {
                     <div className={`${msg.role === "user" ? "max-w-[70%]" : "max-w-[80%] w-full"}`}>
                       <div className={`rounded-2xl px-4 py-3 text-sm ${
                         msg.role === "user"
-                          ? "bg-gradient-to-br from-fuchsia-500 to-indigo-600 text-white rounded-br-sm"
+                          ? "bg-gradient-to-br from-fuchsia-500 to-rose-600 text-white rounded-br-sm"
                           : msg.error
                           ? "bg-red-500/10 border border-red-500/20 text-red-400 rounded-bl-sm"
                           : msg.content === ""
@@ -691,7 +691,7 @@ export default function MXAI() {
                     className={`h-8 w-8 rounded-xl flex items-center justify-center text-white transition-all shrink-0 ${
                       loading
                         ? "bg-red-500 hover:bg-red-600"
-                        : "bg-gradient-to-br from-fuchsia-500 to-indigo-600 hover:opacity-90 disabled:opacity-30"
+                        : "bg-gradient-to-br from-fuchsia-500 to-rose-600 hover:opacity-90 disabled:opacity-30"
                     }`}
                   >
                     {loading

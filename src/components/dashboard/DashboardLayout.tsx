@@ -37,7 +37,7 @@ function getInitials(name?: string | null, email?: string | null): string {
 }
 
 const typeStyles = {
-  info:    { icon: <Info style={{ width: 13, height: 13 }} />,        bg: "#EEF1FB", color: "#5B6FD0" },
+  info:    { icon: <Info style={{ width: 13, height: 13 }} />,        bg: "#F8EDEF", color: "#8A2436" },
   success: { icon: <CheckCheck style={{ width: 13, height: 13 }} />,  bg: "#EEFAF4", color: "#2E9E6B" },
   warning: { icon: <AlertTriangle style={{ width: 13, height: 13 }} />, bg: "#FEF6EB", color: "#D48A2E" },
 };
@@ -53,17 +53,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { dark, toggle: toggleDark } = useDarkMode();
 
   // ── Theme tokens ──────────────────────────────────────────────────────────
-  const BG           = dark ? "#1A1A2E" : "#E8E8F2";
+  const BG           = dark ? "#241418" : "#F3EAEA";
   const SHADOW_OUT   = dark
-    ? "5px 5px 12px #0D0D1A, -5px -5px 12px #272744"
-    : "5px 5px 12px #C4C4D4, -5px -5px 12px #FFFFFF";
-  const TEXT_MUTED   = dark ? "#7070A0" : "#9090A8";
-  const TEXT_MAIN    = dark ? "#D0D0F0" : "#3A3A5A";
-  const BORDER       = dark ? "#2A2A4A" : "#D4D4E4";
-  const PANEL_BG     = dark ? "#1E1E35" : "#E8E8F2";
+    ? "5px 5px 12px #120A0C, -5px -5px 12px #352027"
+    : "5px 5px 12px #D9C6C8, -5px -5px 12px #FFFFFF";
+  const TEXT_MUTED   = dark ? "#A07A82" : "#9A8285";
+  const TEXT_MAIN    = dark ? "#F0D8DC" : "#3A2428";
+  const BORDER       = dark ? "#3A232B" : "#E4D3D5";
+  const PANEL_BG     = dark ? "#2B181D" : "#F3EAEA";
   const PANEL_SHADOW = dark
-    ? "8px 8px 20px #0D0D1A, -8px -8px 20px #272744"
-    : "8px 8px 20px #C0C0D0, -8px -8px 20px #FFFFFF";
+    ? "8px 8px 20px #120A0C, -8px -8px 20px #352027"
+    : "8px 8px 20px #D3C0C2, -8px -8px 20px #FFFFFF";
 
   const initials    = getInitials(profile?.full_name, user?.email);
   const displayName = profile?.full_name ?? user?.email ?? "User";
@@ -132,8 +132,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 ...btnStyle,
                 ...(notifOpen ? {
                   boxShadow: dark
-                    ? "inset 2px 2px 5px #0D0D1A, inset -2px -2px 5px #272744"
-                    : "inset 2px 2px 5px #C4C4D4, inset -2px -2px 5px #FFFFFF"
+                    ? "inset 2px 2px 5px #120A0C, inset -2px -2px 5px #352027"
+                    : "inset 2px 2px 5px #D9C6C8, inset -2px -2px 5px #FFFFFF"
                 } : {}),
               }}
             >
@@ -162,14 +162,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <span style={{ fontWeight: 700, fontSize: 14, color: TEXT_MAIN }}>Notifications</span>
                     {unreadCount > 0 && (
                       <span style={{
-                        background: "linear-gradient(135deg,#7B8FE0,#5B6FD0)",
+                        background: "linear-gradient(135deg,#B23A4E,#8A2436)",
                         color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px",
                       }}>{unreadCount}</span>
                     )}
                   </div>
                   {unreadCount > 0 && (
                     <button onClick={markAllRead} style={{
-                      fontSize: 11, color: "#7B8FE0", fontWeight: 600,
+                      fontSize: 11, color: "#B23A4E", fontWeight: 600,
                       background: "none", border: "none", cursor: "pointer", padding: 0,
                     }}>Mark all read</button>
                   )}
@@ -186,7 +186,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <div key={n.id} onClick={() => markRead(n.id)} style={{
                         display: "flex", alignItems: "flex-start", gap: 10,
                         padding: "10px 14px", cursor: "pointer",
-                        background: n.read ? "transparent" : "rgba(123,143,224,0.06)",
+                        background: n.read ? "transparent" : "rgba(178,58,78,0.06)",
                       }}>
                         <div style={{
                           width: 28, height: 28, borderRadius: 8, background: ts.bg,
@@ -199,7 +199,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                               {n.title}
                             </span>
                             {!n.read && (
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#7B8FE0", flexShrink: 0 }} />
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#B23A4E", flexShrink: 0 }} />
                             )}
                           </div>
                           <p style={{ margin: 0, fontSize: 11.5, color: TEXT_MUTED, lineHeight: 1.4 }}>{n.message}</p>
@@ -223,7 +223,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             onClick={() => navigate("/profile")}
             style={{
               width: 36, height: 36, borderRadius: 10,
-              background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
+              background: "linear-gradient(135deg, #B23A4E, #8A2436)",
               boxShadow: SHADOW_OUT, display: "flex", alignItems: "center",
               justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff",
               cursor: "pointer", flexShrink: 0, userSelect: "none", transition: "opacity 0.15s",

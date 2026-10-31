@@ -39,31 +39,31 @@ interface SearchResult {
 // ── Static nav pages ─────────────────────────────────────────────────────────
 
 const NAV_PAGES = [
-  { label: "Overview",          url: "/",                  icon: LayoutDashboard, color: "#7B8FE0" },
+  { label: "Overview",          url: "/",                  icon: LayoutDashboard, color: "#B23A4E" },
   { label: "Web Analytics",     url: "/web-analytics",     icon: Globe,           color: "#52A882" },
-  { label: "Content",           url: "/content",           icon: FileText,        color: "#9B8FE8" },
-  { label: "Leads",             url: "/leads",             icon: Users,           color: "#6B7FD4" },
+  { label: "Content",           url: "/content",           icon: FileText,        color: "#B85C6E" },
+  { label: "Leads",             url: "/leads",             icon: Users,           color: "#9B2C3F" },
   { label: "Campaign Design",   url: "/campaign-design",   icon: Megaphone,       color: "#E07A5A" },
   { label: "RAG Model",         url: "/itineraries",       icon: Map,             color: "#52A882" },
-  { label: "Clients & PMS",     url: "/client-pms",        icon: UserCircle2,     color: "#9B8FE8" },
+  { label: "Clients & PMS",     url: "/client-pms",        icon: UserCircle2,     color: "#B85C6E" },
   { label: "Suppliers",         url: "/suppliers",         icon: Truck,           color: "#D48A2E" },
-  { label: "Supplier Reachout", url: "/supplier-reachout", icon: Bot,             color: "#6B7FD4" },
+  { label: "Supplier Reachout", url: "/supplier-reachout", icon: Bot,             color: "#9B2C3F" },
   { label: "Active Deals",      url: "/active-deals",      icon: Handshake,       color: "#52A882" },
   { label: "Scheduling",        url: "/scheduling",        icon: CalendarClock,   color: "#E07A5A" },
   { label: "Finance KPIs",      url: "/finance-kpis",      icon: IndianRupee,     color: "#52A882" },
-  { label: "Team Chat",         url: "/chat",              icon: MessageSquare,   color: "#7B8FE0" },
-  { label: "Creatives",         url: "/creatives",         icon: ImagePlus,       color: "#9B8FE8" },
+  { label: "Team Chat",         url: "/chat",              icon: MessageSquare,   color: "#B23A4E" },
+  { label: "Creatives",         url: "/creatives",         icon: ImagePlus,       color: "#B85C6E" },
   { label: "Automations",       url: "/automations",       icon: Zap,             color: "#D48A2E" },
-  { label: "Lead Analytics",    url: "/lead-analytics",    icon: TrendingUp,      color: "#6B7FD4" },
-  { label: "Zeno AI",           url: "/mxai",              icon: Sparkles,        color: "#9B8FE8" },
-  { label: "My Profile",        url: "/profile",           icon: UserCircle2,     color: "#7B8FE0" },
+  { label: "Lead Analytics",    url: "/lead-analytics",    icon: TrendingUp,      color: "#9B2C3F" },
+  { label: "Zeno AI",           url: "/mxai",              icon: Sparkles,        color: "#B85C6E" },
+  { label: "My Profile",        url: "/profile",           icon: UserCircle2,     color: "#B23A4E" },
 ];
 
 const QUICK_ACTIONS = [
-  { label: "Open Zeno AI",      url: "/mxai",              icon: Sparkles,        color: "#9B8FE8" },
-  { label: "Add New Lead",      url: "/leads",             icon: Users,           color: "#6B7FD4" },
+  { label: "Open Zeno AI",      url: "/mxai",              icon: Sparkles,        color: "#B85C6E" },
+  { label: "Add New Lead",      url: "/leads",             icon: Users,           color: "#9B2C3F" },
   { label: "View Automations",  url: "/automations",       icon: Zap,             color: "#D48A2E" },
-  { label: "Team Chat",         url: "/chat",              icon: MessageSquare,   color: "#7B8FE0" },
+  { label: "Team Chat",         url: "/chat",              icon: MessageSquare,   color: "#B23A4E" },
 ];
 
 const CATEGORY_LABELS: Record<ResultCategory, string> = {
@@ -101,21 +101,21 @@ export function GlobalSearch() {
   const debouncedQ  = useDebounce(query, 220);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
-  const BG           = dark ? "#1A1A2E" : "#E8E8F2";
-  const PANEL_BG     = dark ? "#1E1E35" : "#E8E8F2";
+  const BG           = dark ? "#241418" : "#F3EAEA";
+  const PANEL_BG     = dark ? "#2B181D" : "#F3EAEA";
   const SHADOW_OUT   = dark
-    ? "5px 5px 12px #0D0D1A, -5px -5px 12px #272744"
-    : "5px 5px 12px #C4C4D4, -5px -5px 12px #FFFFFF";
+    ? "5px 5px 12px #120A0C, -5px -5px 12px #352027"
+    : "5px 5px 12px #D9C6C8, -5px -5px 12px #FFFFFF";
   const SHADOW_IN    = dark
-    ? "inset 3px 3px 7px #0D0D1A, inset -3px -3px 7px #272744"
-    : "inset 3px 3px 7px #C4C4D4, inset -3px -3px 7px #FFFFFF";
+    ? "inset 3px 3px 7px #120A0C, inset -3px -3px 7px #352027"
+    : "inset 3px 3px 7px #D9C6C8, inset -3px -3px 7px #FFFFFF";
   const PANEL_SHADOW = dark
-    ? "0 20px 60px #0A0A18, 0 4px 20px #0D0D1A"
+    ? "0 20px 60px #0A0A18, 0 4px 20px #120A0C"
     : "0 20px 60px rgba(0,0,0,0.15), 0 4px 20px rgba(0,0,0,0.08)";
-  const TEXT_MAIN    = dark ? "#D0D0F0" : "#3A3A5A";
-  const TEXT_MUTED   = dark ? "#7070A0" : "#9090A8";
-  const BORDER       = dark ? "#2A2A4A" : "#D8D8E8";
-  const HOVER_BG     = dark ? "rgba(123,143,224,0.10)" : "rgba(123,143,224,0.07)";
+  const TEXT_MAIN    = dark ? "#F0D8DC" : "#3A2428";
+  const TEXT_MUTED   = dark ? "#A07A82" : "#9A8285";
+  const BORDER       = dark ? "#3A232B" : "#E8DADB";
+  const HOVER_BG     = dark ? "rgba(178,58,78,0.10)" : "rgba(178,58,78,0.07)";
 
   // ── Keyboard shortcut (Ctrl+K / Cmd+K) ────────────────────────────────────
   useEffect(() => {
@@ -181,7 +181,7 @@ export function GlobalSearch() {
           label: l.name ?? "Unnamed Lead",
           sublabel: `${l.stage ?? "New"} · ${l.destination ?? l.email ?? ""}`,
           icon: Users,
-          color: "#6B7FD4",
+          color: "#9B2C3F",
           action: () => { navigate("/leads"); close(); },
         });
       });
@@ -336,7 +336,7 @@ export function GlobalSearch() {
           borderBottom: displayList.length ? `1px solid ${BORDER}` : "none",
         }}>
           {loading
-            ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${BORDER}`, borderTopColor: "#7B8FE0", animation: "spin 0.7s linear infinite", flexShrink: 0 }} />
+            ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${BORDER}`, borderTopColor: "#B23A4E", animation: "spin 0.7s linear infinite", flexShrink: 0 }} />
             : <Search style={{ width: 18, height: 18, color: TEXT_MUTED, flexShrink: 0 }} />}
           <input
             ref={inputRef}

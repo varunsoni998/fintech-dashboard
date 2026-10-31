@@ -34,7 +34,7 @@ const stageStyle: Record<string, string> = {
   New:       "bg-blue-50 text-blue-500 border border-blue-200",
   Contacted: "bg-orange-50 text-orange-500 border border-orange-200",
   Qualified: "bg-yellow-50 text-yellow-600 border border-yellow-200",
-  Proposal:  "bg-purple-50 text-purple-500 border border-purple-200",
+  Proposal:  "bg-rose-50 text-rose-500 border border-rose-200",
   Booked:    "bg-green-50 text-green-600 border border-green-200",
 };
 
@@ -55,9 +55,9 @@ interface Supplier {
 
 const TYPE_COLORS: Record<string, string> = {
   "Manufacturer":       "bg-blue-50 text-blue-700 border-blue-200",
-  "Distributor":        "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Distributor":        "bg-rose-50 text-rose-700 border-rose-200",
   "Logistics / Transport": "bg-amber-50 text-amber-700 border-amber-200",
-  "Service Provider":   "bg-purple-50 text-purple-700 border-purple-200",
+  "Service Provider":   "bg-rose-50 text-rose-700 border-rose-200",
   "Consultant / Agency": "bg-pink-50 text-pink-700 border-pink-200",
   "Retailer":           "bg-lime-50 text-lime-700 border-lime-200",
   "Other":              "bg-gray-50 text-gray-600 border-gray-200",
@@ -388,7 +388,7 @@ export default function CampaignDesigner() {
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.12 }}
               onClick={() => setMode("suppliers")}
               className="group relative rounded-2xl border-2 border-border hover:border-blue-400 bg-card p-8 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1">
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-5 shadow-md group-hover:scale-110 transition-transform">
+              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-rose-600 flex items-center justify-center mb-5 shadow-md group-hover:scale-110 transition-transform">
                 <Truck className="h-7 w-7 text-white" />
               </div>
               <h2 className="text-xl font-serif text-card-foreground mb-2">Campaign for Suppliers</h2>
@@ -474,7 +474,7 @@ export default function CampaignDesigner() {
               {isLeads ? <Truck className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
               Switch to {isLeads ? "Suppliers" : "Leads"}
             </Button>
-            <Button size="sm" className={"gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-indigo-600") + " text-white hover:opacity-90"}
+            <Button size="sm" className={"gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600") + " text-white hover:opacity-90"}
               onClick={() => { resetCampaign(); setShowModal(true); }}>
               <Plus className="h-3.5 w-3.5" /> New {modeLabel} Campaign
             </Button>
@@ -685,7 +685,7 @@ export default function CampaignDesigner() {
               <div className="h-8 w-8 rounded-lg bg-accent/10 flex items-center justify-center"><ListChecks className="h-4 w-4 text-accent" /></div>
               <div><h3 className="font-serif text-base text-card-foreground">Sequence Builder</h3><p className="text-xs text-muted-foreground">Default outreach flow</p></div>
             </div>
-            <Button size="sm" className={"gap-1.5 text-white hover:opacity-90 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-indigo-600")} onClick={() => { resetCampaign(); setShowModal(true); }}>
+            <Button size="sm" className={"gap-1.5 text-white hover:opacity-90 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600")} onClick={() => { resetCampaign(); setShowModal(true); }}>
               <Plus className="h-3.5 w-3.5" /> Add Sequence
             </Button>
           </div>
@@ -737,9 +737,9 @@ export default function CampaignDesigner() {
         {showScanModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <motion.div initial={{ opacity:0, scale:0.95 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:0.95 }} className="bg-card rounded-xl border shadow-elevated w-full max-w-sm p-6">
-              <div className="flex items-center justify-between mb-5"><div className="flex items-center gap-2"><ScanLine className="h-4 w-4 text-violet-500" /><h2 className="font-serif text-lg">Scan Visiting Card</h2></div><button onClick={() => setShowScanModal(false)}><X className="h-4 w-4" /></button></div>
+              <div className="flex items-center justify-between mb-5"><div className="flex items-center gap-2"><ScanLine className="h-4 w-4 text-rose-500" /><h2 className="font-serif text-lg">Scan Visiting Card</h2></div><button onClick={() => setShowScanModal(false)}><X className="h-4 w-4" /></button></div>
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => cameraRef.current?.click()} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-violet-200 bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors"><Camera className="h-5 w-5" /><span className="text-xs font-medium">Take Photo</span></button>
+                <button onClick={() => cameraRef.current?.click()} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"><Camera className="h-5 w-5" /><span className="text-xs font-medium">Take Photo</span></button>
                 <button onClick={() => cardRef.current?.click()} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-muted bg-muted/30 text-muted-foreground hover:bg-muted/60 transition-colors"><Upload className="h-5 w-5" /><span className="text-xs font-medium">Upload Image</span></button>
               </div>
             </motion.div>
@@ -753,7 +753,7 @@ export default function CampaignDesigner() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <motion.div initial={{ opacity:0, scale:0.95 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:0.95 }} className="bg-card rounded-xl border shadow-elevated w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-3"><h2 className="font-serif text-lg">{isEditing ? "Edit Lead" : "Add New Lead"}</h2><button onClick={closeAddModal}><X className="h-4 w-4" /></button></div>
-              {scanning && <div className="flex flex-col items-center py-8 gap-4"><Loader2 className="h-8 w-8 animate-spin text-violet-500" /><p className="text-sm text-muted-foreground">Scanning card…</p></div>}
+              {scanning && <div className="flex flex-col items-center py-8 gap-4"><Loader2 className="h-8 w-8 animate-spin text-rose-500" /><p className="text-sm text-muted-foreground">Scanning card…</p></div>}
               {!scanning && (
                 <>
                   {scanSuccess && <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4"><CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" /><p className="text-xs text-green-700">Card scanned! Review fields before saving.</p></div>}
@@ -1008,10 +1008,10 @@ export default function CampaignDesigner() {
                 <div className="flex gap-2">
                   {step > 1 && <Button variant="outline" size="sm" onClick={() => setStep(p => (p-1) as 1|2|3)}>Back</Button>}
                   {step < 3
-                    ? <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-indigo-600")} onClick={() => setStep(p => (p+1) as 1|2|3)} disabled={step===1&&!form.name.trim()}>
+                    ? <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600")} onClick={() => setStep(p => (p+1) as 1|2|3)} disabled={step===1&&!form.name.trim()}>
                         Next <ArrowRight className="h-3.5 w-3.5" />
                       </Button>
-                    : <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-indigo-600")} onClick={saveCampaign} disabled={saving}>
+                    : <Button size="sm" className={"text-white gap-2 " + (isLeads ? "bg-gradient-to-r from-emerald-600 to-teal-600" : "bg-gradient-to-r from-blue-600 to-rose-600")} onClick={saveCampaign} disabled={saving}>
                         {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</> : <><Send className="h-3.5 w-3.5" />Save Campaign</>}
                       </Button>}
                 </div>

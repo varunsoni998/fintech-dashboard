@@ -19,17 +19,17 @@ function getInitials(name?: string | null, email?: string | null): string {
 }
 
 function Toggle({ value, onChange, dark }: { value: boolean; onChange: () => void; dark: boolean }) {
-  const BG = dark ? "#1A1A2E" : "#E8E8F2";
+  const BG = dark ? "#241418" : "#F3EAEA";
   const SHADOW_IN = dark
-    ? "inset 3px 3px 7px #0D0D1A, inset -3px -3px 7px #272744"
-    : "inset 3px 3px 7px #C4C4D4, inset -3px -3px 7px #FFFFFF";
+    ? "inset 3px 3px 7px #120A0C, inset -3px -3px 7px #352027"
+    : "inset 3px 3px 7px #D9C6C8, inset -3px -3px 7px #FFFFFF";
   const SHADOW_KNOB = dark
-    ? "2px 2px 5px #0D0D1A, -2px -2px 5px #272744"
-    : "2px 2px 5px #C4C4D4, -2px -2px 5px #FFFFFF";
+    ? "2px 2px 5px #120A0C, -2px -2px 5px #352027"
+    : "2px 2px 5px #D9C6C8, -2px -2px 5px #FFFFFF";
   return (
     <div onClick={onChange} style={{
       width: 44, height: 24, borderRadius: 99,
-      background: value ? "linear-gradient(135deg, #7B8FE0, #5B6FD0)" : BG,
+      background: value ? "linear-gradient(135deg, #B23A4E, #8A2436)" : BG,
       boxShadow: value ? "none" : SHADOW_IN,
       position: "relative", cursor: "pointer", transition: "all 0.3s", flexShrink: 0,
     }}>
@@ -48,16 +48,16 @@ export default function Profile() {
   const { user, profile } = useAuth();
   const { dark, toggle: toggleDark } = useDarkMode();
 
-  const BG = dark ? "#1A1A2E" : "#E8E8F2";
+  const BG = dark ? "#241418" : "#F3EAEA";
   const SHADOW_OUT = dark
-    ? "5px 5px 12px #0D0D1A, -5px -5px 12px #272744"
-    : "5px 5px 12px #C4C4D4, -5px -5px 12px #FFFFFF";
+    ? "5px 5px 12px #120A0C, -5px -5px 12px #352027"
+    : "5px 5px 12px #D9C6C8, -5px -5px 12px #FFFFFF";
   const SHADOW_IN = dark
-    ? "inset 3px 3px 7px #0D0D1A, inset -3px -3px 7px #272744"
-    : "inset 3px 3px 7px #C4C4D4, inset -3px -3px 7px #FFFFFF";
-  const TEXT_MAIN = dark ? "#D0D0F0" : "#3A3A5A";
-  const TEXT_MUTED = dark ? "#7070A0" : "#9090A8";
-  const BORDER = dark ? "#2A2A4A" : "#D8D8E8";
+    ? "inset 3px 3px 7px #120A0C, inset -3px -3px 7px #352027"
+    : "inset 3px 3px 7px #D9C6C8, inset -3px -3px 7px #FFFFFF";
+  const TEXT_MAIN = dark ? "#F0D8DC" : "#3A2428";
+  const TEXT_MUTED = dark ? "#A07A82" : "#9A8285";
+  const BORDER = dark ? "#3A232B" : "#E8DADB";
 
   // Pre-fill from profile
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -117,7 +117,7 @@ export default function Profile() {
   }
 
   function Row({
-    icon: Icon, label, sublabel, right, onClick, color = "#7B8FE0",
+    icon: Icon, label, sublabel, right, onClick, color = "#B23A4E",
   }: {
     icon: React.ElementType; label: string; sublabel?: string;
     right?: React.ReactNode; onClick?: () => void; color?: string;
@@ -185,7 +185,7 @@ export default function Profile() {
             <div style={{ position: "relative" }}>
               <div style={{
                 width: 80, height: 80, borderRadius: 22,
-                background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
+                background: "linear-gradient(135deg, #B23A4E, #8A2436)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 28, fontWeight: 800, color: "#fff",
                 boxShadow: SHADOW_OUT, letterSpacing: 1,
@@ -197,7 +197,7 @@ export default function Profile() {
                 width: 28, height: 28, borderRadius: "50%",
                 background: BG, boxShadow: SHADOW_OUT, border: "none",
                 cursor: "pointer", display: "flex", alignItems: "center",
-                justifyContent: "center", color: "#7B8FE0",
+                justifyContent: "center", color: "#B23A4E",
               }}>
                 <Camera style={{ width: 13, height: 13 }} />
               </button>
@@ -209,7 +209,7 @@ export default function Profile() {
               </p>
               <span style={{
                 display: "inline-block", marginTop: 6, fontSize: 11, fontWeight: 700,
-                color: "#7B8FE0", background: "rgba(123,143,224,0.12)",
+                color: "#B23A4E", background: "rgba(178,58,78,0.12)",
                 borderRadius: 99, padding: "3px 12px",
               }}>
                 {displayRole}
@@ -252,7 +252,7 @@ export default function Profile() {
             disabled={saving || !fullName.trim()}
             style={{
               width: "100%", padding: 11, borderRadius: 12, border: "none",
-              background: saving || !fullName.trim() ? BG : "linear-gradient(135deg, #7B8FE0, #5B6FD0)",
+              background: saving || !fullName.trim() ? BG : "linear-gradient(135deg, #B23A4E, #8A2436)",
               boxShadow: saving || !fullName.trim() ? SHADOW_OUT : "none",
               color: saving || !fullName.trim() ? TEXT_MUTED : "#fff",
               fontSize: 13, fontWeight: 700,
@@ -276,7 +276,7 @@ export default function Profile() {
             icon={dark ? Moon : Sun}
             label="Dark Mode"
             sublabel={dark ? "Currently on" : "Currently off"}
-            color={dark ? "#7B8FE0" : "#E0AA5A"}
+            color={dark ? "#B23A4E" : "#E0AA5A"}
             right={<Toggle value={dark} onChange={toggleDark} dark={dark} />}
           />
           <Row
@@ -305,9 +305,9 @@ export default function Profile() {
             icon={Shield}
             label="Role"
             sublabel="Contact admin to change your role"
-            color="#6B7FD4"
+            color="#9B2C3F"
             right={
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#7B8FE0", background: "rgba(123,143,224,0.12)", borderRadius: 99, padding: "3px 10px" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#B23A4E", background: "rgba(178,58,78,0.12)", borderRadius: 99, padding: "3px 10px" }}>
                 {displayRole}
               </span>
             }

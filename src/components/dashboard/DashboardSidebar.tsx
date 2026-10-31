@@ -76,7 +76,7 @@ function ModuleSection({
                     className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ml-1 mt-0.5"
                     style={{ color: TEXT_MUTED }}
                     activeClassName=""
-                    activeStyle={{ color: "#6B7FD4", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
+                    activeStyle={{ color: "#9B2C3F", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
                     <item.icon className="h-3.5 w-3.5 shrink-0" />
                     <span>{item.title}</span>
                   </NavLink>
@@ -96,16 +96,16 @@ export function DashboardSidebar() {
   const { dark } = useDarkMode();
 
   // ── Theme tokens ──────────────────────────────────────────────────────────
-  const BG         = dark ? "#1A1A2E" : "#E8E8F2";
+  const BG         = dark ? "#241418" : "#F3EAEA";
   const SHADOW_OUT = dark
-    ? "3px 3px 7px #0D0D1A, -3px -3px 7px #272744"
-    : "3px 3px 7px #C4C4D4, -3px -3px 7px #FFFFFF";
+    ? "3px 3px 7px #120A0C, -3px -3px 7px #352027"
+    : "3px 3px 7px #D9C6C8, -3px -3px 7px #FFFFFF";
   const SHADOW_IN  = dark
-    ? "inset 2px 2px 5px #0D0D1A, inset -2px -2px 5px #272744"
-    : "inset 2px 2px 5px #C4C4D4, inset -2px -2px 5px #FFFFFF";
-  const TEXT_MAIN  = dark ? "#D0D0F0" : "#3D3D5C";
-  const TEXT_MUTED = dark ? "#7070A0" : "#9090A8";
-  const TEXT_FAINT = dark ? "#3A3A5A" : "#C4C4D4";
+    ? "inset 2px 2px 5px #120A0C, inset -2px -2px 5px #352027"
+    : "inset 2px 2px 5px #D9C6C8, inset -2px -2px 5px #FFFFFF";
+  const TEXT_MAIN  = dark ? "#F0D8DC" : "#3A2428";
+  const TEXT_MUTED = dark ? "#A07A82" : "#9A8285";
+  const TEXT_FAINT = dark ? "#3A2428" : "#D9C6C8";
 
   const sectionProps = { moduleState, setModuleState, BG, SHADOW_OUT, SHADOW_IN, TEXT_MUTED };
 
@@ -118,7 +118,7 @@ export function DashboardSidebar() {
       <SidebarHeader className="px-4 py-5 border-b-0" style={{ background: BG }}>
         <div className="flex items-center gap-3 mb-2">
           <div className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)", boxShadow: SHADOW_OUT }}>
+            style={{ background: "linear-gradient(135deg, #B23A4E, #8A2436)", boxShadow: SHADOW_OUT }}>
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <div>
@@ -142,7 +142,7 @@ export function DashboardSidebar() {
                   <NavLink to="/" end
                     className="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm transition-all"
                     style={{ color: TEXT_MUTED }} activeClassName=""
-                    activeStyle={{ color: "#6B7FD4", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
+                    activeStyle={{ color: "#9B2C3F", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
                     <LayoutDashboard className="h-4 w-4" />
                     <span>Overview</span>
                   </NavLink>
@@ -173,7 +173,7 @@ export function DashboardSidebar() {
 
         {/* Suppliers */}
         <ModuleSection {...sectionProps}
-          label="Suppliers" icon={Truck} accentColor="bg-violet-400" moduleKey="supplierAnalytics"
+          label="Suppliers" icon={Truck} accentColor="bg-rose-400" moduleKey="supplierAnalytics"
           items={[
             { title: "Suppliers",         url: "/suppliers",         icon: Truck     },
             { title: "Supplier Reachout", url: "/supplier-reachout", icon: Bot       },
@@ -206,7 +206,7 @@ export function DashboardSidebar() {
             className="flex items-center gap-2.5 w-full px-3 py-2 rounded-2xl transition-all"
             style={{ background: BG, boxShadow: moduleState.mxai ? SHADOW_IN : SHADOW_OUT }}>
             <div className="h-6 w-6 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: "linear-gradient(135deg, #9B8FE8, #6B7FD4)", boxShadow: "2px 2px 5px rgba(0,0,0,0.2)" }}>
+              style={{ background: "linear-gradient(135deg, #B85C6E, #9B2C3F)", boxShadow: "2px 2px 5px rgba(0,0,0,0.2)" }}>
               <Sparkles className="h-3 w-3 text-white" />
             </div>
             <span className="text-[10px] uppercase tracking-widest font-semibold flex-1 text-left"
@@ -228,8 +228,8 @@ export function DashboardSidebar() {
                       <NavLink to={item.url} end
                         className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ml-1 mt-0.5"
                         style={{ color: TEXT_MUTED }} activeClassName=""
-                        activeStyle={{ color: "#6B7FD4", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
-                        <item.icon className="h-3.5 w-3.5 shrink-0" style={{ color: "#6B7FD4" }} />
+                        activeStyle={{ color: "#9B2C3F", background: BG, boxShadow: SHADOW_IN, fontWeight: 500 }}>
+                        <item.icon className="h-3.5 w-3.5 shrink-0" style={{ color: "#9B2C3F" }} />
                         <span>{item.title}</span>
                       </NavLink>
                     </SidebarMenuButton>
@@ -247,7 +247,7 @@ export function DashboardSidebar() {
           <div className="mb-3 px-2">
             <div className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold text-white"
-                style={{ background: "linear-gradient(135deg, #7B8FE0, #5B6FD0)", boxShadow: SHADOW_OUT }}>
+                style={{ background: "linear-gradient(135deg, #B23A4E, #8A2436)", boxShadow: SHADOW_OUT }}>
                 {(profile?.full_name || user.email || "U")[0].toUpperCase()}
               </div>
               <div className="min-w-0">
