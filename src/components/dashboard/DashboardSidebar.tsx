@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Map, MessageSquare, FileText,
   IndianRupee, TrendingUp, CalendarClock, Megaphone,
-  UserCircle2, Truck, ChevronDown, ChevronRight,
+  UserCircle2, Truck, ChevronDown, Globe, Briefcase,
   Bot, Handshake, UserCheck, Sparkles, ImagePlus, ListTodo,
   Zap, LogOut, Database, FileSpreadsheet, FolderTree, Scale,
 } from "lucide-react";
@@ -31,7 +31,7 @@ function saveModuleState(state: Record<string, boolean>) {
 
 type ModuleKey = "webAnalytics" | "leadAnalytics" | "supplierAnalytics" | "houseAutomation" | "mxai";
 type Item = { title: string; url: string; icon: React.ElementType };
-type Theme = { BG: string; SHADOW_IN: string; TEXT_MAIN: string; TEXT_MUTED: string; ACCENT: string };
+type Theme = { BG: string; SHADOW_IN: string; TEXT_MAIN: string; TEXT_MUTED: string; ACCENT: string; HAIRLINE: string };
 
 // One nav row: 36px tall, icon column 16px, label on one line
 function NavRow({ item, t }: { item: Item; t: Theme }) {
@@ -39,11 +39,11 @@ function NavRow({ item, t }: { item: Item; t: Theme }) {
     <SidebarMenuItem>
       <SidebarMenuButton asChild>
         <NavLink to={item.url} end
-          className="flex items-center gap-3 h-9 px-3 rounded-[10px] text-sm transition-colors"
+          className="flex items-center gap-2.5 h-8 px-2.5 rounded-[8px] text-[13px] transition-colors hover:bg-black/[0.04]"
           style={{ color: t.TEXT_MUTED }}
           activeClassName=""
           activeStyle={{ color: t.ACCENT, background: t.BG, boxShadow: t.SHADOW_IN, fontWeight: 500 }}>
-          <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+          <item.icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.5} />
           <span className="truncate">{item.title}</span>
         </NavLink>
       </SidebarMenuButton>
@@ -51,8 +51,8 @@ function NavRow({ item, t }: { item: Item; t: Theme }) {
   );
 }
 
-function ModuleSection({ label, items, moduleKey, moduleState, setModuleState, t }: {
-  label: string; items: Item[]; moduleKey: ModuleKey;
+function ModuleSection({ label, icon: Icon, items, moduleKey, moduleState, setModuleState, t }: {
+  label: string; icon: React.ElementType; items: Item[]; moduleKey: ModuleKey;
   moduleState: Record<string, boolean>; setModuleState: (s: Record<string, boolean>) => void; t: Theme;
 }) {
   const open = moduleState[moduleKey];
@@ -61,18 +61,21 @@ function ModuleSection({ label, items, moduleKey, moduleState, setModuleState, t
     setModuleState(next);
     saveModuleState(next);
   };
-  const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
-    <SidebarGroup className="p-0 mt-6">
-      <button onClick={toggle}
-        className="flex items-center w-full h-6 px-3 mb-1 text-xs font-medium text-left transition-colors"
-        style={{ color: t.TEXT_MUTED, background: "none", border: "none" }}>
-        <span className="flex-1">{label}</span>
-        <Chevron className="h-3.5 w-3.5" strokeWidth={1.5} />
+    <SidebarGroup className="p-0 mt-3 pt-3" style={{ borderTop: `1px solid ${t.HAIRLINE}` }}>
+      {/* Section heading: full-width, clearly clickable */}
+      <button onClick={toggle} aria-expanded={open}
+        className="group flex items-center gap-3 w-full h-9 px-3 rounded-[10px] text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+        style={{ color: t.TEXT_MAIN, background: "none", border: "none", cursor: "pointer" }}>
+        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color: open ? t.ACCENT : t.TEXT_MUTED }} />
+        <span className="flex-1 text-[13px] font-semibold">{label}</span>
+        <span className="text-[11px] tabular-nums" style={{ color: t.TEXT_MUTED }}>{open ? "" : items.length}</span>
+        <ChevronDown className="h-4 w-4 transition-transform" strokeWidth={1.75}
+          style={{ color: t.TEXT_MUTED, transform: open ? "rotate(0deg)" : "rotate(-90deg)" }} />
       </button>
       {open && (
-        <SidebarGroupContent>
+        <SidebarGroupContent className="mt-1 ml-[19px] pl-2" style={{ borderLeft: `1px solid ${t.HAIRLINE}` }}>
           <SidebarMenu className="gap-0.5">
             {items.map(item => <NavRow key={item.url} item={item} t={t} />)}
           </SidebarMenu>
@@ -96,8 +99,9 @@ export function DashboardSidebar() {
     TEXT_MAIN:  dark ? "#F0D8DC" : "#3A2428",
     TEXT_MUTED: dark ? "#A07A82" : "#8A7275",
     ACCENT:     dark ? "#E8A0AC" : "#9B2C3F",
+    HAIRLINE:   dark ? "rgba(240,216,220,0.10)" : "rgba(58,36,40,0.10)",
   };
-  const HAIRLINE = dark ? "rgba(240,216,220,0.08)" : "rgba(58,36,40,0.08)";
+  const HAIRLINE = t.HAIRLINE;
 
   const sectionProps = { moduleState, setModuleState, t };
   const handleSignOut = async () => { await supabase.auth.signOut(); };
@@ -132,13 +136,13 @@ export function DashboardSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <ModuleSection {...sectionProps} label="Analytics & Content" moduleKey="webAnalytics"
+        <ModuleSection {...sectionProps} label="Analytics & Content" icon={Globe} moduleKey="webAnalytics"
           items={[
             { title: "Web Analytics", url: "/web-analytics", icon: TrendingUp },
             { title: "Content",       url: "/content",       icon: FileText   },
           ]} />
 
-        <ModuleSection {...sectionProps} label="Lead Analytics" moduleKey="leadAnalytics"
+        <ModuleSection {...sectionProps} label="Lead Analytics" icon={Users} moduleKey="leadAnalytics"
           items={[
             { title: "Leads",           url: "/leads",           icon: UserCheck   },
             { title: "Campaign Design", url: "/campaign-design", icon: Megaphone   },
@@ -147,14 +151,14 @@ export function DashboardSidebar() {
             { title: "Clients & PMS", url: "/client-pms",      icon: UserCircle2 },
           ]} />
 
-        <ModuleSection {...sectionProps} label="Suppliers" moduleKey="supplierAnalytics"
+        <ModuleSection {...sectionProps} label="Suppliers" icon={Truck} moduleKey="supplierAnalytics"
           items={[
             { title: "Suppliers",         url: "/suppliers",         icon: Truck     },
             { title: "Supplier Reachout", url: "/supplier-reachout", icon: Bot       },
             { title: "Active Deals",      url: "/active-deals",      icon: Handshake },
           ]} />
 
-        <ModuleSection {...sectionProps} label="Operations" moduleKey="houseAutomation"
+        <ModuleSection {...sectionProps} label="Operations" icon={Briefcase} moduleKey="houseAutomation"
           items={[
             { title: "Scheduling",      url: "/scheduling",     icon: CalendarClock   },
             { title: "Todo",           url: "/todo",           icon: ListTodo        },
@@ -167,7 +171,7 @@ export function DashboardSidebar() {
             { title: "Automations",     url: "/automations",    icon: Zap             },
           ]} />
 
-        <ModuleSection {...sectionProps} label="Zeno AI" moduleKey="mxai"
+        <ModuleSection {...sectionProps} label="Zeno AI" icon={Sparkles} moduleKey="mxai"
           items={[
             { title: "Zeno",      url: "/mxai", icon: Sparkles },
             { title: "RAG Model", url: "/rag",  icon: Database },
